@@ -1,0 +1,71 @@
+[project]
+name = "graflow"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "networkx>=3.4.2",
+    "typing-extensions>=4.5.0",
+    "matplotlib>=3.10.3",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.1",
+    "ruff>=0.12.2",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["graflow"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+exclude = [
+    ".git",
+    ".ruff_cache",
+    ".mypy_cache",
+    ".pytest_cache",
+    "venv",
+    "env",
+    ".venv",
+    ".env",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "N", "UP", "B", "RUF", "C90", "PL", "PD", "YTT", "TID"]
+ignore = [
+    "ANN101", "ANN102", "ANN401", "B008",
+    "UP035", "UP006", "UP007",
+    # UP045: Use `X | None` for type annotationsRuff
+    "UP045",
+    "PLR0913", "C901", "RUF010"
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["graflow"]
+
+[tool.ruff.lint.pylint]
+max-returns = 9
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = false
+no_implicit_optional = true
+strict_optional = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
