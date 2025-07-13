@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import Any
 
 
 class Executable(ABC):
     """Abstract base class for all executable entities in graflow."""
 
     @abstractmethod
-    def run(self):
+    def __call__(self, *args, **kwargs) -> Any:
+        """Allow direct function call on the executable."""
+        pass
+
+    @abstractmethod
+    def run(self, *args, **kwargs) -> Any:
         """Execute this executable."""
         pass
 
@@ -67,7 +73,11 @@ class Task(Executable):
         """Return the name of this root task."""
         return self._name
 
-    def run(self) -> None:
+    def __call__(self, *args, **kwargs) -> Any:
+        """Allow direct function call on the root task."""
+        return self.run()
+
+    def run(self) -> Any:
         """Execute this task (typically a no-op)."""
         print(f"Starting workflow from root: {self._name}")
         pass
@@ -98,7 +108,11 @@ class ParallelGroup(Executable):
         """Return the name of this parallel group."""
         return self._name
 
-    def run(self) -> None:
+    def __call__(self, *args, **kwargs) -> Any:
+        """Allow direct function call on the parallel group."""
+        return self.run()
+
+    def run(self) -> Any:
         """Execute all tasks in this parallel group."""
         print(f"Running parallel group: {self._name}")
         print(f"  Parallel tasks: {[task.name for task in self.tasks]}")
@@ -182,14 +196,13 @@ class TaskWrapper(Executable):
         """Return the name of this task wrapper."""
         return self._name
 
-    def run(self) -> None:
-        """Execute the wrapped function."""
-        print(f"Running task: {self._name}")
-        return self.func()
-
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args, **kwargs) -> Any:
         """Allow direct function call."""
         return self.func(*args, **kwargs)
+
+    def run(self) -> Any:
+        """Execute the wrapped function."""
+        return self.func()
 
     def __repr__(self) -> str:
         """Return string representation of this task wrapper."""
