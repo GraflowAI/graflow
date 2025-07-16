@@ -12,6 +12,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "pandas>=2.3.1",
     "pytest>=8.4.1",
     "ruff>=0.12.2",
 ]
