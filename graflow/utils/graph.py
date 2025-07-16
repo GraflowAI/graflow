@@ -5,7 +5,7 @@ from typing import Optional
 import matplotlib.pyplot as plt
 import networkx as nx
 
-from graflow.core.task import Executable, Task, TaskWrapper
+from graflow.core.task import Executable
 from graflow.core.workflow import WorkflowContext, get_current_workflow_context
 
 
