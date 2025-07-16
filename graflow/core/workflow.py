@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Optional
 
 import networkx as nx
 
+from graflow.exceptions import GraphError
+
 from .context import ExecutionContext
 
 if TYPE_CHECKING:
@@ -53,8 +55,18 @@ class WorkflowContext:
         """Add an edge between tasks in this workflow's graph."""
         self.graph.add_edge(from_node, to_node)
 
-    def execute(self, start_node: str, max_steps: int = 10) -> None:
+    def execute(self, start_node: Optional[str] = None, max_steps: int = 10) -> None:
         """Execute the workflow starting from the specified node."""
+        if start_node is None:
+            # Find start nodes (nodes with no predecessors)
+            candidate_nodes = [node for node in self.graph.nodes() if self.graph.in_degree(node) == 0]
+            if not candidate_nodes:
+                raise GraphError("No start node specified and no nodes with no predecessors found.")
+            elif len(candidate_nodes) > 1:
+                raise GraphError("Multiple start nodes found, please specify one.")            
+            start_node = candidate_nodes[0]
+            assert start_node is not None, "No valid start node found"
+
         exec_context = ExecutionContext.create(self.graph, start_node, max_steps=max_steps)
         exec_context.execute()
 
