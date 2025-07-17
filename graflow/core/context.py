@@ -9,6 +9,8 @@ from typing import Any, Dict, List, Optional
 
 import networkx as nx
 
+from .engine import WorkflowEngine
+
 
 @dataclass
 class ExecutionContext:
@@ -93,40 +95,8 @@ class ExecutionContext:
 
     def execute(self) -> None:
         """Execute tasks using this context."""
-        assert self.graph is not None, "Graph must be set before execution"
-
-        print(f"Starting execution from: {self.start_node}")
-
-        while not self.is_completed():
-            node = self.get_next_node()
-            if node is None:
-                break
-
-            # Check if node exists in graph
-            if node not in self.graph.nodes:
-                print(f"Warning: Node {node} not found in graph")
-                continue
-
-            # Execute the task
-            task = self.graph.nodes[node]["task"]
-            print(f"Running task: {node}")
-
-            # Execute task and store result
-            try:
-                result = task.run()
-                self.set_result(node, result)
-                self.mark_executed(node)
-            except Exception as e:
-                print(f"Error executing task {node}: {e}")
-                self.set_result(node, e)
-
-            self.increment_step()
-
-            # Add successor nodes to queue
-            for succ in self.graph.successors(node):
-                self.add_to_queue(succ)
-
-        print(f"Execution completed after {self.steps} steps")
+        engine = WorkflowEngine()
+        engine.execute(self)
 
     def save_context(self, path: str = "context.pkl") -> None:
         """Save the current execution context to a file."""
@@ -144,7 +114,6 @@ def load_context(path: str = "context.pkl") -> ExecutionContext:
 
 def execute_with_cycles(graph: nx.DiGraph, start_node: str, max_steps: int = 10) -> None:
     """Execute tasks allowing cycles from global graph."""
-    # Create ExecutionContext and delegate to it
-    exec_context = ExecutionContext.create(graph, start_node, max_steps=max_steps)
-    exec_context.execute()
+    engine = WorkflowEngine()
+    engine.execute_with_cycles(graph, start_node, max_steps)
 
