@@ -25,7 +25,6 @@ class ExecutionContext:
 
     # Execution results and data
     results: Dict[str, Any] = field(default_factory=dict)
-    shared_data: Dict[str, Any] = field(default_factory=dict)
 
     # Graph reference
     graph: nx.DiGraph = field(default_factory=nx.DiGraph)
@@ -73,14 +72,6 @@ class ExecutionContext:
     def get_result(self, node: str) -> Any:
         """Get execution result for a node."""
         return self.results.get(node)
-
-    def set_shared_data(self, key: str, value: Any) -> None:
-        """Set shared data accessible to all tasks."""
-        self.shared_data[key] = value
-
-    def get_shared_data(self, key: str, default: Any = None) -> Any:
-        """Get shared data."""
-        return self.shared_data.get(key, default)
 
     def save(self, path: str = "execution_context.pkl") -> None:
         """Save execution context to a pickle file."""
