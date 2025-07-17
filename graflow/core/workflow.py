@@ -63,12 +63,15 @@ class WorkflowContext:
             if not candidate_nodes:
                 raise GraphError("No start node specified and no nodes with no predecessors found.")
             elif len(candidate_nodes) > 1:
-                raise GraphError("Multiple start nodes found, please specify one.")            
+                raise GraphError("Multiple start nodes found, please specify one.")
             start_node = candidate_nodes[0]
             assert start_node is not None, "No valid start node found"
 
+        from .engine import WorkflowEngine  # noqa: PLC0415
+
         exec_context = ExecutionContext.create(self.graph, start_node, max_steps=max_steps)
-        exec_context.execute()
+        engine = WorkflowEngine()
+        engine.execute(exec_context)
 
     def show_info(self) -> None:
         """Display information about this workflow's graph."""
@@ -107,10 +110,10 @@ class WorkflowContext:
         self._group_counter += 1
         return f"ParallelGroup_{self._group_counter}"
 
-    def task(self, func=None, *, name=None):
+    def task(self, func=None, *, id=None):
         """Context-scoped task decorator."""
         from .decorators import task as _task  # noqa: PLC0415
-        return _task(func, name=name)
+        return _task(func, id=id)
 
 
 def get_current_workflow_context() -> WorkflowContext:
