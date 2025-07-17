@@ -8,7 +8,7 @@ from graflow.core.workflow import workflow
 def test_task_creation():
     """Test Task creation and basic functionality."""
     task_obj = Task("A")
-    assert task_obj.name == "A"
+    assert task_obj.task_id == "A"
     assert str(task_obj) == "Task(A)"
 
 
@@ -25,17 +25,17 @@ def test_decorator():
         return "test_result"
 
     assert isinstance(test_func, TaskWrapper)
-    assert test_func.name == "test_func"
+    assert test_func.task_id == "test_func"
 
 
 def test_decorator_with_name():
     """Test @task decorator with custom name."""
-    @task(name="custom_name")
+    @task(id="custom_name")
     def test_func():
         return "test_result"
 
     assert isinstance(test_func, TaskWrapper)
-    assert test_func.name == "custom_name"
+    assert test_func.task_id == "custom_name"
 
 
 def test_parallel_group_creation():
@@ -44,7 +44,7 @@ def test_parallel_group_creation():
     task_b = Task("B")
     group = ParallelGroup([task_a, task_b])
 
-    assert group.name.startswith("ParallelGroup_")
+    assert group.task_id.startswith("ParallelGroup_")
     assert len(group.tasks) == 2
 
 

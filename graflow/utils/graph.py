@@ -21,20 +21,20 @@ def build_graph(start_node: Executable, context: Optional[WorkflowContext] = Non
 
     def _build_graph_recursive(node: Executable) -> None:
         """Recursively build the graph from the executable."""
-        if node.name in visited:
+        if node.task_id in visited:
             return
-        visited.add(node.name)
+        visited.add(node.task_id)
 
-        new_graph.add_node(node.name, task=node)
+        new_graph.add_node(node.task_id, task=node)
 
-        for successor in graph.successors(node.name):
+        for successor in graph.successors(node.task_id):
             successor_task = graph.nodes[successor]["task"]
-            new_graph.add_edge(node.name, successor)
+            new_graph.add_edge(node.task_id, successor)
             _build_graph_recursive(successor_task)
 
-        for predecessor in graph.predecessors(node.name):
+        for predecessor in graph.predecessors(node.task_id):
             predecessor_task = graph.nodes[predecessor]["task"]
-            new_graph.add_edge(predecessor, node.name)
+            new_graph.add_edge(predecessor, node.task_id)
             _build_graph_recursive(predecessor_task)
 
     _build_graph_recursive(start_node)

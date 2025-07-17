@@ -1,14 +1,15 @@
 """Tests for revised graflow core functionality."""
 
 from graflow.core.decorators import task
-from graflow.core.task import ParallelGroup, Task, TaskWrapper, clear_workflow_context
+from graflow.core.task import ParallelGroup, Task, TaskWrapper
+from graflow.core.workflow import clear_workflow_context
 
 
 def test_task_creation():
     """Test Task creation and basic functionality."""
     clear_workflow_context()
     task_obj = Task("A")
-    assert task_obj.name == "A"
+    assert task_obj.task_id == "A"
     assert str(task_obj) == "Task(A)"
 
 
@@ -27,7 +28,7 @@ def test_task_decorator():
     def test_func():
         return "test result"
 
-    assert test_func.name == "test_func"
+    assert test_func.task_id == "test_func"
     assert isinstance(test_func, TaskWrapper)
     assert test_func() == "test result"  # Can call directly
 
@@ -36,11 +37,11 @@ def test_task_decorator_with_name():
     """Test @task decorator with custom name."""
     clear_workflow_context()
 
-    @task(name="custom_name")
+    @task(id="custom_name")
     def test_func():
         return "test result"
 
-    assert test_func.name == "custom_name"
+    assert test_func.task_id == "custom_name"
 
 
 def test_parallel_group_creation():
@@ -51,9 +52,9 @@ def test_parallel_group_creation():
     group = ParallelGroup([task_a, task_b])
 
     assert len(group.tasks) == 2
-    assert group.tasks[0].name == "A"
-    assert group.tasks[1].name == "B"
-    assert "ParallelGroup_" in group.name
+    assert group.tasks[0].task_id == "A"
+    assert group.tasks[1].task_id == "B"
+    assert "ParallelGroup_" in group.task_id
 
 
 def test_sequential_operator():
