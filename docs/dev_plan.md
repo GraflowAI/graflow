@@ -1931,56 +1931,80 @@ sequenceDiagram
     EC->>TW3: stop()
 ```
 
-### Task State Transition Diagram (Enhanced from backup plan)
+### TaskStatus State Transition Diagram
 
 ```mermaid
 stateDiagram-v2
-    [*] --> BLOCKED: Task defined with @task
+    [*] --> BLOCKED: Task created with dependencies
     
-    BLOCKED --> READY: Dependencies satisfied
-    BLOCKED --> SKIPPED: Skip conditions met
+    BLOCKED --> READY: All dependencies satisfied
+    BLOCKED --> SKIPPED: Skip conditions met or upstream failure
     
     READY --> RUNNING: TaskWorker dequeues and starts execution
     READY --> SKIPPED: Pre-execution skip conditions
     
-    RUNNING --> PLANNED: Execution success (cycle/downstream processing needed)
-    RUNNING --> SUCCESS: Execution success (single completion)
-    RUNNING --> ERROR: Execution failure
+    RUNNING --> PLANNED: Execution success + cycle/downstream processing needed
+    RUNNING --> SUCCESS: Execution success + single completion
+    RUNNING --> ERROR: Execution failure or exception
     RUNNING --> FEEDBACK_REQUIRED: Human-in-the-loop required
     
     PLANNED --> SUCCESS: Cycle termination condition met
     PLANNED --> READY: Continue cycle (next iteration)
     PLANNED --> ERROR: Cycle processing failure
+    PLANNED --> FEEDBACK_REQUIRED: Manual approval needed for next cycle
     
-    FEEDBACK_REQUIRED --> READY: Feedback received, continue
+    FEEDBACK_REQUIRED --> READY: Feedback approved, continue execution
     FEEDBACK_REQUIRED --> REJECTED: Human rejected the task
     FEEDBACK_REQUIRED --> SKIPPED: Human chose to skip
+    FEEDBACK_REQUIRED --> ERROR: Feedback processing failed
     
-    ERROR --> RETRY_WAITING: Retryable (attempt < max_attempts)
-    ERROR --> COMPLETED: Retry limit reached
+    ERROR --> RETRY_WAITING: Retryable error + retry_count < max_retries
+    ERROR --> COMPLETED: Non-retryable error or retry limit reached
     
-    RETRY_WAITING --> READY: Retry timer elapsed
+    RETRY_WAITING --> READY: Retry timer elapsed, ready for re-execution
+    RETRY_WAITING --> COMPLETED: Retry cancelled or timeout
     
-    SUCCESS --> READY: Cycle condition met (convergence not achieved)
-    SUCCESS --> COMPLETED: Final completion (convergence achieved)
+    SUCCESS --> READY: Cycle condition met + convergence not achieved
+    SUCCESS --> COMPLETED: Final completion + convergence achieved
+    SUCCESS --> FEEDBACK_REQUIRED: Success but needs human validation
     
-    REJECTED --> COMPLETED: Task rejected by human
-    SKIPPED --> COMPLETED: Skip completed
-    COMPLETED --> [*]: Task finished
+    REJECTED --> COMPLETED: Task permanently rejected by human
+    SKIPPED --> COMPLETED: Skip processing completed
+    COMPLETED --> [*]: Task lifecycle finished
+    
+    note right of BLOCKED
+        Initial state for tasks with dependencies
+        Waiting for prerequisite tasks to complete
+    end note
     
     note right of PLANNED
-        Handles iterative execution cycles
+        Iterative execution cycles
         Dynamic task generation via context.next_task()
+        Increment cycle_count in TaskState
     end note
     
     note right of FEEDBACK_REQUIRED
         Human-in-the-loop workflows
-        Supports manual intervention
+        Supports approval, text input, rejection
+        Task suspension until feedback received
     end note
     
     note right of SUCCESS
-        Uses node-specific max_cycle
+        Uses node-specific max_cycle settings
         Automatic convergence detection
+        Can trigger dependent task execution
+    end note
+    
+    note right of ERROR
+        Increment retry_count in TaskState
+        Respects task-specific max_retries
+        Can transition to retry or permanent failure
+    end note
+    
+    note right of RETRY_WAITING
+        Implements exponential backoff
+        Configurable retry delay
+        Preserves error context for retry
     end note
 ```
 
