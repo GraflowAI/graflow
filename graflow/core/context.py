@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import pickle
+import uuid
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 import networkx as nx
+
+from graflow.channels.base import Channel
+from graflow.channels.memory import MemoryChannel
+from graflow.core.cycle import CycleController
 
 from .engine import WorkflowEngine
 
@@ -16,18 +21,25 @@ from .engine import WorkflowEngine
 class ExecutionContext:
     """Encapsulates execution state and provides execution methods."""
 
-    # Execution state
+    session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     queue: deque = field(default_factory=deque)
-    executed: List[str] = field(default_factory=list)
-    steps: int = 0
-    max_steps: int = 10
     start_node: Optional[str] = None
+    max_steps: int = 10
+    default_max_retries: int = 3
 
-    # Execution results and data
+    # Execution metadata
+    steps: int = 0
+    executed: List[str] = field(default_factory=list)
     results: Dict[str, Any] = field(default_factory=dict)
 
     # Graph reference
     graph: nx.DiGraph = field(default_factory=nx.DiGraph)
+
+    # Cycle control
+    cycle_controller: CycleController = field(default_factory=lambda: CycleController())
+
+    # Channel system for inter-task communication
+    channel: Channel = field(default_factory=lambda: MemoryChannel("default"))
 
     def __post_init__(self):
         """Initialize context after creation."""
@@ -35,13 +47,19 @@ class ExecutionContext:
             self.queue.append(self.start_node)
 
     @classmethod
-    def create(cls, graph: nx.DiGraph, start_node: str, max_steps: int = 10) -> ExecutionContext:
+    def create(cls, graph: nx.DiGraph, start_node: str, max_steps: int = 10,
+               default_max_cycles: int = 10, default_max_retries: int = 3) -> ExecutionContext:
         """Create a new execution context."""
+        session_id = str(uuid.uuid4())
         return cls(
+            session_id=session_id,
             queue=deque([start_node]),
             start_node=start_node,
             max_steps=max_steps,
-            graph=graph
+            default_max_retries=default_max_retries,
+            graph=graph,
+            cycle_controller=CycleController(default_max_cycles),
+            channel=MemoryChannel(session_id)  # Use session_id for unique channel name
         )
 
     def add_to_queue(self, node: str) -> None:
@@ -72,6 +90,10 @@ class ExecutionContext:
     def get_result(self, node: str) -> Any:
         """Get execution result for a node."""
         return self.results.get(node)
+
+    def get_channel(self) -> Channel:
+        """Get the channel for inter-task communication."""
+        return self.channel
 
     def save(self, path: str = "execution_context.pkl") -> None:
         """Save execution context to a pickle file."""
