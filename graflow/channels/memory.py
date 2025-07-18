@@ -3,18 +3,19 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from .base import Channel
 
 
-@dataclass
 class MemoryChannel(Channel):
     """Memory-based channel implementation for inter-task communication."""
 
-    data: Dict[str, Any] = field(default_factory=dict)
-    ttl_data: Dict[str, float] = field(default_factory=dict)
+    def __init__(self, name: str):
+        """Initialize memory channel."""
+        super().__init__(name)
+        self.data: Dict[str, Any] = {}
+        self.ttl_data: Dict[str, float] = {}
 
     def set(self, key: str, value: Any, ttl: Optional[int] = None) -> None:
         """Store data in the channel."""
