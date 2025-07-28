@@ -105,102 +105,15 @@ class TaskState:
             self.result = kwargs.get('result')
 ```
 
-#### 1.2 Basic Cycle Control Implementation
-```python
-# graflow/core/cycle.py
-from typing import Dict, Optional
-from .task_status import TaskStatus, TaskState
-
-class CycleController:
-    """Controls cycle execution and prevents infinite loops."""
-    
-    def __init__(self, default_max_iterations: int = 100):
-        self.default_max_iterations: int = default_max_iterations
-        self.cycle_counts: Dict[str, int] = {}
-        self.node_max_cycles: Dict[str, int] = {}
-    
-    def set_node_max_cycles(self, node_id: str, max_cycles: int) -> None:
-        """Set maximum cycle count for a specific node."""
-        self.node_max_cycles[node_id] = max_cycles
-    
-    def get_max_cycles_for_node(self, node_id: str) -> int:
-        """Get maximum cycle count for a node (node-specific or default)."""
-        return self.node_max_cycles.get(node_id, self.default_max_iterations)
-    
-    def can_execute(self, node_id: str, iteration: Optional[int] = None) -> bool:
-        """Check if node can be executed based on iteration count."""
-        if iteration is None:
-            iteration = self.cycle_counts.get(node_id, 0)
-        max_cycles = self.get_max_cycles_for_node(node_id)
-        return iteration < max_cycles
-    
-    def register_cycle(self, node_id: str) -> int:
-        """Register a cycle execution and return current count."""
-        self.cycle_counts[node_id] = self.cycle_counts.get(node_id, 0) + 1
-        return self.cycle_counts[node_id]
-```
-
-#### 1.2 ExecutionContext Enhancement for Cycle and Retry Support
-```python
-# Extension to graflow/core/context.py
-@dataclass
-class ExecutionContext:
-    # Existing fields...
-    cycle_controller: CycleController = field(default_factory=lambda: CycleController())
-    cycle_detection: bool = True
-    
-    # New default configuration fields
-    default_max_cycle: int = 10
-    default_max_retries: int = 3
-    execution_mode: str = "sequential"
-    
-    @classmethod
-    def create(cls, graph: nx.DiGraph, start_node: str, max_steps: int = 10, 
-               default_max_cycle: int = 10, default_max_retries: int = 3,
-               execution_mode: str = "sequential") -> 'ExecutionContext':
-        """Create a new execution context with configuration."""
-        return cls(
-            queue=deque([start_node]),
-            start_node=start_node,
-            max_steps=max_steps,
-            graph=graph,
-            default_max_cycle=default_max_cycle,
-            default_max_retries=default_max_retries,
-            execution_mode=execution_mode,
-            cycle_controller=CycleController(default_max_cycle)
-        )
-    
-    def can_execute_node(self, node: str) -> bool:
-        """Check if node can be executed considering cycle limits."""
-        iteration = self.cycle_controller.cycle_counts.get(node, 0)
-        return self.cycle_controller.can_execute(node, iteration)
-    
-    def register_cycle_execution(self, node: str) -> None:
-        """Register that a node was executed in a cycle."""
-        self.cycle_controller.register_cycle(node)
-    
-    def configure_node_max_cycles(self, node: str, max_cycles: int) -> None:
-        """Configure max cycles for a specific node."""
-        self.cycle_controller.set_node_max_cycles(node, max_cycles)
-    
-    def get_max_retries_for_node(self, node: str) -> int:
-        """Get max retries for a specific node."""
-        if hasattr(self, 'graph') and node in self.graph.nodes:
-            task_obj = self.graph.nodes[node]["task"]
-            if hasattr(task_obj, 'get_max_retries'):
-                return task_obj.get_max_retries(self.default_max_retries)
-        return self.default_max_retries
-```
-
 #### 1.3 Enhanced TaskWrapper with Cycle Configuration
 ```python
 # Enhancement to graflow/core/task.py
 class TaskWrapper(Executable):
     """Wrapper class for function-based tasks with cycle and retry support."""
 
-    def __init__(self, name: str, func: Callable[..., Any]) -> None:
-        """Initialize a task wrapper with name and function."""
-        self._name: str = name
+    def __init__(self, task_id: str, func: Callable[..., Any]) -> None:
+        """Initialize a task wrapper with task_id and function."""
+        self._task_id: str = task_id
         self.func: Callable[..., Any] = func
         self.max_cycle: Optional[int] = None  # Node-specific max cycle limit
         self.max_retries: Optional[int] = None  # Node-specific max retry limit
@@ -208,9 +121,9 @@ class TaskWrapper(Executable):
         self._register_to_context()
 
     @property
-    def name(self) -> str:
-        """Return the name of this task wrapper."""
-        return self._name
+    def task_id(self) -> str:
+        """Return the task_id of this task wrapper."""
+        return self._task_id
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         """Allow direct function call."""
@@ -223,7 +136,7 @@ class TaskWrapper(Executable):
     def configure_cycle_control(self, execution_context: ExecutionContext) -> None:
         """Configure cycle control for this task in the execution context."""
         if self.max_cycle is not None:
-            execution_context.configure_node_max_cycles(self.name, self.max_cycle)
+            execution_context.configure_node_max_cycles(self.task_id, self.max_cycle)
     
     def get_max_retries(self, default: int) -> int:
         """Get max retries for this task (task-specific or default)."""
@@ -238,38 +151,7 @@ class TaskWrapper(Executable):
             config_info.append(f"max_retries={self.max_retries}")
         
         config_str = f", {', '.join(config_info)}" if config_info else ""
-        return f"TaskWrapper({self._name}{config_str})"
-```
-
-#### 1.4 Basic Data Channel Implementation
-```python
-# graflow/core/channel.py
-class Channel:
-    """Data channel for inter-task communication."""
-    
-    def __init__(self, name: str):
-        self.name = name
-        self.data = {}
-    
-    def set(self, key: str, value: Any) -> None:
-        """Store data in the channel."""
-        self.data[key] = value
-    
-    def get(self, key: str, default: Any = None) -> Any:
-        """Retrieve data from the channel."""
-        return self.data.get(key, default)
-
-# Integration into graflow/core/context.py
-@dataclass 
-class ExecutionContext:
-    # Existing fields...
-    channels: Dict[str, Channel] = field(default_factory=dict)
-    
-    def get_channel(self, name: str) -> Channel:
-        """Get or create a data channel."""
-        if name not in self.channels:
-            self.channels[name] = Channel(name)
-        return self.channels[name]
+        return f"TaskWrapper({self._task_id}{config_str})"
 ```
 
 #### 1.5 Human-in-the-loop Feedback Framework
@@ -440,26 +322,13 @@ class ExecutionContext:
 
 ```python
 # Enhancement to graflow/core/task.py
-class TaskExecutionContext:
-    """Context for task execution with feedback support."""
-    
-    def __init__(self, task_id: str, execution_context: ExecutionContext):
-        self.task_id = task_id
-        self.execution_context = execution_context
-        self.current_task_id = task_id
-    
-    def get_service(self, service_name: str) -> Any:
-        """Get service from execution context."""
-        return self.execution_context.get_service(service_name)
-    
-    def suspend_until_feedback(self, feedback_id: str) -> None:
-        """Suspend current task until feedback is received."""
-        self.execution_context.suspend_until_feedback(self.task_id, feedback_id)
+# Note: Using ExecutionContext directly for task execution context
+# The ExecutionContext already provides the necessary functionality
 
 # Usage examples for different feedback types
 
 @task(name="approval_task")
-def require_approval(context: TaskExecutionContext, data: Any) -> Any:
+def require_approval(context: ExecutionContext, data: Any) -> Any:
     """Task requiring approval before continuing."""
     feedback_manager = context.get_service("feedback_manager")
     feedback_id = feedback_manager.request_approval(
@@ -475,7 +344,7 @@ def require_approval(context: TaskExecutionContext, data: Any) -> Any:
     return data
 
 @task(name="text_input_task")
-def require_text_input(context: TaskExecutionContext, data: Any) -> Any:
+def require_text_input(context: ExecutionContext, data: Any) -> Any:
     """Task requiring text input from user."""
     feedback_manager = context.get_service("feedback_manager")
     feedback_id = feedback_manager.request_text_input(
@@ -491,9 +360,10 @@ def require_text_input(context: TaskExecutionContext, data: Any) -> Any:
     return context.get_result()
 ```
 
-#### 1.7 Enhanced WorkflowContext with Default Settings
+#### 1.7 Enhanced WorkflowContext with Default Settings and WorkflowEngine Integration
 ```python
 # Enhancement to graflow/core/workflow.py
+# Note: Execution logic has been moved to graflow/core/engine.py (WorkflowEngine)
 class WorkflowContext:
     """Enhanced context manager with default configuration support."""
 
@@ -538,12 +408,15 @@ class WorkflowContext:
         )
         
         # Configure task-specific settings
-        for node_name in self.graph.nodes():
-            task_obj = self.graph.nodes[node_name]["task"]
+        for node_id in self.graph.nodes():
+            task_obj = self.graph.nodes[node_id]["task"]
             if hasattr(task_obj, 'max_cycle') and task_obj.max_cycle is not None:
-                exec_context.configure_node_max_cycles(node_name, task_obj.max_cycle)
+                exec_context.configure_node_max_cycles(node_id, task_obj.max_cycle)
         
-        exec_context.execute()
+        # Use WorkflowEngine for execution
+        from .engine import WorkflowEngine
+        engine = WorkflowEngine(strategy=self.execution_mode)
+        engine.execute(exec_context)
 
 def workflow(name: str, **kwargs) -> WorkflowContext:
     """Enhanced workflow factory with configuration support.
@@ -574,7 +447,7 @@ from graflow.core.decorators import task
 from graflow.core.workflow import workflow
 
 @task(name="data_processor", max_cycle=5, max_retries=2)
-def process_data(context: TaskExecutionContext, data: Dict[str, Any]) -> Dict[str, Any]:
+def process_data(context: ExecutionContext, data: Dict[str, Any]) -> Dict[str, Any]:
     """A task that can iterate up to 5 times and retry up to 2 times."""
     iteration = context.cycle_controller.cycle_counts.get("data_processor", 0)
     
@@ -604,7 +477,7 @@ def simple_task() -> str:
     return "completed"
 
 @task(name="feedback_required_task")
-def require_human_approval(context: TaskExecutionContext, data: Dict[str, Any]) -> Dict[str, Any]:
+def require_human_approval(context: ExecutionContext, data: Dict[str, Any]) -> Dict[str, Any]:
     """A task that requires human approval before continuing."""
     # Check if approval is needed
     if data.get("requires_approval", False):
@@ -716,280 +589,8 @@ def example_mixed_feedback_workflow():
 
 #### 1.9 Parallel Group Coordination with Barrier Synchronization
 
-```python
-# graflow/coordination/coordinator.py
-from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional, Callable, Union
-from enum import Enum
-import uuid
-import time
-import json
-import threading
-import multiprocessing as mp
-
-class CoordinationBackend(Enum):
-    """Types of coordination backends for parallel execution."""
-    REDIS = "redis"
-    MULTIPROCESSING = "multiprocessing"
-    MEMORY = "memory"  # Single-process testing
-
-class TaskCoordinator(ABC):
-    """Abstract base class for task coordination."""
-    
-    @abstractmethod
-    def create_barrier(self, barrier_id: str, participant_count: int) -> str:
-        """Create a barrier for parallel task synchronization."""
-        pass
-    
-    @abstractmethod
-    def wait_barrier(self, barrier_id: str, timeout: int = 30) -> bool:
-        """Wait at barrier until all participants arrive."""
-        pass
-    
-    @abstractmethod
-    def signal_barrier(self, barrier_id: str) -> None:
-        """Signal barrier completion."""
-        pass
-    
-    @abstractmethod
-    def dispatch_task(self, task_spec: 'TaskSpec', group_id: str) -> None:
-        """Dispatch task to worker."""
-        pass
-    
-    @abstractmethod
-    def cleanup_barrier(self, barrier_id: str) -> None:
-        """Clean up barrier resources."""
-        pass
-
-class RedisCoordinator(TaskCoordinator):
-    """Redis-based task coordination."""
-    
-    def __init__(self, redis_client):
-        self.redis = redis_client
-        self.active_barriers: Dict[str, Dict[str, Any]] = {}
-    
-    def create_barrier(self, barrier_id: str, participant_count: int) -> str:
-        barrier_key = f"barrier:{barrier_id}"
-        completion_channel = f"barrier_done:{barrier_id}"
-        
-        # Reset barrier
-        self.redis.delete(barrier_key)
-        self.redis.set(f"{barrier_key}:expected", participant_count)
-        
-        self.active_barriers[barrier_id] = {
-            "key": barrier_key,
-            "channel": completion_channel,
-            "expected": participant_count
-        }
-        
-        return barrier_key
-    
-    def wait_barrier(self, barrier_id: str, timeout: int = 30) -> bool:
-        if barrier_id not in self.active_barriers:
-            return False
-        
-        barrier_info = self.active_barriers[barrier_id]
-        
-        # Increment participant count
-        current_count = self.redis.incr(barrier_info["key"])
-        
-        if current_count >= barrier_info["expected"]:
-            # Last participant - notify all
-            self.redis.publish(barrier_info["channel"], "complete")
-            return True
-        else:
-            # Wait for completion notification
-            pubsub = self.redis.pubsub()
-            pubsub.subscribe(barrier_info["channel"])
-            
-            try:
-                for message in pubsub.listen():
-                    if message["type"] == "message":
-                        return True
-            finally:
-                pubsub.close()
-        
-        return False
-    
-    def signal_barrier(self, barrier_id: str) -> None:
-        if barrier_id in self.active_barriers:
-            barrier_info = self.active_barriers[barrier_id]
-            current_count = self.redis.incr(barrier_info["key"])
-            
-            if current_count >= barrier_info["expected"]:
-                self.redis.publish(barrier_info["channel"], "complete")
-    
-    def dispatch_task(self, task_spec: 'TaskSpec', group_id: str) -> None:
-        queue_key = f"task_queue:{group_id}"
-        task_data = {
-            "task_id": task_spec.task_id,
-            "func_name": task_spec.func.__name__,
-            "args": task_spec.args,
-            "kwargs": task_spec.kwargs,
-            "group_id": group_id
-        }
-        self.redis.lpush(queue_key, json.dumps(task_data))
-    
-    def get_task_registry(self) -> Dict[str, Callable]:
-        """Get registry of available task functions for Redis workers."""
-        # This would be populated with registered task functions
-        return getattr(self, '_task_registry', {})
-    
-    def cleanup_barrier(self, barrier_id: str) -> None:
-        if barrier_id in self.active_barriers:
-            barrier_info = self.active_barriers[barrier_id]
-            self.redis.delete(barrier_info["key"])
-            self.redis.delete(f"{barrier_info['key']}:expected")
-            del self.active_barriers[barrier_id]
-
-class MultiprocessingCoordinator(TaskCoordinator):
-    """Multiprocessing-based task coordination."""
-    
-    def __init__(self, process_count: int = None):
-        self.mp = mp
-        self.manager = mp.Manager()
-        self.barriers: Dict[str, mp.Barrier] = {}
-        self.task_queue = mp.Queue()
-        self.result_queue = mp.Queue()
-        self.process_count = process_count or mp.cpu_count()
-        self.workers: List[mp.Process] = []
-    
-    def create_barrier(self, barrier_id: str, participant_count: int) -> str:
-        barrier = self.mp.Barrier(participant_count)
-        self.barriers[barrier_id] = barrier
-        return barrier_id
-    
-    def wait_barrier(self, barrier_id: str, timeout: int = 30) -> bool:
-        if barrier_id not in self.barriers:
-            return False
-        
-        try:
-            self.barriers[barrier_id].wait(timeout)
-            return True
-        except self.mp.BrokenBarrierError:
-            return False
-    
-    def signal_barrier(self, barrier_id: str) -> None:
-        # In multiprocessing, signaling is done through wait_barrier
-        pass
-    
-    def dispatch_task(self, task_spec: 'TaskSpec', group_id: str) -> None:
-        task_data = {
-            "task_id": task_spec.task_id,
-            "func": task_spec.func,
-            "args": task_spec.args,
-            "kwargs": task_spec.kwargs,
-            "group_id": group_id
-        }
-        self.task_queue.put(task_data)
-    
-    def cleanup_barrier(self, barrier_id: str) -> None:
-        if barrier_id in self.barriers:
-            # Reset barrier if needed
-            barrier = self.barriers[barrier_id]
-            if barrier.n_waiting > 0:
-                barrier.abort()
-            del self.barriers[barrier_id]
-    
-    def start_workers(self) -> None:
-        """Start worker processes."""
-        for i in range(self.process_count):
-            worker = self.mp.Process(
-                target=self._worker_loop,
-                args=(i,)
-            )
-            worker.start()
-            self.workers.append(worker)
-    
-    def stop_workers(self) -> None:
-        """Stop worker processes."""
-        # Send stop signals
-        for _ in self.workers:
-            self.task_queue.put(None)
-        
-        # Wait for workers to finish
-        for worker in self.workers:
-            worker.join()
-        
-        self.workers.clear()
-    
-    def _worker_loop(self, worker_id: int) -> None:
-        """Worker process loop."""
-        while True:
-            try:
-                task_data = self.task_queue.get(timeout=1)
-                if task_data is None:
-                    break
-                
-                # Execute task
-                result = self._execute_task(task_data)
-                
-                # Signal completion
-                self.result_queue.put({
-                    "task_id": task_data["task_id"],
-                    "group_id": task_data["group_id"],
-                    "result": result,
-                    "worker_id": worker_id
-                })
-                
-            except Exception as e:
-                self.result_queue.put({
-                    "task_id": task_data.get("task_id", "unknown"),
-                    "group_id": task_data.get("group_id", "unknown"),
-                    "error": str(e),
-                    "worker_id": worker_id
-                })
-    
-    def _execute_task(self, task_data: Dict[str, Any]) -> Any:
-        """Execute a single task."""
-        func = task_data["func"]
-        args = task_data["args"]
-        kwargs = task_data["kwargs"]
-        
-        return func(*args, **kwargs)
-
-class MemoryCoordinator(TaskCoordinator):
-    """In-memory coordination for single-process testing."""
-    
-    def __init__(self):
-        self.barriers: Dict[str, Dict[str, Any]] = {}
-        self.task_results: Dict[str, Any] = {}
-    
-    def create_barrier(self, barrier_id: str, participant_count: int) -> str:
-        self.barriers[barrier_id] = {
-            "expected": participant_count,
-            "current": 0,
-            "completed": False
-        }
-        return barrier_id
-    
-    def wait_barrier(self, barrier_id: str, timeout: int = 30) -> bool:
-        if barrier_id not in self.barriers:
-            return False
-        
-        barrier = self.barriers[barrier_id]
-        return barrier["completed"]
-    
-    def signal_barrier(self, barrier_id: str) -> None:
-        if barrier_id in self.barriers:
-            barrier = self.barriers[barrier_id]
-            barrier["current"] += 1
-            
-            if barrier["current"] >= barrier["expected"]:
-                barrier["completed"] = True
-    
-    def dispatch_task(self, task_spec: 'TaskSpec', group_id: str) -> None:
-        # Execute task immediately in memory coordinator
-        result = task_spec.func(*task_spec.args, **task_spec.kwargs)
-        self.task_results[task_spec.task_id] = result
-        
-        # Signal completion
-        self.signal_barrier(group_id)
-    
-    def cleanup_barrier(self, barrier_id: str) -> None:
-        if barrier_id in self.barriers:
-            del self.barriers[barrier_id]
-
+```py
+# graflow/coordinator/parallel_group.py
 class ParallelGroupExecutor:
     """Unified executor for parallel task groups supporting multiple backends."""
     
@@ -1058,115 +659,8 @@ class ParallelGroupExecutor:
         finally:
             # Clean up barrier
             self.coordinator.cleanup_barrier(barrier_id)
-    
-    def _execute_single_task(self, task: TaskSpec) -> None:
-        """Execute single task."""
-        result = task.func(*task.args, **task.kwargs)
-        if self.execution_context:
-            self.execution_context.set_result(task.task_id, result)
 ```
 
-#### 1.10 Usage Examples for Different Coordination Backends
-
-```python
-# Usage examples for different backends
-
-# Redis backend example
-def example_redis_parallel_execution():
-    """Example using Redis for distributed parallel execution."""
-    import redis
-    
-    executor = ParallelGroupExecutor(
-        backend=CoordinationBackend.REDIS,
-        backend_config={
-            "redis_client": redis.Redis(host="localhost", port=6379)
-        }
-    )
-    
-    # Define task sequence: task_a >> (task_b | task_c) >> task_d
-    sequence = [
-        TaskSpec("task_a", task_a_func, args=(), kwargs={}),
-        [  # Parallel group with barrier synchronization
-            TaskSpec("task_b", task_b_func, args=(), kwargs={}),
-            TaskSpec("task_c", task_c_func, args=(), kwargs={})
-        ],
-        TaskSpec("task_d", task_d_func, args=(), kwargs={})
-    ]
-    
-    executor.execute_sequence(sequence)
-
-# Multiprocessing backend example
-def example_multiprocessing_parallel_execution():
-    """Example using multiprocessing for local parallel execution."""
-    executor = ParallelGroupExecutor(
-        backend=CoordinationBackend.MULTIPROCESSING,
-        backend_config={
-            "process_count": 4
-        }
-    )
-    
-    # Same task sequence as Redis example
-    sequence = [
-        TaskSpec("task_a", task_a_func, args=(), kwargs={}),
-        [  # Parallel group
-            TaskSpec("task_b", task_b_func, args=(), kwargs={}),
-            TaskSpec("task_c", task_c_func, args=(), kwargs={})
-        ],
-        TaskSpec("task_d", task_d_func, args=(), kwargs={})
-    ]
-    
-    executor.execute_sequence(sequence)
-
-# Memory backend example (for testing)
-def example_memory_parallel_execution():
-    """Example using in-memory coordination for testing."""
-    executor = ParallelGroupExecutor(
-        backend=CoordinationBackend.MEMORY
-    )
-    
-    # Same task sequence
-    sequence = [
-        TaskSpec("task_a", task_a_func, args=(), kwargs={}),
-        [  # Parallel group
-            TaskSpec("task_b", task_b_func, args=(), kwargs={}),
-            TaskSpec("task_c", task_c_func, args=(), kwargs={})
-        ],
-        TaskSpec("task_d", task_d_func, args=(), kwargs={})
-    ]
-    
-    executor.execute_sequence(sequence)
-
-# Integration with existing workflow syntax
-def example_workflow_with_parallel_coordination():
-    """Example integrating parallel coordination with existing workflow syntax."""
-    
-    @task(name="task_a")
-    def task_a() -> str:
-        return "Task A completed"
-    
-    @task(name="task_b")
-    def task_b() -> str:
-        time.sleep(2)  # Simulate work
-        return "Task B completed"
-    
-    @task(name="task_c")
-    def task_c() -> str:
-        time.sleep(1)  # Simulate work
-        return "Task C completed"
-    
-    @task(name="task_d")
-    def task_d() -> str:
-        return "Task D completed"
-    
-    # Use multiprocessing backend for local execution
-    with workflow("parallel_workflow", 
-                  coordination_backend=CoordinationBackend.MULTIPROCESSING) as wf:
-        # Define flow: task_a >> (task_b | task_c) >> task_d
-        flow = task_a >> (task_b | task_c) >> task_d
-        
-        # Execute with barrier synchronization
-        wf.execute()
-```
 
 #### 1.11 Redis TaskWorker Core Logic
 
@@ -1468,19 +962,21 @@ class TaskWorker:
 
 ### Phase 3: Dynamic Task Generation (2 weeks)
 
-#### 3.1 TaskExecutionContext Extension
+#### 3.1 ExecutionContext Extension for Dynamic Task Generation
 ```python
-# graflow/core/execution_context.py
+# graflow/core/context.py - Extension to existing ExecutionContext
 from typing import Optional, Dict, Any, Callable
 import uuid
 
-class TaskExecutionContext:
-    """Context for dynamic task generation during execution."""
+# Extension methods for ExecutionContext class
+class ExecutionContext:
+    """Extended ExecutionContext with dynamic task generation support."""
     
-    def __init__(self, workflow_id: str, task_queue: TaskQueue) -> None:
-        self.workflow_id: str = workflow_id
-        self.task_queue: TaskQueue = task_queue
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Additional attributes for dynamic task generation
         self.current_task: Optional[TaskSpec] = None
+        self.task_queue: Optional[TaskQueue] = None
     
     def next_task(self, func: Callable[..., Any], **kwargs: Any) -> str:
         """Generate a new task dynamically."""
@@ -1490,7 +986,8 @@ class TaskExecutionContext:
             func=func,
             kwargs=kwargs
         )
-        self.task_queue.enqueue(task_spec)
+        if self.task_queue:
+            self.task_queue.enqueue(task_spec)
         return task_id
     
     def next_iteration(self, func: Optional[Callable[..., Any]] = None, **kwargs: Any) -> str:
@@ -1578,39 +1075,6 @@ def task(
     return decorator
 ```
 
-#### 3.3 Channel Push/Pull Decorators
-```python
-# graflow/decorators/channel.py
-from typing import Dict, Any, Callable, Optional, TypeVar
-import functools
-
-F = TypeVar('F', bound=Callable[..., Any])
-
-def channel_push(channel_name: str, key: Optional[str] = None) -> Callable[[F], F]:
-    """Decorator to push task results to a channel."""
-    def decorator(func: F) -> F:
-        @functools.wraps(func)
-        def wrapper(context: TaskExecutionContext, *args: Any, **kwargs: Any) -> Any:
-            result = func(context, *args, **kwargs)
-            channel = context.get_channel(channel_name)
-            channel.set(key or func.__name__, result)
-            return result
-        return wrapper  # type: ignore
-    return decorator
-
-def channel_pull(channels: Dict[str, str]) -> Callable[[F], F]:
-    """Decorator to pull data from channels and inject as parameters."""
-    def decorator(func: F) -> F:
-        @functools.wraps(func)
-        def wrapper(context: TaskExecutionContext, *args: Any, **kwargs: Any) -> Any:
-            channel_data: Dict[str, Any] = {}
-            for param, channel_name in channels.items():
-                channel = context.get_channel(channel_name)
-                channel_data[param] = channel.get("data")
-            return func(context, *args, **kwargs, **channel_data)
-        return wrapper  # type: ignore
-    return decorator
-```
 
 ### Phase 4: Monitoring & API Implementation (2 weeks)
 
@@ -1754,10 +1218,16 @@ graflow/
 │   ├── task.py              # 既存: Executable, Task, ParallelGroup
 │   ├── workflow.py          # 既存: WorkflowContext
 │   ├── context.py           # 既存: ExecutionContext (拡張要)
+│   ├── engine.py            # 既存: WorkflowEngine (execution logic)
 │   ├── cycle.py             # 新規: 循環制御
-│   ├── channel.py           # 新規: データチャネル
+│   ├── channel.py           # 既存: Abstract Channel base class
 │   ├── feedback.py          # 新規: フィードバック管理
-│   └── execution_context.py # 新規: TaskExecutionContext
+│   └── execution_context.py # 拡張: ExecutionContext extensions
+├── channels/
+│   ├── __init__.py
+│   ├── memory.py            # 既存: MemoryChannel implementation
+│   ├── redis.py             # 既存: RedisChannel implementation
+│   └── factory.py           # 既存: ChannelFactory and ChannelManager
 ├── coordination/
 │   ├── __init__.py
 │   ├── coordinator.py       # 新規: 並列実行コーディネータ
@@ -1772,8 +1242,7 @@ graflow/
 │   └── redis_worker.py      # 新規: Redis分散タスクワーカー
 ├── decorators/
 │   ├── __init__.py
-│   ├── decorators.py        # 既存: @task デコレータ
-│   └── channel.py           # 新規: @channel_push/pull
+│   └── decorators.py        # 既存: @task デコレータ
 ├── monitoring/
 │   ├── __init__.py
 │   └── monitor.py           # 新規: モニタリング
@@ -1861,7 +1330,7 @@ sequenceDiagram
     EC-->>TW: cycle check result
     
     TW->>TP: process_task(task_spec)
-    TP->>TP: Create TaskExecutionContext
+    TP->>TP: Create ExecutionContext
     TP->>Task: execute with context
     Task-->>TP: result
     
