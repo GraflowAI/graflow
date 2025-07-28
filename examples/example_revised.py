@@ -2,10 +2,8 @@
 
 from graflow.core.context import execute_with_cycles
 from graflow.core.decorators import task
-from graflow.core.task import (
-    Task,
-    clear_workflow_context,
-)
+from graflow.core.task import Task
+from graflow.core.workflow import clear_workflow_context
 from graflow.utils.graph import show_graph_info, visualize_dependencies
 
 # Clear any existing tasks
@@ -27,7 +25,7 @@ def task_C():  # noqa: N802
     print("Executing task C logic")
     return "Result C"
 
-@task(name="custom_D")
+@task(id="custom_D")
 def task_D():  # noqa: N802
     print("Executing task D logic")
     return "Result D"

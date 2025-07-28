@@ -2,10 +2,8 @@
 
 from graflow.core.context import execute_with_cycles
 from graflow.core.decorators import task
-from graflow.core.task import (
-    Task,
-    clear_workflow_context,
-)
+from graflow.core.task import Task
+from graflow.core.workflow import clear_workflow_context
 from graflow.utils.graph import show_graph_info, visualize_dependencies
 
 print("="*60)
@@ -30,7 +28,7 @@ def data_validation():
     print("✅ Validating data integrity...")
     return {"valid": True}
 
-@task(name="custom_transform")
+@task(id="custom_transform")
 def data_transformation():
     """Transform data format."""
     print("🔄 Transforming data format...")

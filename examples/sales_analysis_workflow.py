@@ -1,11 +1,16 @@
-"""Sales Data Analysis Workflow
+"""Sales analysis workflow example.
 
-Comprehensive workflow to analyze sales data, detect anomalies, create detailed reports, and send after approval
+This workflow demonstrates:
+1. Loading sales data
+2. Detecting anomalies in the data
+3. Generating detailed reports
+4. Requesting approval for actions
+5. Generating final reports
 """
 
-import json
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+import random
+from datetime import datetime, timedelta
+from typing import Any, Dict
 
 import numpy as np
 import pandas as pd
@@ -14,238 +19,247 @@ from graflow.core.decorators import task
 from graflow.core.workflow import workflow
 
 
-class SalesAnalyzer:
-    """Sales data analysis class"""
+def generate_sample_sales_data(num_records: int = 1000) -> pd.DataFrame:
+    """Generate sample sales data for demonstration."""
+    start_date = datetime.now() - timedelta(days=365)
 
-    def __init__(self):
-        self.data: Optional[pd.DataFrame] = None
-        self.anomalies: List[Dict] = []
-        self.report: Dict[str, Any] = {}
+    data = []
+    for i in range(num_records):
+        date = start_date + timedelta(days=random.randint(0, 365))
 
-    def load_data(self, file_path: str) -> pd.DataFrame:
-        """Load sales data"""
-        try:
-            self.data = pd.read_csv(file_path)
-            print(f"Data loading complete: {len(self.data)} records")
-            return self.data
-        except Exception as e:
-            print(f"Data loading error: {e}")
-            raise
+        # Base sales amount with some seasonality
+        base_amount = 1000 + 500 * np.sin(date.month * 2 * np.pi / 12)
 
-    def detect_anomalies(self, threshold: float = 2.0) -> List[Dict]:
-        """Anomaly detection (Z-score method)"""
-        if self.data is None:
-            raise ValueError("Data not loaded")
-
-        # Assume sales amount column
-        if 'amount' not in self.data.columns:
-            print("Warning: 'amount' column not found. Using sample data")
-            return []
-
-        z_scores = np.abs((self.data['amount'] - self.data['amount'].mean()) / self.data['amount'].std())
-        anomaly_indices = z_scores > threshold
-
-        self.anomalies = []
-        for idx in self.data[anomaly_indices].index:
-            anomaly = {
-                'index': int(idx),
-                'amount': float(self.data.loc[idx, 'amount']),
-                'z_score': float(z_scores[idx]),
-                'date': str(self.data.loc[idx, 'date']) if 'date' in self.data.columns else 'N/A'
-            }
-            self.anomalies.append(anomaly)
-
-        print(f"Anomalies detected: {len(self.anomalies)} records")
-        return self.anomalies
-
-    def generate_report(self) -> Dict[str, Any]:
-        """Generate detailed report"""
-        if self.data is None:
-            raise ValueError("Data not loaded")
-
-        self.report = {
-            'timestamp': datetime.now().isoformat(),
-            'data_summary': {
-                'total_records': len(self.data),
-                'total_amount': float(self.data['amount'].sum()) if 'amount' in self.data.columns else 0,
-                'avg_amount': float(self.data['amount'].mean()) if 'amount' in self.data.columns else 0,
-                'max_amount': float(self.data['amount'].max()) if 'amount' in self.data.columns else 0,
-                'min_amount': float(self.data['amount'].min()) if 'amount' in self.data.columns else 0
-            },
-            'anomaly_analysis': {
-                'anomaly_count': len(self.anomalies),
-                'anomaly_rate': len(self.anomalies) / len(self.data) if len(self.data) > 0 else 0,
-                'anomalies': self.anomalies
-            }
-        }
-
-        print(f"Report generation complete: {len(self.anomalies)} anomalies")
-        return self.report
-
-
-class ApprovalManager:
-    """Approval management class"""
-
-    @staticmethod
-    def request_approval(report: Dict[str, Any]) -> bool:
-        """Request approval (in actual implementation, integrate with external system)"""
-        anomaly_count = report.get('anomaly_analysis', {}).get('anomaly_count', 0)
-
-        if anomaly_count == 0:
-            print("No anomalies - auto approval")
-            return True
-        elif anomaly_count <= 5:
-            print(f"Minor anomalies ({anomaly_count} records) - auto approval")
-            return True
+        # Add some anomalies (5% chance)
+        if random.random() < 0.05:
+            amount = base_amount * random.choice([0.1, 5.0])  # Very low or very high
         else:
-            print(f"Critical anomalies ({anomaly_count} records) - manual approval required")
-            # In actual implementation, call external approval system API
-            return False
+            amount = base_amount * (1 + random.gauss(0, 0.2))  # Normal variation
+
+        data.append({
+            'date': date.strftime('%Y-%m-%d'),
+            'amount': max(0, amount),
+            'customer_id': f'CUST_{random.randint(1, 100):03d}',
+            'product_category': random.choice(['Electronics', 'Clothing', 'Books', 'Home']),
+            'region': random.choice(['North', 'South', 'East', 'West'])
+        })
+
+    return pd.DataFrame(data)
 
 
-class ReportSender:
-    """Report sending class"""
+def detect_anomalies(df: pd.DataFrame) -> Dict[str, Any]:
+    """Detect anomalies in sales data using statistical methods."""
+    anomalies = {
+        'outliers': [],
+        'suspicious_patterns': [],
+        'summary': {}
+    }
 
-    @staticmethod
-    def send_report(report: Dict[str, Any], approved: bool) -> bool:
-        """Send report"""
-        try:
-            # In actual implementation, send to external systems (email, Slack, etc.)
-            output_file = f"sales_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    # Calculate statistics
+    mean_amount = df['amount'].mean()
+    std_amount = df['amount'].std()
+    threshold = mean_amount + 3 * std_amount
 
-            report_data = {
-                'report': report,
-                'approval_status': 'approved' if approved else 'pending',
-                'sent_at': datetime.now().isoformat()
-            }
+    # Find outliers (amounts more than 3 standard deviations from mean)
+    outliers = df[df['amount'] > threshold]
+    anomalies['outliers'] = outliers.to_dict('records')
 
-            with open(output_file, 'w', encoding='utf-8') as f:
-                json.dump(report_data, f, ensure_ascii=False, indent=2)
+    # Check for suspicious patterns
+    daily_sales = df.groupby('date')['amount'].sum()
+    daily_mean = daily_sales.mean()
+    daily_std = daily_sales.std()
 
-            print(f"Report sending complete: {output_file}")
-            return True
-        except Exception as e:
-            print(f"Sending error: {e}")
-            return False
+    suspicious_days = daily_sales[daily_sales > daily_mean + 2 * daily_std]
+    anomalies['suspicious_patterns'] = [
+        {
+            'date': date,
+            'total_amount': float(amount),
+            'deviation': float(amount - daily_mean)
+        }
+        for date, amount in suspicious_days.items()
+    ]
+
+    # Summary statistics
+    anomalies['summary'] = {
+        'total_records': len(df),
+        'outlier_count': len(outliers),
+        'suspicious_days': len(suspicious_days),
+        'mean_amount': float(mean_amount),
+        'std_amount': float(std_amount),
+        'threshold': float(threshold)
+    }
+
+    return anomalies
+
+
+def generate_detailed_report(df: pd.DataFrame, anomalies: Dict[str, Any]) -> Dict[str, Any]:
+    """Generate a detailed analysis report."""
+    report = {
+        'timestamp': datetime.now().isoformat(),
+        'data_summary': {
+            'total_records': len(df),
+            'date_range': {
+                'start': df['date'].min(),
+                'end': df['date'].max()
+            },
+            'total_sales': float(df['amount'].sum()),
+            'average_sale': float(df['amount'].mean())
+        },
+        'anomaly_analysis': anomalies,
+        'recommendations': []
+    }
+
+    # Generate recommendations based on findings
+    if anomalies['summary']['outlier_count'] > 0:
+        report['recommendations'].append(
+            f"Review {anomalies['summary']['outlier_count']} outlier transactions for potential errors or fraud"
+        )
+
+    if anomalies['summary']['suspicious_days'] > 0:
+        report['recommendations'].append(
+            f"Investigate {anomalies['summary']['suspicious_days']} days with unusually high sales"
+        )
+
+    if anomalies['summary']['outlier_count'] == 0 and anomalies['summary']['suspicious_days'] == 0:
+        report['recommendations'].append("No significant anomalies detected. Data appears normal.")
+
+    return report
+
+
+def request_approval(report: Dict[str, Any]) -> bool:
+    """Simulate approval request process."""
+    print("\n=== APPROVAL REQUEST ===")
+    print(f"Report generated at: {report['timestamp']}")
+    print(f"Total records analyzed: {report['data_summary']['total_records']}")
+    print(f"Outliers found: {report['anomaly_analysis']['summary']['outlier_count']}")
+    print(f"Suspicious patterns: {report['anomaly_analysis']['summary']['suspicious_days']}")
+
+    print("\nRecommendations:")
+    for i, rec in enumerate(report['recommendations'], 1):
+        print(f"{i}. {rec}")
+
+    # Auto-approve for demo (in real scenario, this would be human input)
+    print("\n[AUTO-APPROVED for demonstration]")
+    return True
+
+
+def generate_final_report(detailed_report: Dict[str, Any], approved: bool) -> str:
+    """Generate final executive summary report."""
+    if not approved:
+        return "Report generation cancelled - approval not granted."
+
+    summary = f"""
+SALES ANALYSIS EXECUTIVE SUMMARY
+Generated: {detailed_report['timestamp']}
+
+DATA OVERVIEW:
+- Total Records: {detailed_report['data_summary']['total_records']:,}
+- Date Range: {detailed_report['data_summary']['date_range']['start']} to {detailed_report['data_summary']['date_range']['end']}
+- Total Sales: ${detailed_report['data_summary']['total_sales']:,.2f}
+- Average Sale: ${detailed_report['data_summary']['average_sale']:.2f}
+
+ANOMALY DETECTION RESULTS:
+- Outlier Transactions: {detailed_report['anomaly_analysis']['summary']['outlier_count']}
+- Suspicious Days: {detailed_report['anomaly_analysis']['summary']['suspicious_days']}
+
+RECOMMENDED ACTIONS:
+"""
+
+    for i, rec in enumerate(detailed_report['recommendations'], 1):
+        summary += f"{i}. {rec}\n"
+
+    summary += "\nStatus: APPROVED\nNext Review: Quarterly"
+
+    return summary
 
 
 def main():
-    """Main execution function"""
-    print("=== Sales Data Analysis Workflow ===\n")
+    """Main function to execute the sales analysis workflow."""
+    print("=== Sales Analysis Workflow ===\n")
 
-    # Shared data storage
-    analyzer = SalesAnalyzer()
-    workflow_data = {}
-
-    with workflow("sales_analysis_pipeline") as ctx:
+    with workflow("sales_analysis") as ctx:
+        # Shared data storage
+        workflow_data = {}
 
         @task
         def load_sales_data():
-            """Load sales data"""
+            """Load and prepare sales data."""
             print("📊 Loading sales data...")
-
-            # Create sample data (in actual use, specify external file)
-            sample_data = pd.DataFrame({
-                'date': pd.date_range('2024-01-01', periods=100, freq='D'),
-                'amount': np.random.normal(10000, 2000, 100)  # mean 10000, std 2000
-            })
-
-            # Intentionally add anomalies
-            sample_data.loc[10, 'amount'] = 50000  # abnormally high value
-            sample_data.loc[20, 'amount'] = 1000   # abnormally low value
-
-            analyzer.data = sample_data
-            workflow_data['data_loaded'] = True
-            print("✅ Data loading complete")
+            df = generate_sample_sales_data(1000)
+            workflow_data['sales_data'] = df
+            print(f"✅ Loaded {len(df)} sales records")
+            print(f"Date range: {df['date'].min()} to {df['date'].max()}")
+            print(f"Total sales: ${df['amount'].sum():,.2f}")
 
         @task
-        def analyze_anomalies():
-            """Anomaly analysis"""
-            print("🔍 Analyzing anomalies...")
+        def detect_data_anomalies():
+            """Detect anomalies in the loaded data."""
+            print("\n🔍 Detecting anomalies...")
+            df = workflow_data['sales_data']
+            anomalies = detect_anomalies(df)
+            workflow_data['anomalies'] = anomalies
 
-            if not workflow_data.get('data_loaded'):
-                raise ValueError("Data not loaded")
-
-            anomalies = analyzer.detect_anomalies(threshold=2.0)
-            workflow_data['anomalies_detected'] = len(anomalies) > 0
-            workflow_data['anomaly_count'] = len(anomalies)
-            print("✅ Anomaly analysis complete")
-
-        @task
-        def generate_detailed_report():
-            """Generate detailed report"""
-            print("📋 Generating detailed report...")
-
-            if not workflow_data.get('anomalies_detected', False):
-                print("ℹ️  No anomalies detected")
-
-            report = analyzer.generate_report()
-            workflow_data['report'] = report
-            workflow_data['report_generated'] = True
-            print("✅ Report generation complete")
+            print(f"✅ Analysis complete:")
+            print(f"  - Outliers detected: {anomalies['summary']['outlier_count']}")
+            print(f"  - Suspicious days: {anomalies['summary']['suspicious_days']}")
+            print(f"  - Detection threshold: ${anomalies['summary']['threshold']:.2f}")
 
         @task
-        def request_approval():
-            """Request approval"""
-            print("✋ Requesting approval...")
+        def create_detailed_report():
+            """Generate detailed analysis report."""
+            print("\n📋 Generating detailed report...")
+            df = workflow_data['sales_data']
+            anomalies = workflow_data['anomalies']
+            report = generate_detailed_report(df, anomalies)
+            workflow_data['detailed_report'] = report
+            print("✅ Detailed report generated")
 
-            if not workflow_data.get('report_generated'):
-                raise ValueError("Report not generated")
+            # Show some key findings
+            if report['anomaly_analysis']['summary']['outlier_count'] > 0:
+                print(f"⚠️  Found {report['anomaly_analysis']['summary']['outlier_count']} outlier transactions")
 
-            report = workflow_data['report']
-            approved = ApprovalManager.request_approval(report)
+            if report['anomaly_analysis']['summary']['suspicious_days'] > 0:
+                print(f"⚠️  Found {report['anomaly_analysis']['summary']['suspicious_days']} suspicious days")
+
+        @task
+        def approval_process():
+            """Request approval for report and recommendations."""
+            print("\n✋ Requesting approval...")
+            report = workflow_data['detailed_report']
+            approved = request_approval(report)
             workflow_data['approved'] = approved
-            print(f"✅ Approval result: {'Approved' if approved else 'Requires approval'}")
 
-        @task
-        def send_report():
-            """Send report"""
-            print("📤 Sending report...")
-
-            if not workflow_data.get('approved', False):
-                print("❌ Skipping send due to lack of approval")
-                return
-
-            report = workflow_data['report']
-            success = ReportSender.send_report(report, True)
-            workflow_data['sent'] = success
-
-            if success:
-                print("✅ Report sending complete")
+            if approved:
+                print("✅ Report approved - proceeding to final generation")
             else:
-                print("❌ Report sending failed")
+                print("❌ Report not approved - process halted")
 
         @task
-        def cleanup():
-            """Cleanup"""
-            print("🧹 Cleaning up...")
+        def generate_executive_summary():
+            """Generate final executive summary."""
+            print("\n📄 Generating executive summary...")
+            report = workflow_data['detailed_report']
+            approved = workflow_data['approved']
+            final_report = generate_final_report(report, approved)
+            workflow_data['final_report'] = final_report
 
-            # Delete temporary files, log records, etc.
-            summary = {
-                'Data Loading': workflow_data.get('data_loaded', False),
-                'Anomalies Detected': workflow_data.get('anomaly_count', 0),
-                'Report Generated': workflow_data.get('report_generated', False),
-                'Approval Status': workflow_data.get('approved', False),
-                'Send Complete': workflow_data.get('sent', False)
-            }
+            print("✅ Executive summary generated")
+            print("\n" + "="*60)
+            print(final_report)
+            print("="*60)
 
-            print("📊 Workflow Execution Summary:")
-            for key, value in summary.items():
-                print(f"  {key}: {value}")
+        # Build the workflow pipeline
+        load_sales_data >> detect_data_anomalies >> create_detailed_report >> approval_process >> generate_executive_summary
 
-            print("✅ Cleanup complete")
-
-        # Build workflow
-        load_sales_data >> analyze_anomalies >> generate_detailed_report >> request_approval >> send_report >> cleanup
-
-        # Display workflow information
+        # Show workflow structure
+        print("Workflow structure:")
         ctx.show_info()
+        print()
 
-        # Execute
-        print("\n🚀 Starting workflow execution\n")
-        ctx.execute("load_sales_data")
+        # Execute the workflow
+        ctx.execute("load_sales_data", max_steps=10)
 
-    print("\n🎉 Sales data analysis workflow complete!")
+    print("\n🎉 Sales analysis workflow completed successfully!")
 
 
 if __name__ == "__main__":
