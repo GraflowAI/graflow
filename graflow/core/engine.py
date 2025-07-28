@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import networkx as nx
+from graflow import exceptions
+from graflow.core.graph import TaskGraph
 
 if TYPE_CHECKING:
     from .context import ExecutionContext
@@ -26,6 +27,8 @@ class WorkflowEngine:
 
         Args:
             context: ExecutionContext containing the execution state and graph
+        Raises:
+            exceptions.GraflowRuntimeError: If execution fails due to a runtime error
         """
         assert context.graph is not None, "Graph must be set before execution"
 
@@ -37,32 +40,33 @@ class WorkflowEngine:
                 break
 
             # Check if node exists in graph
-            if node not in context.graph.nodes:
+            graph = context.graph.nx_graph()
+            if node not in graph.nodes:
                 print(f"Warning: Node {node} not found in graph")
                 continue
 
             # Execute the task
-            task = context.graph.nodes[node]["task"]
-            print(f"Running task: {node}")
+            task = graph.nodes[node]["task"]
 
-            # Execute task and store result
+            # Execute task with proper context management
             try:
-                result = task.run()
-                context.set_result(node, result)
-                context.mark_executed(node)
+                with context.executing_task(task) as _ctx:
+                    result = task.run()
+                    context.set_result(node, result)
+                    context.mark_executed(node)
             except Exception as e:
-                print(f"Error executing task {node}: {e}")
                 context.set_result(node, e)
+                raise exceptions.as_runtime_error(e) from e
 
             context.increment_step()
 
             # Add successor nodes to queue
-            for succ in context.graph.successors(node):
+            for succ in graph.successors(node):
                 context.add_to_queue(succ)
 
         print(f"Execution completed after {context.steps} steps")
 
-    def execute_with_cycles(self, graph: nx.DiGraph, start_node: str, max_steps: int = 10) -> None:
+    def execute_with_cycles(self, graph: TaskGraph, start_node: str, max_steps: int = 10) -> None:
         """Execute tasks allowing cycles from global graph.
 
         Args:

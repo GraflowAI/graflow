@@ -5,24 +5,39 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
+from graflow.core.context import ExecutionContext
+from graflow.exceptions import GraflowRuntimeError
+
 
 class Executable(ABC):
     """Abstract base class for all executable entities in graflow."""
 
+    @property
     @abstractmethod
-    def __call__(self, *args, **kwargs) -> Any:
-        """Allow direct function call on the executable."""
+    def task_id(self) -> str:
+        """Return the task_id of this executable."""
         pass
+
+    def set_execution_context(self, context: ExecutionContext) -> None:
+        """Set the execution context for this executable."""
+        self._execution_context = context
+
+    def get_execution_context(self) -> ExecutionContext:
+        """Get the execution context for this executable."""
+
+        if not hasattr(self, '_execution_context'):
+            raise GraflowRuntimeError("Execution context not set. Call set_execution_context() first.")
+
+        return self._execution_context
 
     @abstractmethod
     def run(self, *args, **kwargs) -> Any:
         """Execute this executable."""
         pass
 
-    @property
     @abstractmethod
-    def task_id(self) -> str:
-        """Return the task_id of this executable."""
+    def __call__(self, *args, **kwargs) -> Any:
+        """Allow direct function call on the executable."""
         pass
 
     def __rshift__(self, other: Executable) -> Executable:
@@ -171,7 +186,7 @@ class ParallelGroup(Executable):
         """Remove this parallel group from the current workflow context."""
         from .workflow import get_current_workflow_context  # noqa: PLC0415 avoid circular import
         current_context = get_current_workflow_context()
-        graph = current_context.graph
+        graph = current_context.graph._graph
         if graph.has_node(self.task_id):
             # Remove all edges connected to this node
             edges_to_remove = list(graph.edges(self.task_id))
@@ -184,10 +199,11 @@ class ParallelGroup(Executable):
 class TaskWrapper(Executable):
     """Wrapper class for function-based tasks created with @task decorator."""
 
-    def __init__(self, task_id: str, func) -> None:
+    def __init__(self, task_id: str, func, inject_context: bool = False) -> None:
         """Initialize a task wrapper with task_id and function."""
         self._task_id = task_id
         self.func = func
+        self.inject_context = inject_context
         # Register to current workflow context or global graph
         self._register_to_context()
 
@@ -198,10 +214,28 @@ class TaskWrapper(Executable):
 
     def __call__(self, *args, **kwargs) -> Any:
         """Allow direct function call."""
+        if self.inject_context:
+            exec_context = self.get_execution_context()
+            task_context = exec_context.current_task_context
+            if task_context:
+                return self.func(task_context, *args, **kwargs)
+            else:
+                # Fallback: create temporary task context
+                with exec_context.executing_task(self) as task_ctx:
+                    return self.func(task_ctx, *args, **kwargs)
         return self.func(*args, **kwargs)
 
     def run(self) -> Any:
         """Execute the wrapped function."""
+        if self.inject_context:
+            exec_context = self.get_execution_context()
+            task_context = exec_context.current_task_context
+            if task_context:
+                return self.func(task_context)
+            else:
+                # Fallback: create temporary task context
+                with exec_context.executing_task(self) as task_ctx:
+                    return self.func(task_ctx)
         return self.func()
 
     def __repr__(self) -> str:

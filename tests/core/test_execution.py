@@ -3,7 +3,7 @@
 import os
 import tempfile
 
-from graflow.core.context import create_execution_context, execute_with_cycles, load_context
+from graflow.core.context import ExecutionContext, create_execution_context, execute_with_cycles
 from graflow.core.task import Task
 from graflow.utils.graph import build_graph
 
@@ -26,8 +26,8 @@ def test_save_and_load_context():
         original_context.executed = ["A", "B"]
         original_context.steps= 2
 
-        original_context.save_context(context_path)
-        loaded_context = load_context(context_path)
+        original_context.save(context_path)
+        loaded_context = ExecutionContext.load(context_path)
 
         assert loaded_context.executed == ["A", "B"]
         assert loaded_context.steps == 2

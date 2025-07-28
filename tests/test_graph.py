@@ -5,6 +5,7 @@ import pytest
 
 from graflow.core.task import ParallelGroup, Task
 from graflow.core.workflow import clear_workflow_context
+from graflow.exceptions import DuplicateTaskError
 from graflow.utils.graph import build_graph
 
 
@@ -68,26 +69,15 @@ def test_cycle_detection():
 def test_a_a_b():
     """Test graph construction for flow: A >> A >> B."""
     task_a1 = Task("A")
-    task_a2 = Task("A")
-    task_b = Task("B")
 
-    flow = task_a1 >> task_a2 >> task_b
-    graph = build_graph(flow)
-
-    #draw_task_graph(graph, title="A_A_B Graph")
-
-    assert set(graph.nodes()) == {"A", "B"}
-    expected_edges = {
-        ("A", "A"),
-        ("A", "B"),
-    }
-    assert set(graph.edges()) == expected_edges
+    with pytest.raises(DuplicateTaskError) as e:
+        task_a2 = Task("A")
+        assert task_a1.task_id == task_a2.task_id, "Duplicate task IDs should match"
 
 def test_a_b_a():
     """Test graph construction for flow: A >> B >> A."""
     task_a1 = Task("A")
     task_b = Task("B")
-    task_a2 = Task("A")
 
     flow = task_a1 >> task_b >> task_a1
     graph = build_graph(flow)

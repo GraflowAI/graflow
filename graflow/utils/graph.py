@@ -15,7 +15,7 @@ def build_graph(start_node: Executable, context: Optional[WorkflowContext] = Non
         # Use the current workflow context if not provided
         context = get_current_workflow_context()
 
-    graph = context.graph
+    graph = context.graph.nx_graph()
     new_graph: nx.DiGraph = nx.DiGraph()
     visited: set[str] = set()
 

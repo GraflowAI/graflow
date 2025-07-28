@@ -13,45 +13,58 @@ if TYPE_CHECKING:
 F = TypeVar('F', bound=Callable[..., Any])
 
 @overload
-def task(func: F) -> TaskWrapper: ... # type: ignore
+def task(id_or_func: F) -> TaskWrapper: ... # type: ignore
+# Usage: @task (without parentheses, directly on function)
 
 @overload
-def task(func: None = None, *, id: Optional[str] = None) -> Callable[[F], TaskWrapper]: ... # type: ignore
+def task(id_or_func: str, *, inject_context: bool = False) -> Callable[[F], TaskWrapper]: ... # type: ignore
+# Usage: @task("custom_id") or @task("custom_id", inject_context=True)
+
+@overload
+def task(*, id: Optional[str] = None, inject_context: bool = False) -> Callable[[F], TaskWrapper]: ... # type: ignore
+# Usage: @task() or @task(id="custom_id") or @task(inject_context=True)
 
 def task(
-    func: Optional[F] = None, *, id: Optional[str] = None
+    id_or_func: Optional[F] | str | None = None, *, id: Optional[str] = None, inject_context: bool = False
 ) -> TaskWrapper | Callable[[F], TaskWrapper]:
     """Decorator to convert a function into a Task object.
 
     Can be used as:
     - @task
     - @task()
+    - @task("custom_id")
+    - @task("custom_id", inject_context=True)
     - @task(id="custom_id")
+    - @task(inject_context=True)
 
     Args:
-        func: The function to decorate (when used without parentheses)
-        id: Optional custom id for the task
+        id_or_func: The function to decorate (when used without parentheses) or task ID string
+        id: Optional custom id for the task (keyword argument)
+        inject_context: If True, automatically inject ExecutionContext as first parameter
 
     Returns:
         TaskWrapper instance or decorator function
     """
 
+    # Handle @task("task_id") and @task("task_id", inject_context=True) syntax
+    if isinstance(id_or_func, str):
+        def string_decorator(f: F) -> TaskWrapper:
+            return task(f, id=id_or_func, inject_context=inject_context)  # type: ignore
+        return string_decorator
+
     def decorator(f: F) -> TaskWrapper:
-        # Get task id. Use random UUID if not provided.
+        # Get task id. Use provided id, or function name, or random UUID.
         task_id = id if id is not None else getattr(f, '__name__', None)
         if task_id is None:
-            task_id = str(uuid.uuid4())
+            task_id = str(uuid.uuid4().int)
 
         @functools.wraps(f)
         def wrapper(*args, **kwargs):
             return f(*args, **kwargs)
 
         # Create TaskWrapper instance
-        try:
-            from .task import TaskWrapper  # Import here to avoid circular imports  # noqa: PLC0415
-            task_obj = TaskWrapper(task_id, wrapper)
-        except Exception as e:
-            raise RuntimeError(f"Failed to create TaskWrapper for {task_id}: {e}") from e
+        from .task import TaskWrapper  # Import here to avoid circular imports  # noqa: PLC0415
+        task_obj = TaskWrapper(task_id, wrapper, inject_context=inject_context)
 
         # Copy original function attributes to ensure compatibility
         try:
@@ -69,9 +82,9 @@ def task(
 
         return task_obj
 
-    if func is not None:
+    if callable(id_or_func):
         # If the decorator is used without parentheses, apply it directly
-        return decorator(func)
+        return decorator(id_or_func)
 
     # Handle @task() or @task(id="...")
     return decorator

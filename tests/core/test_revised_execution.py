@@ -25,8 +25,8 @@ def test_execute_simple_flow():
     context = get_current_workflow_context()  # Ensure context is initialized
 
     graph = context.graph
-    assert "start" in graph.nodes(), f"start not in graph nodes: {list(graph.nodes())}"
-    assert "end" in graph.nodes(), f"end not in graph nodes: {list(graph.nodes())}"
+    assert "start" in graph.nodes, f"start not in graph nodes: {list(graph.nodes)}"
+    assert "end" in graph.nodes, f"end not in graph nodes: {list(graph.nodes)}"
 
     start >> end
 
@@ -99,9 +99,9 @@ def test_global_graph_state():
 
         task1 >> task2
 
-        graph = context.graph
-        assert "task1" in graph.nodes()
-        assert "task2" in graph.nodes()
+        graph = context.graph.nx_graph()
+        assert "task1" in graph.nodes
+        assert "task2" in graph.nodes
         assert ("task1", "task2") in graph.edges()
 
 
@@ -115,10 +115,10 @@ def test_clear_graph():
         pass
 
     graph = context.graph
-    assert len(graph.nodes()) > 0
+    assert len(graph.nodes) > 0
 
     clear_workflow_context()
 
     context = get_current_workflow_context()
     graph = context.graph
-    assert len(graph.nodes()) == 0
+    assert len(graph.nodes) == 0
