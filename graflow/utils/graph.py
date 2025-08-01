@@ -1,8 +1,12 @@
 """Graph construction functionality for graflow."""
 
+import base64
 import math
 import os
+import random
 import re
+import time
+from pathlib import Path
 from typing import Any, Optional
 
 import matplotlib.pyplot as plt
@@ -362,9 +366,42 @@ def draw_mermaid(  # noqa: PLR0912
     Returns:
         Mermaid diagram syntax
     """
+    # Mermaid reserved keywords that cannot be used as node IDs
+    reserved_keywords = {
+        'graph', 'subgraph', 'direction', 'click', 'class', 'classDef',
+        'style', 'linkStyle', 'fill', 'stroke', 'color', 'end', 'start',
+        'TD', 'TB', 'BT', 'RL', 'LR', 'flowchart'
+    }
+
+    # Create unique IDs for all node labels
+    node_id_map: dict[str, str] = {}
+    # Pre-populate used_ids with all escaped node labels to avoid conflicts
+    used_ids: set[str] = {re.sub(r"[^a-zA-Z-_0-9]", "_", str(node)) for node in graph.nodes()}
+
     def _escape_node_label(node_label: str) -> str:
-        """Escapes the node label for Mermaid syntax."""
-        return re.sub(r"[^a-zA-Z-_0-9]", "_", str(node_label))
+        """Generate a unique Mermaid-compatible ID for a node label."""
+        if node_label in node_id_map:
+            return node_id_map[node_label]
+
+        # Escape non-alphanumeric characters
+        escaped = re.sub(r"[^a-zA-Z-_0-9]", "_", node_label)
+
+        # Start with the escaped label as candidate
+        candidate = escaped
+
+        # If it's a reserved keyword or already used, add suffix
+        if escaped in reserved_keywords or candidate in used_ids:
+            counter = 1
+            while True:
+                candidate = f"{escaped}_{counter}"
+                if candidate not in used_ids:
+                    break
+                counter += 1
+
+        # Store mapping and mark as used
+        node_id_map[node_label] = candidate
+        used_ids.add(candidate)
+        return candidate
 
     if not graph.nodes():
         return "graph TD;\n    EmptyGraph[Empty Graph];\n"
@@ -512,13 +549,11 @@ def draw_mermaid_png(
     with_styles: bool = True,
     node_colors: Optional[dict[Any, str]] = None,
     wrap_label_n_words: int = 9,
-    draw_method: str = "api",
     background_color: Optional[str] = "white",
-    padding: int = 10,
     max_retries: int = 1,
     retry_delay: float = 1.0,
 ) -> bytes:
-    """Draw a NetworkX DiGraph as PNG using Mermaid rendering.
+    """Draw a NetworkX DiGraph as PNG using Mermaid API rendering.
 
     Args:
         graph: NetworkX directed graph to draw
@@ -527,17 +562,14 @@ def draw_mermaid_png(
         with_styles: Whether to include node styling
         node_colors: Custom colors for nodes (optional)
         wrap_label_n_words: Words to wrap edge labels at
-        draw_method: Method to draw the graph ("api" or "pyppeteer")
         background_color: Background color of the image
-        padding: Padding around the image
-        max_retries: Maximum number of retries (API method only)
-        retry_delay: Delay between retries (API method only)
+        max_retries: Maximum number of retries
+        retry_delay: Delay between retries
 
     Returns:
         PNG image bytes
 
     Raises:
-        ValueError: If an invalid draw method is provided
         ImportError: If required dependencies are not installed
     """
     # Generate Mermaid syntax
@@ -549,110 +581,15 @@ def draw_mermaid_png(
         wrap_label_n_words=wrap_label_n_words,
     )
 
-    if draw_method.lower() == "pyppeteer":
-        import asyncio
-        img_bytes = asyncio.run(
-            _render_mermaid_using_pyppeteer(
-                mermaid_syntax, output_path, background_color, padding
-            )
-        )
-    elif draw_method.lower() == "api":
-        img_bytes = _render_mermaid_using_api(
-            mermaid_syntax,
-            output_path=output_path,
-            background_color=background_color,
-            max_retries=max_retries,
-            retry_delay=retry_delay,
-        )
-    else:
-        supported_methods = ["api", "pyppeteer"]
-        msg = (
-            f"Invalid draw method: {draw_method}. "
-            f"Supported draw methods are: {', '.join(supported_methods)}"
-        )
-        raise ValueError(msg)
-
-    return img_bytes
-
-
-async def _render_mermaid_using_pyppeteer(
-    mermaid_syntax: str,
-    output_path: Optional[str] = None,
-    background_color: Optional[str] = "white",
-    padding: int = 10,
-    device_scale_factor: int = 3,
-) -> bytes:
-    """Renders Mermaid graph using Pyppeteer."""
-    try:
-        from pyppeteer import launch  # type: ignore[import-not-found]
-    except ImportError as e:
-        msg = "Install Pyppeteer to use the Pyppeteer method: `pip install pyppeteer`."
-        raise ImportError(msg) from e
-
-    browser = await launch()
-    page = await browser.newPage()
-
-    # Setup Mermaid JS
-    await page.goto("about:blank")
-    await page.addScriptTag(
-        {"url": "https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"}
-    )
-    await page.evaluate(
-        """() => {
-                mermaid.initialize({startOnLoad:true});
-            }"""
-    )
-
-    # Render SVG
-    svg_code = await page.evaluate(
-        """(mermaidGraph) => {
-                return mermaid.mermaidAPI.render('mermaid', mermaidGraph);
-            }""",
+    img_bytes = _render_mermaid_using_api(
         mermaid_syntax,
+        output_path=output_path,
+        background_color=background_color,
+        max_retries=max_retries,
+        retry_delay=retry_delay,
     )
-
-    # Set the page background to white
-    await page.evaluate(
-        """(svg, background_color) => {
-            document.body.innerHTML = svg;
-            document.body.style.background = background_color;
-        }""",
-        svg_code["svg"],
-        background_color,
-    )
-
-    # Take a screenshot
-    dimensions = await page.evaluate(
-        """() => {
-            const svgElement = document.querySelector('svg');
-            const rect = svgElement.getBoundingClientRect();
-            return { width: rect.width, height: rect.height };
-        }"""
-    )
-    await page.setViewport(
-        {
-            "width": int(dimensions["width"] + padding),
-            "height": int(dimensions["height"] + padding),
-            "deviceScaleFactor": device_scale_factor,
-        }
-    )
-
-    img_bytes = await page.screenshot({"fullPage": False})
-    await browser.close()
-
-    if output_path is not None:
-        import asyncio
-        await asyncio.get_event_loop().run_in_executor(
-            None, _write_bytes_to_file, output_path, img_bytes
-        )
 
     return img_bytes
-
-
-def _write_bytes_to_file(file_path: str, data: bytes) -> None:
-    """Write bytes to file."""
-    from pathlib import Path
-    Path(file_path).write_bytes(data)
 
 
 def _render_mermaid_using_api(
@@ -665,12 +602,8 @@ def _render_mermaid_using_api(
     retry_delay: float = 1.0,
 ) -> bytes:
     """Renders Mermaid graph using the Mermaid.INK API."""
-    import base64
-    import random
-    import time
-
     try:
-        import requests
+        import requests  # noqa: PLC0415
     except ImportError as e:
         msg = (
             "Install the `requests` module to use the Mermaid.INK API: "
@@ -699,8 +632,7 @@ def _render_mermaid_using_api(
         "1. Check your internet connection and try again\n"
         "2. Try with higher retry settings: "
         "`draw_mermaid_png(..., max_retries=5, retry_delay=2.0)`\n"
-        "3. Use the Pyppeteer rendering method which will render your graph locally "
-        'in a browser: `draw_mermaid_png(..., draw_method="pyppeteer")`'
+        "3. Try using the pygraphviz PNG renderer instead: `draw_png(...)`"
     )
 
     for attempt in range(max_retries + 1):
@@ -709,7 +641,6 @@ def _render_mermaid_using_api(
             if response.status_code == requests.codes.ok:
                 img_bytes = response.content
                 if output_path is not None:
-                    from pathlib import Path
                     Path(output_path).write_bytes(response.content)
 
                 return img_bytes
