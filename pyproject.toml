@@ -18,6 +18,12 @@ dev = [
     "ruff>=0.12.2",
 ]
 
+[project.optional-dependencies]
+extras = [
+    "grandalf>=0.8",
+    "pygraphviz>=1.14",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
