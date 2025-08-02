@@ -3,14 +3,10 @@
 Demonstration of how stack-based design supports parallel and nested execution.
 """
 
-import os
-import sys
-
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-from graflow.core.context import ExecutionContext
+from graflow.core.context import ExecutionContext, TaskExecutionContext
 from graflow.core.decorators import task
 from graflow.core.graph import TaskGraph
+from graflow.core.task import Task
 
 
 def demo_stack_behavior():
@@ -32,25 +28,25 @@ def demo_stack_behavior():
     show_stack_state("1. Initial state")
 
     # Simulate nested execution
-    with exec_context.executing_task("outer_task") as outer_ctx:
-        show_stack_state("2. After entering outer_task")
+    with exec_context.executing_task(Task("outer_task")) as outer_ctx:
+        show_stack_state(f"2. After entering {outer_ctx.task_id}")
 
-        with exec_context.executing_task("middle_task") as middle_ctx:
-            show_stack_state("3. After entering middle_task")
+        with exec_context.executing_task(Task("middle_task")) as middle_ctx:
+            show_stack_state(f"3. After entering {middle_ctx.task_id}")
 
-            with exec_context.executing_task("inner_task") as inner_ctx:
-                show_stack_state("4. After entering inner_task (deepest)")
+            with exec_context.executing_task(Task("inner_task")) as inner_ctx:
+                show_stack_state(f"4. After entering {inner_ctx.task_id}")
 
                 # All contexts are available
                 print(f"  Inner can access: task_id={inner_ctx.task_id}")
                 print(f"  Current from stack: {exec_context.current_task_id}")
                 print()
 
-            show_stack_state("5. After exiting inner_task")
+            show_stack_state(f"5. After exiting {inner_ctx.task_id}")
 
-        show_stack_state("6. After exiting middle_task")
+        show_stack_state(f"6. After exiting {middle_ctx.task_id}")
 
-    show_stack_state("7. After exiting outer_task (back to empty)")
+    show_stack_state(f"7. After exiting {outer_ctx.task_id} (back to empty)")
 
 
 def demo_parallel_group_simulation():
@@ -75,7 +71,7 @@ def demo_parallel_group_simulation():
         return f"Task 2 result: {task_ctx.get_local_data('task_number')}"
 
     @task(inject_context=True)
-    def parallel_group(task_ctx):
+    def parallel_group(task_ctx: TaskExecutionContext):
         print(f"🔗 ParallelGroup executing in context: {task_ctx.task_id}")
         print(f"   Current stack depth: {len(exec_context._task_execution_stack)}")
 
@@ -85,14 +81,14 @@ def demo_parallel_group_simulation():
         print("\n  📋 Starting parallel task executions:")
 
         # Task 1 execution with its own context
-        with exec_context.executing_task("parallel_task_1") as ctx1:
+        with exec_context.executing_task(Task("parallel_task_1")) as ctx1:
             print(f"    Stack during task 1: {[c.task_id for c in exec_context._task_execution_stack]}")
             result1 = parallel_task_1.func(ctx1)
             results.append(result1)
             print(f"    Task 1 local data: {ctx1.local_data}")
 
         # Task 2 execution with its own context
-        with exec_context.executing_task("parallel_task_2") as ctx2:
+        with exec_context.executing_task(Task("parallel_task_2")) as ctx2:
             print(f"    Stack during task 2: {[c.task_id for c in exec_context._task_execution_stack]}")
             result2 = parallel_task_2.func(ctx2)
             results.append(result2)
@@ -103,7 +99,7 @@ def demo_parallel_group_simulation():
 
     # Execute the parallel group
     print("1. Executing parallel group:")
-    with exec_context.executing_task("parallel_group") as group_ctx:
+    with exec_context.executing_task(Task("parallel_group")) as group_ctx:
         result = parallel_group.func(group_ctx)
         print(f"\nFinal result: {result}")
 
@@ -118,13 +114,13 @@ def demo_context_isolation():
     # Simulate what happens in actual parallel execution
     print("1. Testing data isolation between contexts:")
 
-    with exec_context.executing_task("task_a") as ctx_a:
+    with exec_context.executing_task(Task("task_a")) as ctx_a:
         ctx_a.set_local_data("shared_key", "value_from_A")
         ctx_a.set_local_data("task_specific", "A_data")
         print(f"  Task A set data: {ctx_a.local_data}")
 
         # Nested task B (could be parallel in real scenario)
-        with exec_context.executing_task("task_b") as ctx_b:
+        with exec_context.executing_task(Task("task_b")) as ctx_b:
             ctx_b.set_local_data("shared_key", "value_from_B")  # Same key, different value
             ctx_b.set_local_data("task_specific", "B_data")
             print(f"  Task B set data: {ctx_b.local_data}")
@@ -150,14 +146,14 @@ def demo_cycle_isolation():
     print("1. Testing per-task cycle management:")
 
     # First task with its own cycle count
-    with exec_context.executing_task("cycling_task_a") as ctx_a:
+    with exec_context.executing_task(Task("cycling_task_a")) as ctx_a:
         print(f"  Task A initial cycles: {ctx_a.cycle_count}/{ctx_a.max_cycles}")
         ctx_a.register_cycle()
         ctx_a.register_cycle()
         print(f"  Task A after 2 cycles: {ctx_a.cycle_count}/{ctx_a.max_cycles}")
 
         # Second task with independent cycle count
-        with exec_context.executing_task("cycling_task_b") as ctx_b:
+        with exec_context.executing_task(Task("cycling_task_b")) as ctx_b:
             print(f"  Task B initial cycles: {ctx_b.cycle_count}/{ctx_b.max_cycles}")
             ctx_b.register_cycle()
             print(f"  Task B after 1 cycle: {ctx_b.cycle_count}/{ctx_b.max_cycles}")
@@ -165,7 +161,7 @@ def demo_cycle_isolation():
             # Both tasks have independent cycle counts
             print(f"  Task A still has: {ctx_a.cycle_count} cycles")
             print(f"  Task B has: {ctx_b.cycle_count} cycles")
-            print(f"  Tasks can iterate independently:")
+            print("  Tasks can iterate independently:")
             print(f"    A can iterate: {ctx_a.can_iterate()}")
             print(f"    B can iterate: {ctx_b.can_iterate()}")
 

@@ -1,13 +1,12 @@
 """Example usage of revised graflow with @task decorator and global graph."""
 
-from graflow.core.context import execute_with_cycles
 from graflow.core.decorators import task
 from graflow.core.task import Task
-from graflow.core.workflow import clear_workflow_context
-from graflow.utils.graph import show_graph_info, visualize_dependencies
+from graflow.core.workflow import clear_workflow_context, get_current_workflow_context
 
 # Clear any existing tasks
 clear_workflow_context()
+ctx = get_current_workflow_context()
 
 # Create tasks using @task decorator
 @task
@@ -37,34 +36,35 @@ def task_E():  # noqa: N802
 
 print("=== Building Dependencies with Operators ===")
 # Build dependencies using operators (auto-registers to global graph)
-task_A >> task_B >> task_C
-task_D >> task_E
+task_A >> task_B >> task_C # type: ignore
+task_D >> task_E # type: ignore
 
 # Create parallel group
 parallel_group = task_B | task_C
 print(f"Created parallel group: {parallel_group}")
 
 # Complex flow
-task_A >> (task_B | task_C) >> task_D
+task_A >> (task_B | task_C) >> task_D # type: ignore
 
 print("\n=== Graph Information ===")
-show_graph_info()
+ctx.show_info()
 
 print("\n=== Dependencies Visualization ===")
-visualize_dependencies()
+ctx.visualize_dependencies()
 
 print("\n=== Execution ===")
-execute_with_cycles("task_A", max_steps=10)
+ctx.execute("task_A", max_steps=10)
 
 print("\n=== Traditional Task Objects ===")
 # Traditional Task objects still work
 clear_workflow_context()
+ctx = get_current_workflow_context()
 
 X = Task("X")
 Y = Task("Y")
 Z = Task("Z")
 
-X >> Y >> Z
+X >> Y >> Z # type: ignore
 
-show_graph_info()
-execute_with_cycles("X", max_steps=5)
+ctx.show_info()
+ctx.execute("X", max_steps=5)

@@ -21,7 +21,7 @@ def make_decision(context: TaskExecutionContext, data):
 
     value = data.get("value", 0)
 
-    if value > 10:
+    if value > 10:  # noqa: PLR2004
         # Create high-value processing task
         high_task = TaskWrapper(
             "high_value_processor",
@@ -56,8 +56,10 @@ def process_low_value(value):
 
 
 @task(id="counter_task", inject_context=True)
-def count_iterations(context: TaskExecutionContext, data):
+def count_iterations(context: TaskExecutionContext, data=None):
     """Count iterations using next_iteration."""
+    if data is None:
+        data = {"count": 0, "limit": 3}
     count = data.get("count", 0)
     limit = data.get("limit", 3)
 
@@ -96,7 +98,7 @@ def demo_conditional_tasks():
     print("\n🚀 Testing with high value (15):")
     with workflow("high_value_demo") as wf:
         @task(id="init_high", inject_context=True)
-        def init_high(context: TaskExecutionContext):
+        def init_high(context: TaskExecutionContext, _data=None):
             """Initialize high value processing."""
             return make_decision.func(context, {"value": 15})
 
@@ -106,7 +108,7 @@ def demo_conditional_tasks():
     print("\n🚀 Testing with low value (7):")
     with workflow("low_value_demo") as wf:
         @task(id="init_low", inject_context=True)
-        def init_low(context: TaskExecutionContext):
+        def init_low(context: TaskExecutionContext, _data=None):
             """Initialize low value processing."""
             return make_decision.func(context, {"value": 7})
 
@@ -121,14 +123,10 @@ def demo_iterative_tasks():
 
     print("\n🚀 Starting iterative counting:")
     with workflow("iteration_demo") as wf:
-        @task(id="init_counter", inject_context=True)
-        def init_counter(context: TaskExecutionContext):
-            """Initialize counting."""
-            context.next_task(count_iterations, {"count": 0, "limit": 3})
+        # Add the count_iterations task to the workflow
+        wf.add_node("counter_task", count_iterations)
 
-            return count_iterations.func(context, {"count": 0, "limit": 3})
-
-        wf.execute("init_counter")
+        wf.execute(start_node="counter_task")
 
 
 def main():

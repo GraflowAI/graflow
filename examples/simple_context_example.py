@@ -26,7 +26,7 @@ def main():  # noqa: PLR0915
             return "loaded"
 
         # Build pipeline - just use @task, no @ctx.task needed!
-        extract >> transform >> load
+        extract >> transform >> load # type: ignore
 
         ctx.show_info()
         ctx.execute("extract")
@@ -46,7 +46,7 @@ def main():  # noqa: PLR0915
         def train():
             print("ML: Training model")
 
-        load_data >> train
+        load_data >> train # type: ignore
 
         print("ML Pipeline:")
         ml.show_info()
@@ -61,7 +61,7 @@ def main():  # noqa: PLR0915
         def report():
             print("Analytics: Generating report")
 
-        collect >> report
+        collect >> report # type: ignore
 
         print("\nAnalytics Pipeline:")
         analytics.show_info()
@@ -92,7 +92,7 @@ def main():  # noqa: PLR0915
             print("Finishing parallel demo")
 
         # Create parallel execution: start >> (A | B | C) >> finish
-        start >> (task_a | task_b | task_c) >> finish
+        start >> (task_a | task_b | task_c) >> finish # type: ignore
 
         parallel.show_info()
         parallel.execute("start")
@@ -111,7 +111,7 @@ def main():  # noqa: PLR0915
         print("Global task 2")
 
     # These will use the global graph
-    global_task1 >> global_task2
+    global_task1 >> global_task2 # type: ignore
 
     print("Global tasks created (will use global graph)")
 

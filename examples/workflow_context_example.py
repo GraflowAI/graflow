@@ -26,7 +26,7 @@ def main():  # noqa: PLR0915
             return {"status": "loaded"}
 
         # Build pipeline
-        extract_data >> transform_data >> load_data
+        extract_data >> transform_data >> load_data # type: ignore
 
         # Show workflow info
         ctx.show_info()
@@ -60,7 +60,7 @@ def main():  # noqa: PLR0915
             print("Evaluating model")
 
         # Build ML pipeline
-        load_dataset >> preprocess >> train_model >> evaluate
+        load_dataset >> preprocess >> train_model >> evaluate # type: ignore
 
         print("ML Training Workflow:")
         ml_ctx.show_info()
@@ -80,7 +80,7 @@ def main():  # noqa: PLR0915
             print("Sending notification")
 
         # Build analysis pipeline
-        collect_metrics >> generate_report >> send_notification
+        collect_metrics >> generate_report >> send_notification # type: ignore
 
         print("\nData Analysis Workflow:")
         analysis_ctx.show_info()
@@ -115,7 +115,7 @@ def main():  # noqa: PLR0915
             print("Final processing")
 
         # Build complex pipeline with parallel execution
-        start_task >> (parallel_task_a | parallel_task_b | parallel_task_c) >> merge_results >> final_task
+        start_task >> (parallel_task_a | parallel_task_b | parallel_task_c) >> merge_results >> final_task # type: ignore
 
         complex_ctx.show_info()
         complex_ctx.visualize_dependencies()
@@ -149,7 +149,7 @@ def main():  # noqa: PLR0915
             print("Context task 2")
 
         # Build dependencies in context
-        context_task_1 >> context_task_2
+        context_task_1 >> context_task_2 # type: ignore
 
         print("Mixed Context Workflow:")
         mixed_ctx.show_info()

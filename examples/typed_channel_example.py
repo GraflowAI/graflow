@@ -139,8 +139,8 @@ def main():
     graph.add_task(collect_results)
 
     # Add dependencies
-    graph.add_dependency("data_generator", "data_processor")
-    graph.add_dependency("data_processor", "result_collector")
+    graph.add_edge("data_generator", "data_processor")
+    graph.add_edge("data_processor", "result_collector")
 
     # Create execution context and execute
     context = create_execution_context("data_generator", max_steps=5)

@@ -250,7 +250,6 @@ def demonstrate_mermaid_png():
         mermaid_png_bytes = draw_mermaid_png(
             workflow_graph,
             title="API Generated Graph",
-            draw_method="api",
             background_color="white"
         )
         print(f"Generated Mermaid PNG via API: {len(mermaid_png_bytes)} bytes")
@@ -260,42 +259,13 @@ def demonstrate_mermaid_png():
         draw_mermaid_png(
             workflow_graph,
             output_path=api_output_path,
-            title="Workflow via Mermaid API",
-            draw_method="api"
+            title="Workflow via Mermaid API"
         )
         print(f"Saved Mermaid PNG to: {api_output_path}")
 
     except Exception as e:
         print(f"Mermaid API PNG generation failed: {e}")
         print("This might be due to network issues or missing 'requests' package")
-
-    print("\n2. Mermaid PNG via Pyppeteer (Local):")
-    print("-" * 40)
-    try:
-        # Generate using local browser (requires pyppeteer)
-        local_png_bytes = draw_mermaid_png(
-            workflow_graph,
-            title="Local Generated Graph",
-            draw_method="pyppeteer",
-            background_color="lightgray",
-            padding=20
-        )
-        print(f"Generated Mermaid PNG locally: {len(local_png_bytes)} bytes")
-
-        # Save local version
-        local_output_path = "/tmp/workflow_mermaid_local.png"
-        draw_mermaid_png(
-            workflow_graph,
-            output_path=local_output_path,
-            title="Workflow via Pyppeteer",
-            draw_method="pyppeteer"
-        )
-        print(f"Saved local Mermaid PNG to: {local_output_path}")
-
-    except Exception as e:
-        print(f"Pyppeteer PNG generation failed: {e}")
-        print("Install with: pip install pyppeteer")
-
 
 def demonstrate_graph_analysis():
     """Demonstrate graph analysis utilities."""

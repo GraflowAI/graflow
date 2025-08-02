@@ -11,9 +11,8 @@ Demonstrates:
 - Visualizing the task dependencies
 """
 
-from graflow.core.context import execute_in_workflow
-from graflow.core.task import task
-from graflow.core.workflow import get_current_workflow_context
+from graflow.core.decorators import task
+from graflow.core.workflow import workflow
 from graflow.utils.graph import (
     draw_ascii,
     draw_mermaid,
@@ -40,14 +39,14 @@ def validate_data(data: dict) -> dict:
 @task
 def transform_data(data: dict) -> dict:
     """Transform the validated data."""
-    print(f"Transforming validated data")
+    print("Transforming validated data")
     return {**data, "transformed": True}
 
 
 @task
 def analyze_data(data: dict) -> dict:
     """Analyze the transformed data."""
-    print(f"Analyzing data")
+    print("Analyzing data")
     return {**data, "analysis": "completed"}
 
 
@@ -69,7 +68,7 @@ def create_workflow_graph():
     """Create a workflow and extract its task graph."""
     print("Creating workflow with task dependencies...")
 
-    def workflow():
+    def generate_pipeline():
         # Create task chain
         data = load_data("input.csv")
         validated = validate_data(data)
@@ -81,14 +80,11 @@ def create_workflow_graph():
         return notification
 
     # Execute in workflow context to build graph
-    with execute_in_workflow():
-        result = workflow()
-
+    with workflow(name="workflow") as ctx:
         # Get the workflow context and extract NetworkX graph
-        context = get_current_workflow_context()
-        nx_graph = context.graph.nx_graph()
-
-        return nx_graph, result
+        generate_pipeline()
+        nx_graph = ctx.graph.nx_graph()
+        return nx_graph, ctx
 
 
 def create_parallel_workflow_graph():
@@ -148,12 +144,11 @@ def create_parallel_workflow_graph():
         return notification
 
     # Execute in workflow context
-    with execute_in_workflow():
+    with workflow("parallel_workflow") as ctx:
         result = parallel_workflow()
 
         # Extract NetworkX graph
-        context = get_current_workflow_context()
-        nx_graph = context.graph.nx_graph()
+        nx_graph = ctx.graph.nx_graph()
 
         return nx_graph, result
 
@@ -165,16 +160,16 @@ def visualize_task_graph(nx_graph, title: str):
     print(f"{'='*60}")
 
     # Graph analysis
-    print(f"\n1. Graph Analysis:")
+    print("\n1. Graph Analysis:")
     print("-" * 40)
     show_graph_info(nx_graph)
 
-    print(f"\n2. Task Dependencies:")
+    print("\n2. Task Dependencies:")
     print("-" * 40)
     visualize_dependencies(nx_graph)
 
     # ASCII visualization
-    print(f"\n3. ASCII Visualization:")
+    print("\n3. ASCII Visualization:")
     print("-" * 40)
     try:
         ascii_repr = draw_ascii(nx_graph)
@@ -184,13 +179,13 @@ def visualize_task_graph(nx_graph, title: str):
         print("Install grandalf: pip install grandalf")
 
     # Mermaid diagram
-    print(f"\n4. Mermaid Diagram:")
+    print("\n4. Mermaid Diagram:")
     print("-" * 40)
     mermaid_diagram = draw_mermaid(nx_graph, title=title)
     print(mermaid_diagram)
 
     # Save PNG if possible
-    print(f"\n5. PNG Generation:")
+    print("\n5. PNG Generation:")
     print("-" * 40)
     try:
         # Create custom labels for better readability

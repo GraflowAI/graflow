@@ -76,7 +76,7 @@ def demo_conditional_creation():
     def process_data(value):
         print(f"🔍 Processing value: {value}")
 
-        if value > 50:
+        if value > 50:  # noqa: PLR2004
             # High value processing
             high_task = TaskWrapper(
                 "high_value_handler",
@@ -85,7 +85,7 @@ def demo_conditional_creation():
             task_id = context.next_task(high_task)
             print(f"✨ Created high-value task: {task_id}")
 
-        elif value > 10:
+        elif value > 10:  # noqa: PLR2004
             # Medium value processing
             med_task = TaskWrapper(
                 "medium_value_handler",
@@ -168,7 +168,7 @@ def main():
 
     except Exception as e:
         print(f"❌ Error: {e}")
-        import traceback
+        import traceback  # noqa: PLC0415
         traceback.print_exc()
 
 

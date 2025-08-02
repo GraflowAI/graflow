@@ -1,8 +1,7 @@
 """Simple test of execution."""
 
-from graflow.core.context import execute_with_cycles
 from graflow.core.decorators import task
-from graflow.utils.graph import show_graph_info
+from graflow.core.workflow import get_current_workflow_context
 
 
 @task
@@ -20,7 +19,8 @@ def end():
 pipeline = start >> middle >> end
 
 print("Graph before execution:")
-show_graph_info()
+ctx = get_current_workflow_context()
+ctx.show_info()
 
 print("\nExecuting:")
-execute_with_cycles("start", max_steps=5)
+ctx.execute("start", max_steps=5)

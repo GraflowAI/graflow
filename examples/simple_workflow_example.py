@@ -24,7 +24,7 @@ def main():  # noqa: PLR0915
             print("Finishing pipeline")
 
         # Build pipeline
-        start >> process >> finish
+        start >> process >> finish # type: ignore
 
         ctx.show_info()
         ctx.execute("start")
@@ -40,7 +40,7 @@ def main():  # noqa: PLR0915
         task_c = Task("task_c")
 
         # Build dependencies
-        task_a >> task_b >> task_c
+        task_a >> task_b >> task_c # type: ignore
 
         ctx.show_info()
         ctx.execute("task_a")
@@ -63,7 +63,7 @@ def main():  # noqa: PLR0915
             print("Final task execution")
 
         # Build pipeline
-        manual_task >> decorated_task >> final_task
+        manual_task >> decorated_task >> final_task # type: ignore
 
         ctx.show_info()
         ctx.execute("manual_task")
@@ -90,7 +90,7 @@ def main():  # noqa: PLR0915
             print("Ending parallel demo")
 
         # Create parallel pipeline
-        start_parallel >> (parallel_a | parallel_b) >> end_parallel
+        start_parallel >> (parallel_a | parallel_b) >> end_parallel # type: ignore
 
         ctx.show_info()
         ctx.execute("start_parallel")
@@ -107,7 +107,7 @@ def main():  # noqa: PLR0915
     global_task2 = Task("global_task2")
 
     # These use global graph
-    global_task1 >> global_task2
+    global_task1 >> global_task2 # type: ignore
 
     print("Global tasks created successfully")
 

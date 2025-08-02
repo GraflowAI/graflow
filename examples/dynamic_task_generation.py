@@ -103,7 +103,7 @@ def optimize_parameters(context, params):
     print(f"Iteration {iteration + 1}: accuracy={new_accuracy:.3f}, lr={new_learning_rate:.3f}")
 
     # Check convergence conditions
-    if new_accuracy >= 0.9 or iteration >= 5:
+    if new_accuracy >= 0.9 or iteration >= 5:  # noqa: PLR2004
         # Converged - create final result task
         final_task = TaskWrapper(
             "save_final_model",
@@ -259,7 +259,7 @@ def run_optimization_example():
             "learning_rate": 0.1,
             "iteration": 0
         }
-        optimize_parameters >> optimize_parameters(initial_params)
+        optimize_parameters >> optimize_parameters(initial_params) # type: ignore
         wf.execute()
 
 
@@ -271,7 +271,7 @@ def run_batch_processing_example():
 
     with workflow("batch_processing") as wf:
         batch_data = {"items": [10, 20, 30, 40, 50]}
-        coordinate_batch_processing >> coordinate_batch_processing(batch_data)
+        coordinate_batch_processing >> coordinate_batch_processing(batch_data) # type: ignore
         wf.execute()
 
 
@@ -283,7 +283,7 @@ def run_error_handling_example():
 
     with workflow("resilient_processing") as wf:
         test_data = {"value": 42, "id": "test_001"}
-        process_with_error_handling >> process_with_error_handling(test_data)
+        process_with_error_handling >> process_with_error_handling(test_data) # type: ignore
         wf.execute()
 
 

@@ -1,10 +1,8 @@
 """Comprehensive example showcasing revised graflow features."""
 
-from graflow.core.context import execute_with_cycles
 from graflow.core.decorators import task
 from graflow.core.task import Task
-from graflow.core.workflow import clear_workflow_context
-from graflow.utils.graph import show_graph_info, visualize_dependencies
+from graflow.core.workflow import clear_workflow_context, get_current_workflow_context
 
 print("="*60)
 print("GRAFLOW v0.2.0 - Comprehensive Feature Demo")
@@ -12,6 +10,7 @@ print("="*60)
 
 # Start fresh
 clear_workflow_context()
+ctx = get_current_workflow_context()
 
 print("\n1. DECORATOR-BASED TASKS")
 print("-" * 30)
@@ -56,7 +55,7 @@ print("-" * 30)
 
 # Sequential workflow
 print("Setting up: data_extraction >> data_validation >> custom_transform")
-data_extraction >> data_validation >> data_transformation
+data_extraction >> data_validation >> data_transformation # type: ignore
 
 # Parallel processing after transformation
 print("Setting up parallel: (generate_report | email_notification | archive_data)")
@@ -64,27 +63,28 @@ parallel_group = data_transformation >> (generate_report | email_notification | 
 
 # Final cleanup
 print("Setting up: parallel_group >> cleanup")
-parallel_group >> cleanup
+parallel_group >> cleanup # type: ignore
 
 print("\n4. GRAPH ANALYSIS")
 print("-" * 30)
-show_graph_info()
+ctx.show_info()
 
 print("\n5. DEPENDENCY VISUALIZATION")
 print("-" * 30)
-visualize_dependencies()
+ctx.visualize_dependencies()
 
 print("\n6. WORKFLOW EXECUTION")
 print("-" * 30)
 print("Executing complete data processing pipeline...")
 print()
 
-execute_with_cycles("data_extraction", max_steps=15)
+ctx.execute("data_extraction", max_steps=15)
 
 print("\n7. MIXED OPERATOR DEMO")
 print("-" * 30)
 
 clear_workflow_context()
+ctx = get_current_workflow_context()
 
 @task
 def start():
@@ -111,18 +111,19 @@ def finalize():
     print("🎯 Finalizing workflow")
 
 # Complex operator combination
-start >> (process_A | process_B | process_C) >> merge >> finalize
+start >> (process_A | process_B | process_C) >> merge >> finalize # type: ignore
 
 print("Complex workflow structure:")
-show_graph_info()
+ctx.show_info()
 
 print("\nExecuting complex workflow:")
-execute_with_cycles("start", max_steps=10)
+ctx.execute("start", max_steps=10)
 
 print("\n8. REVERSE DEPENDENCIES")
 print("-" * 30)
 
 clear_workflow_context()
+ctx = get_current_workflow_context()
 
 @task
 def step1():
@@ -137,13 +138,13 @@ def step3():
     print("Step 3")
 
 # Using << operator (reverse dependency)
-step3 << step2 << step1  # Same as: step1 >> step2 >> step3
+step3 << step2 << step1  # type: ignore # Same as: step1 >> step2 >> step3
 
 print("Reverse dependency setup:")
-visualize_dependencies()
+ctx.visualize_dependencies()
 
 print("\nExecuting reverse-defined workflow:")
-execute_with_cycles("step1", max_steps=5)
+ctx.execute("step1", max_steps=5)
 
 print("\n" + "="*60)
 print("🎉 GRAFLOW DEMO COMPLETE")

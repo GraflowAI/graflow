@@ -6,19 +6,20 @@ This example shows the basic usage of next_task() and next_iteration()
 for dynamic workflow creation.
 """
 
+from graflow.core.context import ExecutionContext
 from graflow.core.decorators import task
 from graflow.core.task import TaskWrapper
-from graflow.core.workflow import WorkflowContext, workflow
+from graflow.core.workflow import workflow
 
 
 @task(id="decision_maker")
-def make_decision(context: WorkflowContext, data):
+def make_decision(context: ExecutionContext, data):
     """Make a decision and create appropriate follow-up tasks."""
     print(f"Making decision based on: {data}")
 
     value = data.get("value", 0)
 
-    if value > 10:
+    if value > 10:  # noqa: PLR2004
         # Create a "high value" processing task
         high_task = TaskWrapper(
             "process_high_value",

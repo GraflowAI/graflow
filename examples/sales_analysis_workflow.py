@@ -24,14 +24,14 @@ def generate_sample_sales_data(num_records: int = 1000) -> pd.DataFrame:
     start_date = datetime.now() - timedelta(days=365)
 
     data = []
-    for i in range(num_records):
+    for _ in range(num_records):
         date = start_date + timedelta(days=random.randint(0, 365))
 
         # Base sales amount with some seasonality
         base_amount = 1000 + 500 * np.sin(date.month * 2 * np.pi / 12)
 
         # Add some anomalies (5% chance)
-        if random.random() < 0.05:
+        if random.random() < 0.05:  # noqa: PLR2004
             amount = base_amount * random.choice([0.1, 5.0])  # Very low or very high
         else:
             amount = base_amount * (1 + random.gauss(0, 0.2))  # Normal variation
@@ -163,7 +163,7 @@ ANOMALY DETECTION RESULTS:
 - Suspicious Days: {detailed_report['anomaly_analysis']['summary']['suspicious_days']}
 
 RECOMMENDED ACTIONS:
-"""
+"""  # noqa: E501
 
     for i, rec in enumerate(detailed_report['recommendations'], 1):
         summary += f"{i}. {rec}\n"
@@ -173,7 +173,7 @@ RECOMMENDED ACTIONS:
     return summary
 
 
-def main():
+def main():  # noqa: PLR0915
     """Main function to execute the sales analysis workflow."""
     print("=== Sales Analysis Workflow ===\n")
 
@@ -199,7 +199,7 @@ def main():
             anomalies = detect_anomalies(df)
             workflow_data['anomalies'] = anomalies
 
-            print(f"✅ Analysis complete:")
+            print("✅ Analysis complete:")
             print(f"  - Outliers detected: {anomalies['summary']['outlier_count']}")
             print(f"  - Suspicious days: {anomalies['summary']['suspicious_days']}")
             print(f"  - Detection threshold: ${anomalies['summary']['threshold']:.2f}")
@@ -249,7 +249,7 @@ def main():
             print("="*60)
 
         # Build the workflow pipeline
-        load_sales_data >> detect_data_anomalies >> create_detailed_report >> approval_process >> generate_executive_summary
+        load_sales_data >> detect_data_anomalies >> create_detailed_report >> approval_process >> generate_executive_summary # type: ignore  # noqa: E501
 
         # Show workflow structure
         print("Workflow structure:")
