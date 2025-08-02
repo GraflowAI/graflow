@@ -64,7 +64,7 @@ class TestTypedChannel:
         invalid_message = {"id": "test123"}
 
         with pytest.raises(TypeError, match="Message does not conform"):
-            typed_channel.send("key1", invalid_message)
+            typed_channel.send("key1", invalid_message) # type: ignore
 
     def test_receive_valid_message(self):
         """Test receiving a valid message."""
@@ -79,10 +79,11 @@ class TestTypedChannel:
 
         typed_channel.send("key1", message)
         received = typed_channel.receive("key1")
+        assert received is not None
 
         assert received == message
         assert received["id"] == "test123"
-        assert received["value"] == 42
+        assert received["value"] == 42  # noqa: PLR2004
 
     def test_receive_nonexistent_key(self):
         """Test receiving from nonexistent key."""

@@ -3,7 +3,7 @@
 Test script for context injection functionality.
 """
 
-from graflow.core.context import ExecutionContext
+from graflow.core.context import ExecutionContext, TaskExecutionContext
 from graflow.core.decorators import task
 from graflow.core.graph import TaskGraph
 
@@ -18,16 +18,16 @@ def test_context_injection():
         return "Regular task executed"
 
     @task(inject_context=True)
-    def context_task(context):
-        print(f"Task ID: {context.current_task_id}")
+    def context_task(context: TaskExecutionContext):
+        print(f"Task ID: {context.task_id}")
         print(f"Session ID: {context.session_id}")
-        print(f"Steps taken: {context.steps}")
+        print(f"Execution context steps: {context.execution_context.steps}")
         return f"Context task executed in session {context.session_id}"
 
     @task(inject_context=True, id="custom_context_task")
-    def custom_context_task(context, message="default"):
+    def custom_context_task(context: TaskExecutionContext, message="default"):
         print(f"Custom task received: {message}")
-        print(f"Current task ID: {context.current_task_id}")
+        print(f"Current task ID: {context.task_id}")
 
         # Test next_task functionality
         @task
@@ -76,7 +76,7 @@ def test_context_access_patterns():
     print("\n=== Testing Context Access Patterns ===")
 
     @task(inject_context=True)
-    def analyze_context(context):
+    def analyze_context(context: TaskExecutionContext):
         print(f"Context type: {type(context)}")
         print(f"Available methods: {[m for m in dir(context) if not m.startswith('_')]}")
 
@@ -87,17 +87,17 @@ def test_context_access_patterns():
         return "Context analysis complete"
 
     @task(inject_context=True)
-    def iteration_example(context, data=None):
+    def iteration_example(context: TaskExecutionContext, data=None):
         if data is None:
             data = {"count": 0}
 
         count = data.get("count", 0)
         print(f"Iteration {count}")
 
-        if count < 3:
+        if count < 3:  # noqa: PLR2004
             # Create next iteration
             next_data = {"count": count + 1}
-            iteration_id = context.next_iteration(next_data, "iteration_example")
+            iteration_id = context.next_iteration(next_data)
             print(f"Scheduled iteration: {iteration_id}")
 
         return f"Iteration {count} complete"
@@ -111,16 +111,20 @@ def test_context_access_patterns():
 
     # Test context analysis
     print("\n1. Analyzing context:")
-    context.current_task_id = "analyze_context"
-    analyze_context()
+    with context.executing_task(analyze_context) as task_ctx:
+        # Call the task function with the proper context
+        result = analyze_context.func(task_ctx)
+        print(f"Analysis result: {result}")
 
     # Add iteration task to graph for testing
     graph.add_node("iteration_example", task=iteration_example)
 
     # Test iteration pattern
     print("\n2. Testing iteration pattern:")
-    context.current_task_id = "iteration_example"
-    iteration_example()
+    with context.executing_task(iteration_example) as task_ctx:
+        # Call the task function with the proper context
+        result = iteration_example.func(task_ctx)
+        print(f"Iteration result: {result}")
 
     print("\n=== Context Access Patterns Test Complete ===")
 
