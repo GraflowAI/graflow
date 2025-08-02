@@ -14,19 +14,21 @@ from typing import TYPE_CHECKING, Any, Optional
 import matplotlib.pyplot as plt
 import networkx as nx
 
+from graflow.core.graph import TaskGraph
 from graflow.core.workflow import WorkflowContext, get_current_workflow_context
 
 if TYPE_CHECKING:
     from graflow.core.task import Executable
 
 
-def build_graph(start_node: Executable, context: Optional[WorkflowContext] = None) -> nx.DiGraph:
+def build_graph(start_node: Executable, context: Optional[WorkflowContext] = None) -> TaskGraph:
     """Build a NetworkX directed graph from an executable."""
     if context is None:
         # Use the current workflow context if not provided
         context = get_current_workflow_context()
 
-    graph = context.graph.nx_graph()
+    task_graph = context.graph
+    cur_graph = task_graph.nx_graph()
     new_graph: nx.DiGraph = nx.DiGraph()
     visited: set[str] = set()
 
@@ -38,18 +40,19 @@ def build_graph(start_node: Executable, context: Optional[WorkflowContext] = Non
 
         new_graph.add_node(node.task_id, task=node)
 
-        for successor in graph.successors(node.task_id):
-            successor_task = graph.nodes[successor]["task"]
+        for successor in cur_graph.successors(node.task_id):
+            successor_task = cur_graph.nodes[successor]["task"]
             new_graph.add_edge(node.task_id, successor)
             _build_graph_recursive(successor_task)
 
-        for predecessor in graph.predecessors(node.task_id):
-            predecessor_task = graph.nodes[predecessor]["task"]
+        for predecessor in cur_graph.predecessors(node.task_id):
+            predecessor_task = cur_graph.nodes[predecessor]["task"]
             new_graph.add_edge(predecessor, node.task_id)
             _build_graph_recursive(predecessor_task)
 
     _build_graph_recursive(start_node)
-    return new_graph
+    task_graph._graph = new_graph
+    return task_graph
 
 
 def draw_task_graph(graph: nx.DiGraph, title: str = "Task Graph") -> None:
@@ -350,7 +353,7 @@ def draw_ascii(graph: nx.DiGraph) -> str:
     return canvas.draw()
 
 
-def draw_mermaid(  # noqa: PLR0912
+def draw_mermaid(  # noqa: PLR0912, PLR0915
     graph: nx.DiGraph,
     title: str = "Graph",
     *,
@@ -650,9 +653,9 @@ def _render_mermaid_using_api(
                 return img_bytes
 
             # If we get a server error (5xx), retry
-            if 500 <= response.status_code < 600 and attempt < max_retries:
+            if 500 <= response.status_code < 600 and attempt < max_retries:  # noqa: PLR2004
                 # Exponential backoff with jitter
-                sleep_time = retry_delay * (2**attempt) * (0.5 + 0.5 * random.random())  # noqa: S311 not used for crypto
+                sleep_time = retry_delay * (2**attempt) * (0.5 + 0.5 * random.random())
                 time.sleep(sleep_time)
                 continue
 
@@ -666,7 +669,7 @@ def _render_mermaid_using_api(
         except (requests.RequestException, requests.Timeout) as e:
             if attempt < max_retries:
                 # Exponential backoff with jitter
-                sleep_time = retry_delay * (2**attempt) * (0.5 + 0.5 * random.random())  # noqa: S311 not used for crypto
+                sleep_time = retry_delay * (2**attempt) * (0.5 + 0.5 * random.random())
                 time.sleep(sleep_time)
             else:
                 msg = (

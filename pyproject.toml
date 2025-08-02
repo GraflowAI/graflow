@@ -56,7 +56,8 @@ ignore = [
     "UP035", "UP006", "UP007",
     # UP045: Use `X | None` for type annotationsRuff
     "UP045",
-    "PLR0913", "C901", "RUF010"
+    "PLR0913", "C901", "RUF010",
+    "PD901" # https://docs.astral.sh/ruff/rules/pandas-df-variable-name/
 ]
 
 [tool.ruff.lint.isort]

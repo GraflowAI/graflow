@@ -48,6 +48,11 @@ class TaskGraph:
         """Get all node names in the graph."""
         return self._graph.nodes()
 
+    @property
+    def edges(self) -> Set[tuple]:
+        """Get all edges in the graph."""
+        return self._graph.edges()
+
     def get_edges(self) -> List[tuple]:
         """Get all edges in the graph."""
         return list(self._graph.edges())

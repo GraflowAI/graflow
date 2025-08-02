@@ -28,7 +28,7 @@ def test_execute_simple_flow():
     assert "start" in graph.nodes, f"start not in graph nodes: {list(graph.nodes)}"
     assert "end" in graph.nodes, f"end not in graph nodes: {list(graph.nodes)}"
 
-    start >> end
+    start >> end # type: ignore
 
     # Execute the flow
     execute_with_cycles(graph, "start", max_steps=5)
@@ -42,11 +42,11 @@ def test_execute_with_traditional_tasks():
     clear_workflow_context()
     context = get_current_workflow_context()
 
-    A = Task("A")
-    B = Task("B")
-    C = Task("C")
+    A = Task("A")  # noqa: N806
+    B = Task("B")  # noqa: N806
+    C = Task("C")  # noqa: N806
 
-    A >> B >> C
+    A >> B >> C # type: ignore
 
     # Should execute without error
     execute_with_cycles(context.graph, "A", max_steps=5)
@@ -76,7 +76,7 @@ def test_parallel_group_execution():
         executed.append("end")
 
     # Create flow with parallel group
-    start >> (parallel1 | parallel2) >> end
+    start >> (parallel1 | parallel2) >> end # type: ignore
 
     execute_with_cycles(context.graph, "start", max_steps=10)
 
@@ -97,7 +97,7 @@ def test_global_graph_state():
         def task2():
             pass
 
-        task1 >> task2
+        task1 >> task2 # type: ignore
 
         graph = context.graph.nx_graph()
         assert "task1" in graph.nodes

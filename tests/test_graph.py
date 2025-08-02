@@ -20,9 +20,9 @@ def test_single_task_graph():
     task = Task("A")
     graph = build_graph(task)
 
-    assert list(graph.nodes()) == ["A"]
-    assert list(graph.edges()) == []
-    assert graph.nodes["A"]["task"] == task
+    assert list(graph.nodes) == ["A"]
+    assert list(graph.edges) == []
+    assert graph.nx_graph().nodes["A"]["task"] == task
 
 
 def test_graph_is_directed():
@@ -45,9 +45,9 @@ def test_parallel_group_graph():
 
     # draw_task_graph(graph, title="Parallel Group Graph")
 
-    assert set(graph.nodes()) == {group.task_id, "A", "B"}
+    assert set(graph.nodes) == {group.task_id, "A", "B"}
     expected_edges = {(group.task_id, "A"), (group.task_id, "B")}
-    assert set(graph.edges()) == expected_edges
+    assert set(graph.edges) == expected_edges
 
 def test_cycle_detection():
     """Test cycle detection in a graph."""
@@ -62,7 +62,7 @@ def test_cycle_detection():
     # draw_task_graph(graph, title="Parallel Group Graph")
 
     # Check for cycles
-    cycles = list(nx.simple_cycles(graph))
+    cycles = list(nx.simple_cycles(graph.nx_graph()))
     assert len(cycles) == 1
     assert set(cycles[0]) == {"A", "B", "C"}
 
@@ -70,7 +70,7 @@ def test_a_a_b():
     """Test graph construction for flow: A >> A >> B."""
     task_a1 = Task("A")
 
-    with pytest.raises(DuplicateTaskError) as e:
+    with pytest.raises(DuplicateTaskError):
         task_a2 = Task("A")
         assert task_a1.task_id == task_a2.task_id, "Duplicate task IDs should match"
 
@@ -84,12 +84,12 @@ def test_a_b_a():
 
     # draw_task_graph(graph, title="A_B_A Graph")
 
-    assert set(graph.nodes()) == {"A", "B"}
+    assert set(graph.nodes) == {"A", "B"}
     expected_edges = {
         ("A", "B"),
         ("B", "A"),
     }
-    assert set(graph.edges()) == expected_edges
+    assert set(graph.edges) == expected_edges
 
 def test_complex_graph1():
     """Test graph construction for complex flow: A >> (B | C) >> D."""
@@ -103,7 +103,7 @@ def test_complex_graph1():
 
     #draw_task_graph(graph, title="Parallel Group Graph")
 
-    assert set(graph.nodes()) == {"A", "B", "C", "D", "ParallelGroup_1"}
+    assert set(graph.nodes) == {"A", "B", "C", "D", "ParallelGroup_1"}
     expected_edges = {
         ("A", "ParallelGroup_1"),
         ("ParallelGroup_1", "B"),
@@ -111,7 +111,7 @@ def test_complex_graph1():
         ("B", "D"),
         ("C", "D")
     }
-    assert set(graph.edges()) == expected_edges
+    assert set(graph.edges) == expected_edges
 
 def test_merge_parallel_groups():
     """Test merging two parallel groups."""
@@ -128,13 +128,13 @@ def test_merge_parallel_groups():
     # draw_task_graph(graph, title="Merged Parallel Groups Graph")
 
     expected_nodes = {"A", "B", "C", merged_group.task_id}
-    assert set(graph.nodes()) == expected_nodes
+    assert set(graph.nodes) == expected_nodes
     expected_edges = {
         (merged_group.task_id, "A"),
         (merged_group.task_id, "B"),
         (merged_group.task_id, "C"),
     }
-    assert set(graph.edges()) == expected_edges
+    assert set(graph.edges) == expected_edges
 
 
 def test_merge_parallel_groups2():
@@ -152,7 +152,7 @@ def test_merge_parallel_groups2():
     # draw_task_graph(graph, title="Merged Parallel Groups Graph")
 
     expected_nodes = {"A", "B", "C", "D", "E", pipeline.task_id}
-    assert set(graph.nodes()) == expected_nodes
+    assert set(graph.nodes) == expected_nodes
     expected_edges = {
         (pipeline.task_id, "A"),
         (pipeline.task_id, "B"),
@@ -160,7 +160,7 @@ def test_merge_parallel_groups2():
         (pipeline.task_id, "D"),
         (pipeline.task_id, "E"),
     }
-    assert set(graph.edges()) == expected_edges
+    assert set(graph.edges) == expected_edges
 
 
 def test_complex_graph2():
@@ -180,11 +180,11 @@ def test_complex_graph2():
     # draw_task_graph(graph, title="Complex Parallel Group Graph")
 
     expected_nodes = {"A", "B", "C", "D", "E", "F", group1.task_id, group2.task_id}
-    assert set(graph.nodes()) == expected_nodes
+    assert set(graph.nodes) == expected_nodes
     expected_edges = {
         ("A", group1.task_id),
         (group1.task_id, "B"), (group1.task_id, "C"),
         ("B", group2.task_id), ("C", group2.task_id),
         (group2.task_id, "D"), (group2.task_id, "E"), (group2.task_id, "F"),
         }
-    assert set(graph.edges()) == expected_edges
+    assert set(graph.edges) == expected_edges

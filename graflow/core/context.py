@@ -9,8 +9,6 @@ from collections import deque
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, Optional, Type, TypeVar
 
-import networkx as nx
-
 from graflow.channels.base import Channel
 from graflow.channels.memory import MemoryChannel
 from graflow.channels.typed import TypedChannel
@@ -104,6 +102,9 @@ class TaskExecutionContext:
     def elapsed_time(self) -> float:
         """Get elapsed time since task started."""
         return time.time() - self.start_time
+
+    def __str__(self) -> str:
+        return f"TaskExecutionContext(task_id={self.task_id}, cycle_count={self.cycle_count})"
 
 
 class ExecutionContext:
@@ -328,7 +329,7 @@ def create_execution_context(start_node: str = "ROOT", max_steps: int = 10) -> E
     graph = TaskGraph()
     return ExecutionContext.create(graph, start_node, max_steps=max_steps)
 
-def execute_with_cycles(graph: nx.DiGraph, start_node: str, max_steps: int = 10) -> None:
+def execute_with_cycles(graph: TaskGraph, start_node: str, max_steps: int = 10) -> None:
     """Execute tasks allowing cycles from global graph."""
     engine = WorkflowEngine()
     engine.execute_with_cycles(graph, start_node, max_steps)
