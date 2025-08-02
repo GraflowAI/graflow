@@ -28,8 +28,8 @@ def nested_workflows():
                 def validate_data():
                     print("validate_data() is called in inner workflow")
 
-                process_data >> validate_data
-                #inner.show_info()
+                process_data >> validate_data # type: ignore
+                inner.show_info()
 
             print("Running inner workflow")
             inner.execute("process_data", max_steps=3)
@@ -38,9 +38,9 @@ def nested_workflows():
         def finalize():
             print("finalize() is called in outer workflow")
 
-        prepare_data >> inner_workflow >> finalize
+        prepare_data >> inner_workflow >> finalize # type: ignore
         print("\nRun outer workflow:")
-        #outer.show_info()
+        outer.show_info()
         outer.execute(max_steps=5)
 
 
@@ -64,7 +64,7 @@ def concurrent_workflow_execution():
             def finish_work():
                 print(f"Worker {worker_id}: Finishing work")
 
-            start_work >> do_processing >> finish_work
+            start_work >> do_processing >> finish_work # type: ignore
 
             print(f"Worker {worker_id} workflow:")
             ctx.show_info()
@@ -104,7 +104,7 @@ def workflow_composition_and_reuse():
                 print(f"{name}: Saving data")
 
             # Setup pipeline
-            load >> transform >> save
+            load >> transform >> save # type: ignore
 
         return ctx
 
@@ -138,7 +138,7 @@ def global_fallback_behavior():
         print("Global task B")
 
     # Build global dependencies
-    global_task_a >> global_task_b
+    global_task_a >> global_task_b # type: ignore
 
     print("Global tasks created outside of context")
     global_context = get_current_workflow_context()
@@ -154,7 +154,7 @@ def global_fallback_behavior():
         def context_task_b():
             print("Context task B")
 
-        context_task_a >> context_task_b
+        context_task_a >> context_task_b # type: ignore
 
         print("Isolated context workflow:")
         isolated.show_info()
@@ -183,7 +183,7 @@ def dynamic_task_generation_with_loops():
         def finalize():
             print("Finalizing dynamic task generation")
 
-        generate_tasks >> finalize
+        generate_tasks >> finalize # type: ignore
         ctx.show_info()
 
         print("\nExecuting dynamic tasks:")
