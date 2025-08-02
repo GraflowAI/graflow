@@ -74,3 +74,8 @@ class TaskGraph:
     def clear(self) -> None:
         """Clear all nodes and edges from the graph."""
         self._graph.clear()
+
+    def __str__(self) -> str:
+        """Return a string representation of the graph."""
+        from graflow.utils.graph import draw_ascii  # noqa: PLC0415
+        return draw_ascii(self._graph)
