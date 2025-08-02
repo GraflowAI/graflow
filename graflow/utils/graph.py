@@ -1,5 +1,7 @@
 """Graph construction functionality for graflow."""
 
+from __future__ import annotations
+
 import base64
 import math
 import os
@@ -7,13 +9,15 @@ import random
 import re
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import matplotlib.pyplot as plt
 import networkx as nx
 
-from graflow.core.task import Executable
 from graflow.core.workflow import WorkflowContext, get_current_workflow_context
+
+if TYPE_CHECKING:
+    from graflow.core.task import Executable
 
 
 def build_graph(start_node: Executable, context: Optional[WorkflowContext] = None) -> nx.DiGraph:
