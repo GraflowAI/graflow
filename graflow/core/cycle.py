@@ -1,5 +1,5 @@
 # graflow/core/cycle.py
-# This file is part of GraFlow, a graph-based workflow management system.
+# This file is part of Graflow, a graph-based workflow management system.
 # It implements cycle control to prevent infinite loops in task execution.
 
 from typing import Dict, Optional

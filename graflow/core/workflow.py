@@ -6,7 +6,6 @@ import contextvars
 import uuid
 from typing import TYPE_CHECKING, Optional
 
-from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
 from graflow.exceptions import GraphCompilationError
 
@@ -66,8 +65,10 @@ class WorkflowContext:
             elif len(candidate_nodes) > 1:
                 raise GraphCompilationError("Multiple start nodes found, please specify one.")
             start_node = candidate_nodes[0]
-            assert start_node is not None, "No valid start node found"
+            if start_node is None:
+                raise GraphCompilationError("No valid start node found in the workflow graph.")
 
+        from .context import ExecutionContext  # noqa: PLC0415
         from .engine import WorkflowEngine  # noqa: PLC0415
 
         exec_context = ExecutionContext.create(self.graph, start_node, max_steps=max_steps)
@@ -77,8 +78,7 @@ class WorkflowContext:
     def show_info(self) -> None:
         """Display information about this workflow's graph."""
         print(f"=== Workflow '{self.name}' Information ===")
-        print(f"Nodes: {self.graph.nodes}")
-        print(f"Edges: {self.graph.get_edges()}")
+        print(self.graph)
 
         # Cycle detection
         cycles = self.graph.detect_cycles()
