@@ -23,6 +23,17 @@ class GraflowRuntimeError(GraflowError):
     def __init__(self, message: str, cause: Optional[Exception] = None):
         super().__init__(message, cause)
 
+class CycleLimitExceededError(GraflowRuntimeError):
+    """Exception raised when the cycle limit is exceeded during execution."""
+    def __init__(self, task_id: str, cycle_count: int, max_cycles: int):
+        super().__init__(f"Cycle limit exceeded for task {task_id}: {cycle_count}/{max_cycles} cycles")
+        self.task_id = task_id
+        self.cycle_count = cycle_count
+        self.max_cycles = max_cycles
+
+    def __str__(self) -> str:
+        return f"CycleLimitExceededError(task_id={self.task_id}, cycle_count={self.cycle_count}, max_cycles={self.max_cycles})"
+
 class TaskError(GraflowRuntimeError):
     """Exception raised for errors related to tasks."""
     def __init__(self, task_id: str, message: str, cause: Optional[Exception] = None):

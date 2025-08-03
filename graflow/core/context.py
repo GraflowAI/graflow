@@ -15,6 +15,7 @@ from graflow.channels.typed import TypedChannel
 from graflow.core.cycle import CycleController
 from graflow.core.engine import WorkflowEngine
 from graflow.core.graph import TaskGraph
+from graflow.exceptions import CycleLimitExceededError
 
 if TYPE_CHECKING:
     from .task import Executable
@@ -265,9 +266,10 @@ class ExecutionContext:
 
         # Use task context for cycle management
         if not task_ctx.can_iterate():
-            raise ValueError(
-                f"Cycle limit exceeded for task {task_id}: "
-                f"{task_ctx.cycle_count}/{task_ctx.max_cycles} cycles"
+            raise CycleLimitExceededError(
+                task_id=task_id,
+                cycle_count=task_ctx.cycle_count,
+                max_cycles=task_ctx.max_cycles
             )
 
         # Register this cycle execution
