@@ -61,7 +61,7 @@ def test_engine_integration():
     print("\n1. Testing engine execution:")
     exec_context.execute()
 
-    print(f"\nResults:")
+    print("\nResults:")
     print(f"Task A result: {exec_context.get_result('task_a')}")
     print(f"Task B result: {exec_context.get_result('task_b')}")
     print(f"Executed tasks: {exec_context.executed}")

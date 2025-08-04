@@ -3,9 +3,14 @@
 Test script for cycle_controller integration in ExecutionContext.
 """
 
-from graflow.core.context import ExecutionContext
+from graflow.core.context import ExecutionContext, TaskExecutionContext
 from graflow.core.decorators import task
 from graflow.core.graph import TaskGraph
+
+# Constants for test limits
+COUNT_LIMIT = 5
+ITERATION_LIMIT = 8
+ATTEMPT_LIMIT = 5
 
 
 def test_cycle_controller_integration():
@@ -17,7 +22,7 @@ def test_cycle_controller_integration():
     context = ExecutionContext.create(graph, "test_start", max_steps=20, default_max_cycles=3)
 
     @task(inject_context=True)
-    def counting_task(ctx, data=None):
+    def counting_task(ctx: TaskExecutionContext, data=None):
         if data is None:
             data = {"count": 0}
 
@@ -25,15 +30,15 @@ def test_cycle_controller_integration():
         print(f"📊 Count: {count}")
 
         # Get cycle info
-        cycle_info = ctx.get_cycle_info()
+        cycle_info = {"current": ctx.cycle_count, "max": ctx.max_cycles}
         print(f"🔄 Cycle info: {cycle_info}")
 
-        if count < 5 and ctx.can_task_iterate():
+        if count < COUNT_LIMIT and ctx.can_iterate():
             # Create next iteration
             next_data = {"count": count + 1}
             iteration_id = ctx.next_iteration(next_data)
             print(f"➡️  Scheduled iteration: {iteration_id}")
-        elif not ctx.can_task_iterate():
+        elif not ctx.can_iterate():
             print("⛔ Cannot iterate - cycle limit reached")
         else:
             print("✅ Count limit reached, stopping")
@@ -50,7 +55,9 @@ def test_cycle_controller_integration():
     except ValueError as e:
         print(f"❌ Expected error: {e}")
 
-    print(f"Final cycle count: {context.get_cycle_count('counting_task')}")
+    task_ctx = context._task_contexts.get('counting_task')
+    final_count = task_ctx.cycle_count if task_ctx else 0
+    print(f"Final cycle count: {final_count}")
 
 
 def test_custom_cycle_limits():
@@ -62,17 +69,17 @@ def test_custom_cycle_limits():
     context = ExecutionContext.create(graph, "test_start", max_steps=30, default_max_cycles=10)
 
     @task(inject_context=True)
-    def limited_task(ctx, data=None):
+    def limited_task(ctx: TaskExecutionContext, data=None):
         if data is None:
             data = {"iteration": 0}
 
         iteration = data.get("iteration", 0)
         print(f"🎯 Limited task iteration: {iteration}")
 
-        cycle_info = ctx.get_cycle_info()
+        cycle_info = {"current": ctx.cycle_count, "max": ctx.max_cycles}
         print(f"🔄 Cycle info: {cycle_info}")
 
-        if iteration < 8 and ctx.can_task_iterate():
+        if iteration < ITERATION_LIMIT and ctx.can_iterate():
             next_data = {"iteration": iteration + 1}
             iteration_id = ctx.next_iteration(next_data)
             print(f"➡️  Next iteration: {iteration_id}")
@@ -82,12 +89,14 @@ def test_custom_cycle_limits():
         return {"iteration": iteration}
 
     # Set custom cycle limit for this task (5 cycles)
-    context.set_max_cycles_for_task("limited_task", 5)
+    context.cycle_controller.set_node_max_cycles("limited_task", 5)
 
     # Set up task
     graph.add_node("limited_task", task=limited_task)
     limited_task.set_execution_context(context)
-    context.current_task_id = "limited_task"
+    # Create and push task context instead of setting current_task_id
+    task_ctx = context.create_task_context("limited_task")
+    context.push_task_context(task_ctx)
 
     print("\n1. Testing custom cycle limit (5):")
     try:
@@ -95,7 +104,9 @@ def test_custom_cycle_limits():
     except ValueError as e:
         print(f"❌ Expected error: {e}")
 
-    print(f"Final cycle count: {context.get_cycle_count('limited_task')}")
+    task_ctx = context._task_contexts.get('limited_task')
+    final_count = task_ctx.cycle_count if task_ctx else 0
+    print(f"Final cycle count: {final_count}")
 
 
 def test_cycle_info_methods():
@@ -107,39 +118,55 @@ def test_cycle_info_methods():
 
     # Test with no current task
     print("\n1. Testing with no current task:")
-    info = context.get_cycle_info()
+    current_ctx = context.current_task_context
+    if current_ctx:
+        info = {"current": current_ctx.cycle_count, "max": current_ctx.max_cycles}
+        can_iterate = current_ctx.can_iterate()
+    else:
+        info = {"current": 0, "max": 0}
+        can_iterate = False
     print(f"Cycle info: {info}")
-    print(f"Can iterate: {context.can_task_iterate()}")
+    print(f"Can iterate: {can_iterate}")
 
     # Set up a task
     @task(inject_context=True)
-    def info_task(ctx):
+    def info_task(_ctx: TaskExecutionContext):
         print("📋 Task executing")
         return "done"
 
     graph.add_node("info_task", task=info_task)
     info_task.set_execution_context(context)
-    context.current_task_id = "info_task"
+    # Create and push task context instead of setting current_task_id
+    task_ctx = context.create_task_context("info_task")
+    context.push_task_context(task_ctx)
 
     print("\n2. Testing with current task (no cycles yet):")
-    info = context.get_cycle_info()
-    print(f"Cycle info: {info}")
-    print(f"Can iterate: {context.can_task_iterate()}")
+    current_ctx = context.current_task_context
+    if current_ctx:
+        info = {"current": current_ctx.cycle_count, "max": current_ctx.max_cycles}
+        print(f"Cycle info: {info}")
+        print(f"Can iterate: {current_ctx.can_iterate()}")
+    else:
+        print("No current task context available")
 
     # Simulate some cycles
     print("\n3. Testing after manual cycle registration:")
-    context.cycle_controller.register_cycle("info_task")
-    context.cycle_controller.register_cycle("info_task")
+    current_ctx = context.current_task_context
+    if current_ctx:
+        current_ctx.register_cycle()
+        current_ctx.register_cycle()
 
-    info = context.get_cycle_info()
-    print(f"Cycle info: {info}")
-    print(f"Can iterate: {context.can_task_iterate()}")
+        info = {"current": current_ctx.cycle_count, "max": current_ctx.max_cycles}
+        print(f"Cycle info: {info}")
+        print(f"Can iterate: {current_ctx.can_iterate()}")
 
-    # Try one more cycle to hit the limit
-    context.cycle_controller.register_cycle("info_task")
-    info = context.get_cycle_info()
-    print(f"After 3rd cycle: {info}")
-    print(f"Can iterate: {context.can_task_iterate()}")
+        # Try one more cycle to hit the limit
+        current_ctx.register_cycle()
+        info = {"current": current_ctx.cycle_count, "max": current_ctx.max_cycles}
+        print(f"After 3rd cycle: {info}")
+        print(f"Can iterate: {current_ctx.can_iterate()}")
+    else:
+        print("No current task context available")
 
 
 def test_error_handling():
@@ -150,7 +177,7 @@ def test_error_handling():
     context = ExecutionContext.create(graph, "test_start", max_steps=10, default_max_cycles=2)
 
     @task(inject_context=True)
-    def error_task(ctx, data=None):
+    def error_task(ctx: TaskExecutionContext, data=None):
         if data is None:
             data = {"attempt": 0}
 
@@ -158,7 +185,7 @@ def test_error_handling():
         print(f"💥 Error task attempt: {attempt}")
 
         try:
-            if attempt < 5:  # Try more than cycle limit
+            if attempt < ATTEMPT_LIMIT:  # Try more than cycle limit
                 next_data = {"attempt": attempt + 1}
                 iteration_id = ctx.next_iteration(next_data)
                 print(f"➡️  Next attempt: {iteration_id}")
@@ -173,7 +200,9 @@ def test_error_handling():
     # Set up task
     graph.add_node("error_task", task=error_task)
     error_task.set_execution_context(context)
-    context.current_task_id = "error_task"
+    # Create and push task context instead of setting current_task_id
+    task_ctx = context.create_task_context("error_task")
+    context.push_task_context(task_ctx)
 
     print("\n1. Testing cycle limit error:")
     result = error_task()

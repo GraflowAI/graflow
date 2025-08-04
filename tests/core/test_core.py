@@ -45,7 +45,7 @@ def test_parallel_group_creation():
     group = ParallelGroup([task_a, task_b])
 
     assert group.task_id.startswith("ParallelGroup_")
-    assert len(group.tasks) == 2
+    assert len(group.tasks) == 2  # noqa: PLR2004
 
 
 def test_sequential_operator():
@@ -65,7 +65,7 @@ def test_parallel_operator():
     group = task_a | task_b
 
     assert isinstance(group, ParallelGroup)
-    assert len(group.tasks) == 2
+    assert len(group.tasks) == 2  # noqa: PLR2004
 
 
 def test_decorator_chaining():
@@ -93,7 +93,7 @@ def test_workflow_context():
         def task2():
             return "task2_result"
 
-        task1 >> task2
+        task1 >> task2 # type: ignore
 
         assert "task1" in ctx.graph.nodes
         assert "task2" in ctx.graph.nodes

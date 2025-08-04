@@ -6,6 +6,7 @@ Test script for TaskExecutionContext implementation.
 from graflow.core.context import ExecutionContext, TaskExecutionContext
 from graflow.core.decorators import task
 from graflow.core.graph import TaskGraph
+from graflow.core.task import Task
 
 
 def test_task_execution_context_basic():
@@ -50,13 +51,13 @@ def test_context_manager():
     exec_context = ExecutionContext.create(graph, "test_start", max_steps=10, default_max_cycles=5)
 
     print("\n1. Testing context manager:")
-    with exec_context.executing_task("manual_task") as task_ctx:
+    with exec_context.executing_task(Task("manual_task")) as task_ctx:
         print(f"Inside context: task_id = {task_ctx.task_id}")
         print(f"Can iterate: {task_ctx.can_iterate()}")
         print(f"Max cycles: {task_ctx.max_cycles}")
 
         # Test nested context
-        with exec_context.executing_task("nested_task") as nested_ctx:
+        with exec_context.executing_task(Task("nested_task")) as nested_ctx:
             print(f"Nested context: task_id = {nested_ctx.task_id}")
             print(f"Current task ID (should be nested): {exec_context.current_task_id}")
 
@@ -80,7 +81,7 @@ def test_cycle_management():
         count = data.get("count", 0)
         print(f"🔄 Cycle task - Count: {count}, Cycle: {task_ctx.cycle_count}")
 
-        if count < 5 and task_ctx.can_iterate():
+        if count < 5 and task_ctx.can_iterate():  # noqa: PLR2004
             print(f"  📊 Can iterate: cycles {task_ctx.cycle_count}/{task_ctx.max_cycles}")
             next_data = {"count": count + 1}
             iteration_id = task_ctx.next_iteration(next_data)
@@ -125,20 +126,20 @@ def test_parallel_context_simulation():
         print(f"    Local data: {task_ctx.get_local_data('task_type')}")
         return "Task B completed"
 
-    @task(inject_context=True)
-    def parallel_group_task(task_ctx):
+    @task(id="parallel_group_task", inject_context=True)
+    def parallel_group_task(task_ctx: TaskExecutionContext):
         print(f"🔗 Parallel group executing - ID: {task_ctx.task_id}")
 
         # Simulate parallel execution by manually managing contexts
         results = []
 
         # Execute task A in its own context
-        with exec_context.executing_task("parallel_task_a") as ctx_a:
+        with exec_context.executing_task(parallel_task_a) as ctx_a:
             result_a = parallel_task_a.func(ctx_a)
             results.append(result_a)
 
         # Execute task B in its own context
-        with exec_context.executing_task("parallel_task_b") as ctx_b:
+        with exec_context.executing_task(parallel_task_b) as ctx_b:
             result_b = parallel_task_b.func(ctx_b)
             results.append(result_b)
 
@@ -146,7 +147,7 @@ def test_parallel_context_simulation():
         return results
 
     # Set up tasks
-    graph.add_node("parallel_group_task", task=parallel_group_task)
+    # graph.add_node("parallel_group_task", task=parallel_group_task)
     parallel_group_task.set_execution_context(exec_context)
 
     print("\n1. Testing simulated parallel execution:")
