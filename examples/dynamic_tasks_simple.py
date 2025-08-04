@@ -5,14 +5,9 @@ Simple Dynamic Task Generation Example
 Shows basic usage of context.next_task() and context.next_iteration()
 """
 
-import os
-import sys
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-import networkx as nx
 
 from graflow.core.context import ExecutionContext
+from graflow.core.graph import TaskGraph
 from graflow.core.task import TaskWrapper
 
 
@@ -20,10 +15,13 @@ def demo_next_task():
     """Demonstrate basic next_task() functionality."""
     print("=== Demo: next_task() ===")
 
-    # Create execution context
-    graph = nx.DiGraph()
+    # Create execution context with a dummy task
+    graph = TaskGraph()
     context = ExecutionContext.create(graph, "start", max_steps=10)
-    context.current_task_id = "start"  # Simulate being in a task
+
+    # Create a dummy task context to simulate being in a task
+    dummy_task_ctx = context.create_task_context("start")
+    context.push_task_context(dummy_task_ctx)
 
     # Create and add a dynamic task
     def dynamic_work():
@@ -43,7 +41,7 @@ def demo_next_iteration():
     print("\n=== Demo: next_iteration() ===")
 
     # Create execution context with a base task
-    graph = nx.DiGraph()
+    graph = TaskGraph()
     context = ExecutionContext.create(graph, "start", max_steps=10)
 
     # Add a base task to the graph first
@@ -55,8 +53,9 @@ def demo_next_iteration():
     base_wrapper = TaskWrapper("counter", base_task)
     graph.add_node("counter", task=base_wrapper)
 
-    # Set current task and create iteration
-    context.current_task_id = "counter"
+    # Set current task context and create iteration
+    counter_task_ctx = context.create_task_context("counter")
+    context.push_task_context(counter_task_ctx)
 
     iteration_id = context.next_iteration({"count": 1, "message": "hello"})
 
@@ -69,9 +68,12 @@ def demo_conditional_creation():
     """Demonstrate conditional task creation."""
     print("\n=== Demo: Conditional Task Creation ===")
 
-    graph = nx.DiGraph()
+    graph = TaskGraph()
     context = ExecutionContext.create(graph, "start", max_steps=10)
-    context.current_task_id = "processor"
+
+    # Create a processor task context
+    processor_task_ctx = context.create_task_context("processor")
+    context.push_task_context(processor_task_ctx)
 
     def process_data(value):
         print(f"🔍 Processing value: {value}")
@@ -115,7 +117,7 @@ def demo_iteration_chain():
     """Demonstrate chained iterations."""
     print("\n=== Demo: Iteration Chain ===")
 
-    graph = nx.DiGraph()
+    graph = TaskGraph()
     context = ExecutionContext.create(graph, "start", max_steps=10)
 
     # Create a counter task
@@ -144,7 +146,10 @@ def demo_iteration_chain():
     # Add counter to graph
     counter_wrapper = TaskWrapper("iteration_counter", counter_task)
     graph.add_node("iteration_counter", task=counter_wrapper)
-    context.current_task_id = "iteration_counter"
+
+    # Create iteration counter task context
+    iteration_counter_ctx = context.create_task_context("iteration_counter")
+    context.push_task_context(iteration_counter_ctx)
 
     # Start the chain
     print("🚀 Starting iteration chain:")
