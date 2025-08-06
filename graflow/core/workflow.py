@@ -108,10 +108,18 @@ class WorkflowContext:
         self._group_counter += 1
         return f"ParallelGroup_{self._group_counter}"
 
-def get_current_workflow_context() -> WorkflowContext:
-    """Get the current workflow context if any."""
+def get_current_workflow_context(create_if_not_exist: bool = True) -> Optional[WorkflowContext]:
+    """Get the current workflow context if any.
+
+    Args:
+        create_if_not_exist: If True, create a new context if none exists.
+                           If False, return None if no context exists.
+
+    Returns:
+        Current WorkflowContext or None if no context exists and create_if_not_exist is False.
+    """
     ctx = _current_context.get()
-    if ctx is None:
+    if ctx is None and create_if_not_exist:
         name = uuid.uuid4().hex
         ctx = WorkflowContext(name)
         _current_context.set(ctx)
