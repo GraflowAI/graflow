@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import networkx as nx
 
 from graflow.core.graph import TaskGraph
-from graflow.core.workflow import WorkflowContext, get_current_workflow_context
+from graflow.core.workflow import WorkflowContext, current_workflow_context
 
 if TYPE_CHECKING:
     from graflow.core.task import Executable
@@ -25,7 +25,7 @@ def build_graph(start_node: Executable, context: Optional[WorkflowContext] = Non
     """Build a NetworkX directed graph from an executable."""
     if context is None:
         # Use the current workflow context if not provided
-        context = get_current_workflow_context()
+        context = current_workflow_context()
 
     task_graph = context.graph
     cur_graph = task_graph.nx_graph()

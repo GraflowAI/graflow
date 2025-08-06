@@ -3,7 +3,7 @@
 from graflow.core.context import execute_with_cycles
 from graflow.core.decorators import task
 from graflow.core.task import Task
-from graflow.core.workflow import clear_workflow_context, get_current_workflow_context, workflow
+from graflow.core.workflow import clear_workflow_context, current_workflow_context, workflow
 
 
 def test_execute_simple_flow():
@@ -22,7 +22,7 @@ def test_execute_simple_flow():
 
     # Check graph state
 
-    context = get_current_workflow_context()  # Ensure context is initialized
+    context = current_workflow_context()  # Ensure context is initialized
 
     graph = context.graph
     assert "start" in graph.nodes, f"start not in graph nodes: {list(graph.nodes)}"
@@ -40,7 +40,7 @@ def test_execute_simple_flow():
 def test_execute_with_traditional_tasks():
     """Test execution with traditional Task objects."""
     clear_workflow_context()
-    context = get_current_workflow_context()
+    context = current_workflow_context()
 
     A = Task("A")  # noqa: N806
     B = Task("B")  # noqa: N806
@@ -55,7 +55,7 @@ def test_execute_with_traditional_tasks():
 def test_parallel_group_execution():
     """Test execution with parallel groups."""
     clear_workflow_context()
-    context = get_current_workflow_context()
+    context = current_workflow_context()
 
     executed = []
 
@@ -108,7 +108,7 @@ def test_global_graph_state():
 def test_clear_graph():
     """Test clearing the global graph."""
     clear_workflow_context()
-    context = get_current_workflow_context()
+    context = current_workflow_context()
 
     @task
     def temp_task():
@@ -119,6 +119,6 @@ def test_clear_graph():
 
     clear_workflow_context()
 
-    context = get_current_workflow_context()
+    context = current_workflow_context()
     graph = context.graph
     assert len(graph.nodes) == 0

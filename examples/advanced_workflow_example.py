@@ -5,7 +5,7 @@ import time
 
 from graflow.core.context import TaskExecutionContext
 from graflow.core.decorators import task
-from graflow.core.workflow import WorkflowContext, get_current_workflow_context, workflow
+from graflow.core.workflow import WorkflowContext, current_workflow_context, workflow
 
 
 def nested_workflows():
@@ -141,7 +141,7 @@ def global_fallback_behavior():
     global_task_a >> global_task_b # type: ignore
 
     print("Global tasks created outside of context")
-    global_context = get_current_workflow_context()
+    global_context = current_workflow_context()
     print(f"Global pipeline structure: {global_context.show_info()}")
 
     # Show that context tasks are isolated

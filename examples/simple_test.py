@@ -1,7 +1,7 @@
 """Simple test of execution."""
 
 from graflow.core.decorators import task
-from graflow.core.workflow import get_current_workflow_context
+from graflow.core.workflow import current_workflow_context
 
 
 @task
@@ -19,7 +19,7 @@ def end():
 pipeline = start >> middle >> end
 
 print("Graph before execution:")
-ctx = get_current_workflow_context()
+ctx = current_workflow_context()
 ctx.show_info()
 
 print("\nExecuting:")

@@ -2,7 +2,7 @@
 
 from graflow.core.decorators import task
 from graflow.core.task import Task
-from graflow.core.workflow import clear_workflow_context, get_current_workflow_context
+from graflow.core.workflow import clear_workflow_context, current_workflow_context
 
 print("="*60)
 print("GRAFLOW v0.2.0 - Comprehensive Feature Demo")
@@ -10,7 +10,7 @@ print("="*60)
 
 # Start fresh
 clear_workflow_context()
-ctx = get_current_workflow_context()
+ctx = current_workflow_context()
 
 print("\n1. DECORATOR-BASED TASKS")
 print("-" * 30)
@@ -84,7 +84,7 @@ print("\n7. MIXED OPERATOR DEMO")
 print("-" * 30)
 
 clear_workflow_context()
-ctx = get_current_workflow_context()
+ctx = current_workflow_context()
 
 @task
 def start():
@@ -123,7 +123,7 @@ print("\n8. REVERSE DEPENDENCIES")
 print("-" * 30)
 
 clear_workflow_context()
-ctx = get_current_workflow_context()
+ctx = current_workflow_context()
 
 @task
 def step1():

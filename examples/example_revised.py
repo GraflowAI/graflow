@@ -2,11 +2,11 @@
 
 from graflow.core.decorators import task
 from graflow.core.task import Task
-from graflow.core.workflow import clear_workflow_context, get_current_workflow_context
+from graflow.core.workflow import clear_workflow_context, current_workflow_context
 
 # Clear any existing tasks
 clear_workflow_context()
-ctx = get_current_workflow_context()
+ctx = current_workflow_context()
 
 # Create tasks using @task decorator
 @task
@@ -58,7 +58,7 @@ ctx.execute("task_A", max_steps=10)
 print("\n=== Traditional Task Objects ===")
 # Traditional Task objects still work
 clear_workflow_context()
-ctx = get_current_workflow_context()
+ctx = current_workflow_context()
 
 X = Task("X")
 Y = Task("Y")
