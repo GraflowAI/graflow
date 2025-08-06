@@ -42,6 +42,11 @@ class TaskExecutionContext:
         self.max_retries = execution_context.default_max_retries
         self.local_data: dict[str, Any] = {}
 
+    @property
+    def session_id(self) -> str:
+        """Get session ID from execution context."""
+        return self.execution_context.session_id
+
     def can_iterate(self) -> bool:
         """Check if this task can execute another cycle."""
         return self.cycle_count < self.max_cycles
@@ -82,9 +87,9 @@ class TaskExecutionContext:
         channel = self.execution_context.get_channel()
         return TypedChannel(channel, message_type)
 
-    def get_result(self, node: str) -> Any:
-        """Get execution result for a node."""
-        return self.execution_context.get_result(node)
+    def get_result(self, node: str, default: Any = None) -> Any:
+        """Get execution result for a node from channel."""
+        return self.execution_context.get_result(node, default)
 
     def set_local_data(self, key: str, value: Any) -> None:
         """Set task-local data."""
@@ -94,12 +99,6 @@ class TaskExecutionContext:
         """Get task-local data."""
         return self.local_data.get(key, default)
 
-    @property
-    def session_id(self) -> str:
-        """Get session ID from execution context."""
-        return self.execution_context.session_id
-
-    @property
     def elapsed_time(self) -> float:
         """Get elapsed time since task started."""
         return time.time() - self.start_time
@@ -136,7 +135,6 @@ class ExecutionContext:
         self.default_max_retries = default_max_retries
         self.steps = steps
         self.executed = []
-        self.results = {}
 
         self.cycle_controller = CycleController(default_max_cycles)
         self.channel = MemoryChannel(session_id) # Use session_id for unique channel name
@@ -182,12 +180,14 @@ class ExecutionContext:
         self.steps += 1
 
     def set_result(self, node: str, result: Any) -> None:
-        """Store execution result for a node."""
-        self.results[node] = result
+        """Store execution result for a node using channel."""
+        channel_key = f"{node}.__result__"
+        self.channel.set(channel_key, result)
 
-    def get_result(self, node: str) -> Any:
-        """Get execution result for a node."""
-        return self.results.get(node)
+    def get_result(self, node: str, default: Any = None) -> Any:
+        """Get execution result for a node from channel."""
+        channel_key = f"{node}.__result__"
+        return self.channel.get(channel_key, default)
 
     def get_channel(self) -> Channel:
         """Get the channel for inter-task communication."""
