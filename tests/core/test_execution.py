@@ -30,7 +30,7 @@ def test_save_and_load_context():
         loaded_context = ExecutionContext.load(context_path)
 
         assert loaded_context.executed == ["A", "B"]
-        assert loaded_context.steps == 2
+        assert loaded_context.steps == 2  # noqa: PLR2004
         assert list(loaded_context.queue) == ["A"]
 
 
