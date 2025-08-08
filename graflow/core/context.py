@@ -5,9 +5,8 @@ from __future__ import annotations
 import pickle
 import time
 import uuid
-from collections import deque
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any, Optional, Type, TypeVar
+from typing import TYPE_CHECKING, Any, Dict, Optional, Type, TypeVar, Union
 
 from graflow.channels.base import Channel
 from graflow.channels.memory import MemoryChannel
@@ -16,6 +15,8 @@ from graflow.coordination.executor import GroupExecutor
 from graflow.core.cycle import CycleController
 from graflow.core.engine import WorkflowEngine
 from graflow.core.graph import TaskGraph
+from graflow.core.queue.base import AbstractTaskQueue
+from graflow.core.queue.factory import QueueBackend, TaskQueueFactory
 from graflow.exceptions import CycleLimitExceededError
 
 if TYPE_CHECKING:
@@ -125,17 +126,31 @@ class ExecutionContext:
         default_max_cycles: int = 10,
         default_max_retries: int = 3,
         steps: int = 0,
+        # Phase 1: Optional parameters for TaskQueue integration
+        queue_backend: Union[QueueBackend, str] = QueueBackend.IN_MEMORY,
+        queue_config: Optional[Dict[str, Any]] = None
     ):
-        """Initialize ExecutionContext."""
+        """Initialize ExecutionContext with configurable queue backend."""
         session_id = str(uuid.uuid4().int)
         self.session_id = session_id
         self.graph = graph
-        self.queue = deque([start_node])
         self.start_node = start_node
         self.max_steps = max_steps
         self.default_max_retries = default_max_retries
         self.steps = steps
         self.executed = []
+
+        # Phase 1: Abstract TaskQueue implementation
+        if isinstance(queue_backend, str):
+            queue_backend = QueueBackend(queue_backend)
+
+        queue_config = queue_config or {}
+        if start_node:
+            queue_config['start_node'] = start_node
+
+        self.task_queue: AbstractTaskQueue = TaskQueueFactory.create(
+            queue_backend, self, **queue_config
+        )
 
         self.cycle_controller = CycleController(default_max_cycles)
         self.channel = MemoryChannel(session_id) # Use session_id for unique channel name
@@ -147,12 +162,11 @@ class ExecutionContext:
         # Group execution
         self.group_executor: Optional[GroupExecutor] = None
 
-        if self.start_node and not self.queue:
-            self.queue.append(self.start_node)
-
     @classmethod
     def create(cls, graph: TaskGraph, start_node: str, max_steps: int = 10,
-               default_max_cycles: int = 10, default_max_retries: int = 3) -> ExecutionContext:
+               default_max_cycles: int = 10, default_max_retries: int = 3,
+               queue_backend: Union[QueueBackend, str] = QueueBackend.IN_MEMORY,
+               queue_config: Optional[Dict[str, Any]] = None) -> ExecutionContext:
         """Create a new execution context."""
         return cls(
             graph=graph,
@@ -160,11 +174,18 @@ class ExecutionContext:
             max_steps=max_steps,
             default_max_cycles=default_max_cycles,
             default_max_retries=default_max_retries,
+            queue_backend=queue_backend,
+            queue_config=queue_config,
         )
 
+    @property
+    def queue(self) -> AbstractTaskQueue:
+        """Get the task queue instance."""
+        return self.task_queue
+
     def add_to_queue(self, node: str) -> None:
-        """Add a node to the execution queue."""
-        self.queue.append(node)
+        """Add a node to the execution queue (complete compatibility)."""
+        self.task_queue.add_node(node)
 
     def mark_executed(self, node: str) -> None:
         """Mark a node as executed."""
@@ -172,12 +193,12 @@ class ExecutionContext:
             self.executed.append(node)
 
     def is_completed(self) -> bool:
-        """Check if execution is completed."""
-        return not self.queue or self.steps >= self.max_steps
+        """Check if execution is completed (complete compatibility)."""
+        return self.task_queue.is_empty() or self.steps >= self.max_steps
 
     def get_next_node(self) -> Optional[str]:
-        """Get the next node to execute."""
-        return self.queue.popleft() if self.queue else None
+        """Get the next node to execute (complete compatibility)."""
+        return self.task_queue.get_next_node()
 
     def increment_step(self) -> None:
         """Increment the step counter."""

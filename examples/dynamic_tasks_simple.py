@@ -33,7 +33,7 @@ def demo_next_task():
 
     print(f"✅ Created dynamic task: {task_id}")
     print(f"✅ Task added to graph: {task_id in context.graph.nodes}")
-    print(f"✅ Task added to queue: {task_id in context.queue}")
+    print(f"✅ Task added to queue: {task_id in context.queue.to_list()}")
 
 
 def demo_next_iteration():
@@ -61,7 +61,7 @@ def demo_next_iteration():
 
     print(f"✅ Created iteration task: {iteration_id}")
     print(f"✅ Iteration task in graph: {iteration_id in context.graph.nodes}")
-    print(f"✅ Iteration task in queue: {iteration_id in context.queue}")
+    print(f"✅ Iteration task in queue: {iteration_id in context.queue.to_list()}")
 
 
 def demo_conditional_creation():
@@ -78,7 +78,7 @@ def demo_conditional_creation():
     def process_data(value):
         print(f"🔍 Processing value: {value}")
 
-        if value > 50:  # noqa: PLR2004
+        if value > 50:
             # High value processing
             high_task = TaskWrapper(
                 "high_value_handler",
@@ -87,7 +87,7 @@ def demo_conditional_creation():
             task_id = context.next_task(high_task)
             print(f"✨ Created high-value task: {task_id}")
 
-        elif value > 10:  # noqa: PLR2004
+        elif value > 10:
             # Medium value processing
             med_task = TaskWrapper(
                 "medium_value_handler",

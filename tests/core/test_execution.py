@@ -12,7 +12,7 @@ def test_create_initial_context():
     """Test initial context creation."""
     context = create_execution_context("A")
 
-    assert list(context.queue) == ["A"]
+    assert context.queue.to_list() == ["A"]
     assert context.executed == []
     assert context.steps == 0
 
@@ -30,8 +30,8 @@ def test_save_and_load_context():
         loaded_context = ExecutionContext.load(context_path)
 
         assert loaded_context.executed == ["A", "B"]
-        assert loaded_context.steps == 2  # noqa: PLR2004
-        assert list(loaded_context.queue) == ["A"]
+        assert loaded_context.steps == 2
+        assert loaded_context.queue.to_list() == ["A"]
 
 
 def test_execute_with_context():
