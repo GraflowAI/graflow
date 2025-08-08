@@ -19,7 +19,7 @@ def make_decision(context: ExecutionContext, data):
 
     value = data.get("value", 0)
 
-    if value > 10:  # noqa: PLR2004
+    if value > 10:
         # Create a "high value" processing task
         high_task = TaskWrapper(
             "process_high_value",

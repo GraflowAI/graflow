@@ -31,7 +31,7 @@ def generate_sample_sales_data(num_records: int = 1000) -> pd.DataFrame:
         base_amount = 1000 + 500 * np.sin(date.month * 2 * np.pi / 12)
 
         # Add some anomalies (5% chance)
-        if random.random() < 0.05:  # noqa: PLR2004
+        if random.random() < 0.05:
             amount = base_amount * random.choice([0.1, 5.0])  # Very low or very high
         else:
             amount = base_amount * (1 + random.gauss(0, 0.2))  # Normal variation
@@ -163,7 +163,7 @@ ANOMALY DETECTION RESULTS:
 - Suspicious Days: {detailed_report['anomaly_analysis']['summary']['suspicious_days']}
 
 RECOMMENDED ACTIONS:
-"""  # noqa: E501
+"""
 
     for i, rec in enumerate(detailed_report['recommendations'], 1):
         summary += f"{i}. {rec}\n"
@@ -173,7 +173,7 @@ RECOMMENDED ACTIONS:
     return summary
 
 
-def main():  # noqa: PLR0915
+def main():
     """Main function to execute the sales analysis workflow."""
     print("=== Sales Analysis Workflow ===\n")
 
@@ -249,7 +249,7 @@ def main():  # noqa: PLR0915
             print("="*60)
 
         # Build the workflow pipeline
-        load_sales_data >> detect_data_anomalies >> create_detailed_report >> approval_process >> generate_executive_summary # type: ignore  # noqa: E501
+        load_sales_data >> detect_data_anomalies >> create_detailed_report >> approval_process >> generate_executive_summary # type: ignore
 
         # Show workflow structure
         print("Workflow structure:")

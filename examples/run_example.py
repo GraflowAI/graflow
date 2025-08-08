@@ -8,7 +8,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:  # noqa: PLR2004
+    if len(sys.argv) != 2:
         print("Usage: python run_example.py <example_name>")
         print("Available examples:")
         examples_dir = os.path.dirname(__file__)

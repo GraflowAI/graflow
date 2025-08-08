@@ -25,7 +25,7 @@ def classify_data(context: TaskExecutionContext):
     data_type = data.get("type", "unknown")
     value = data.get("value", 0)
 
-    if data_type == "numerical" and value > 100:  # noqa: PLR2004
+    if data_type == "numerical" and value > 100:
         # Create high-value numerical processing task
         high_value_task = TaskWrapper(
             "high_value_processor",
@@ -104,7 +104,7 @@ def optimize_parameters(context: TaskExecutionContext):
     print(f"Iteration {iteration + 1}: accuracy={new_accuracy:.3f}, lr={new_learning_rate:.3f}")
 
     # Check convergence conditions
-    if new_accuracy >= 0.9 or iteration >= 5:  # noqa: PLR2004
+    if new_accuracy >= 0.9 or iteration >= 5:
         # Converged - create final result task
         final_task = TaskWrapper(
             "save_final_model",
@@ -270,7 +270,7 @@ def run_classification_example():
                 data_type = data.get("type", "unknown")
                 value = data.get("value", 0)
 
-                if data_type == "numerical" and value > 100:  # noqa: PLR2004
+                if data_type == "numerical" and value > 100:
                     # Create high-value numerical processing task
                     high_value_task = TaskWrapper(
                         "high_value_processor",
@@ -354,7 +354,7 @@ def run_optimization_example():
             print(f"Iteration {iteration + 1}: accuracy={new_accuracy:.3f}, lr={new_learning_rate:.3f}")
 
             # Check convergence conditions
-            if new_accuracy >= 0.9 or iteration >= 5:  # noqa: PLR2004
+            if new_accuracy >= 0.9 or iteration >= 5:
                 # Converged - create final result task
                 final_task = TaskWrapper(
                     "save_final_model",

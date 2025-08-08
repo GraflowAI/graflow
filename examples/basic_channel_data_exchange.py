@@ -21,7 +21,7 @@ from graflow.core.decorators import task
 from graflow.core.workflow import workflow
 
 
-def demo_simple_data_exchange():  # noqa: PLR0915
+def demo_simple_data_exchange():
     """Demonstrate basic data exchange using get_channel()."""
     print("📡 Basic Channel Data Exchange Demo")
     print("=" * 50)

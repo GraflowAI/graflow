@@ -10,27 +10,27 @@ ctx = current_workflow_context()
 
 # Create tasks using @task decorator
 @task
-def task_A():  # noqa: N802
+def task_A():
     print("Executing task A logic")
     return "Result A"
 
 @task
-def task_B():  # noqa: N802
+def task_B():
     print("Executing task B logic")
     return "Result B"
 
 @task
-def task_C():  # noqa: N802
+def task_C():
     print("Executing task C logic")
     return "Result C"
 
 @task(id="custom_D")
-def task_D():  # noqa: N802
+def task_D():
     print("Executing task D logic")
     return "Result D"
 
 @task
-def task_E():  # noqa: N802
+def task_E():
     print("Executing task E logic")
     return "Result E"
 

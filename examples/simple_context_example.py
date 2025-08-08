@@ -4,7 +4,7 @@ from graflow.core.decorators import task
 from graflow.core.workflow import workflow
 
 
-def main():  # noqa: PLR0915
+def main():
     print("=== Simple Context-Aware @task Example ===\n")
 
     # Example 1: Simple pipeline with automatic context detection

@@ -94,7 +94,7 @@ def test_context_access_patterns():
         count = data.get("count", 0)
         print(f"Iteration {count}")
 
-        if count < 3:  # noqa: PLR2004
+        if count < 3:
             # Create next iteration
             next_data = {"count": count + 1}
             iteration_id = context.next_iteration(next_data)

@@ -83,7 +83,7 @@ class TestTypedChannel:
 
         assert received == message
         assert received["id"] == "test123"
-        assert received["value"] == 42  # noqa: PLR2004
+        assert received["value"] == 42
 
     def test_receive_nonexistent_key(self):
         """Test receiving from nonexistent key."""

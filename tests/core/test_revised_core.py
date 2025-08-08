@@ -51,7 +51,7 @@ def test_parallel_group_creation():
     task_b = Task("B")
     group = ParallelGroup([task_a, task_b])
 
-    assert len(group.tasks) == 2  # noqa: PLR2004
+    assert len(group.tasks) == 2
     assert group.tasks[0].task_id == "A"
     assert group.tasks[1].task_id == "B"
     assert "ParallelGroup_" in group.task_id
@@ -85,7 +85,7 @@ def test_parallel_operator():
     group = task_a | task_b
 
     assert isinstance(group, ParallelGroup)
-    assert len(group.tasks) == 2  # noqa: PLR2004
+    assert len(group.tasks) == 2
 
 
 def test_complex_composition():
@@ -124,4 +124,4 @@ def test_parallel_group_extension():
     group1 = task_a | task_b
     group2 = group1 | task_c
 
-    assert len(group2.tasks) == 3  # noqa: PLR2004
+    assert len(group2.tasks) == 3

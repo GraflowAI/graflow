@@ -161,7 +161,7 @@ class TestRedisCoordinatorIntegration:
         coordinator = RedisCoordinator(clean_redis)
 
         # Create barrier
-        barrier_id = coordinator.create_barrier("cleanup_test", 1)
+        _barrier_id = coordinator.create_barrier("cleanup_test", 1)
 
         # Verify barrier exists in Redis
         barrier_key = "barrier:cleanup_test"
@@ -180,8 +180,6 @@ class TestRedisCoordinatorIntegration:
 
     def test_concurrent_barrier_operations(self, clean_redis):
         """Test concurrent barrier operations."""
-        import threading
-        import time
 
         coordinator = RedisCoordinator(clean_redis)
 
@@ -196,7 +194,6 @@ class TestRedisCoordinatorIntegration:
 
         # Start 3 participants
         threads = []
-        start_time = time.time()
         for i in range(3):
             thread = threading.Thread(target=participant, args=(i,))
             thread.start()
@@ -208,7 +205,7 @@ class TestRedisCoordinatorIntegration:
 
         # All participants should succeed
         assert len(results) == 3
-        for participant_id, result, timestamp in results:
+        for _participant_id, result, _timestamp in results:
             assert result is True
 
         # All should complete around the same time (within 1 second)

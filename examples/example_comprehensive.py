@@ -91,15 +91,15 @@ def start():
     print("🚀 Starting complex workflow")
 
 @task
-def process_A():  # noqa: N802
+def process_A():
     print("🔧 Processing A")
 
 @task
-def process_B():  # noqa: N802
+def process_B():
     print("🔧 Processing B")
 
 @task
-def process_C():  # noqa: N802
+def process_C():
     print("🔧 Processing C")
 
 @task

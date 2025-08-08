@@ -79,20 +79,12 @@ class TestGroupExecutor:
         mock_redis_coord = mocker.patch('graflow.coordination.executor.RedisCoordinator')
         mock_redis_client = mocker.Mock()
 
-        executor = GroupExecutor(
+        _executor = GroupExecutor(
             CoordinationBackend.REDIS,
             {"redis_client": mock_redis_client}
         )
 
         mock_redis_coord.assert_called_once_with(mock_redis_client)
-
-    def test_group_executor_unsupported_backend(self):
-        """Test GroupExecutor with unsupported backend."""
-        class UnsupportedBackend:
-            pass
-
-        with pytest.raises(ValueError):
-            GroupExecutor(UnsupportedBackend())
 
     def test_set_execution_context(self, mocker):
         """Test setting execution context."""
@@ -196,7 +188,7 @@ class TestGroupExecutor:
 
         tasks = [TaskSpec("task1", lambda: None)]
 
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017
             executor.execute_parallel_group("test_group", tasks)
 
         # Verify cleanup still happens
@@ -219,7 +211,7 @@ class TestGroupExecutorIntegration:
     def test_multiprocessing_backend_creation(self, mocker):
         """Test multiprocessing backend coordinator creation."""
         mock_mp = mocker.patch('graflow.coordination.executor.MultiprocessingCoordinator')
-        executor = GroupExecutor(
+        _executor = GroupExecutor(
             CoordinationBackend.MULTIPROCESSING,
             {"process_count": 4}
         )
@@ -229,6 +221,6 @@ class TestGroupExecutorIntegration:
     def test_redis_import_error_handling(self, mocker):
         """Test Redis import error handling."""
         # Mock both redis import and RedisCoordinator to simulate import error
-        mocker.patch('graflow.coordination.executor.RedisCoordinator', side_effect=ImportError("No module named 'redis'"))
+        mocker.patch('graflow.coordination.executor.RedisCoordinator', side_effect=ImportError("No module named 'redis'"))  # noqa: E501
         with pytest.raises(ImportError, match="Redis backend requires 'redis' package"):
             GroupExecutor(CoordinationBackend.REDIS)

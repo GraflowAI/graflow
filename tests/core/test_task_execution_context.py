@@ -81,7 +81,7 @@ def test_cycle_management():
         count = data.get("count", 0)
         print(f"🔄 Cycle task - Count: {count}, Cycle: {task_ctx.cycle_count}")
 
-        if count < 5 and task_ctx.can_iterate():  # noqa: PLR2004
+        if count < 5 and task_ctx.can_iterate():
             print(f"  📊 Can iterate: cycles {task_ctx.cycle_count}/{task_ctx.max_cycles}")
             next_data = {"count": count + 1}
             iteration_id = task_ctx.next_iteration(next_data)

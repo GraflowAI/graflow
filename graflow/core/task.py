@@ -66,13 +66,13 @@ class Executable(ABC):
 
     def _add_dependency_edge(self, from_task: str, to_task: str) -> None:
         """Add dependency edge in current context."""
-        from .workflow import current_workflow_context  # noqa: PLC0415 avoid circular import
+        from .workflow import current_workflow_context
         current_context = current_workflow_context()
         current_context.add_edge(from_task, to_task)
 
     def _register_to_context(self) -> None:
         """Register this root task to current workflow context."""
-        from .workflow import current_workflow_context  # noqa: PLC0415 avoid circular import
+        from .workflow import current_workflow_context
         current_context = current_workflow_context()
         current_context.add_node(self.task_id, self)
 
@@ -194,13 +194,13 @@ class ParallelGroup(Executable):
 
     def _get_group_name(self) -> str:
         """Get group name from current context or global counter."""
-        from .workflow import current_workflow_context  # noqa: PLC0415 avoid circular import
+        from .workflow import current_workflow_context
         current_context = current_workflow_context()
         return current_context.get_next_group_name()
 
     def _remove_from_context(self) -> None:
         """Remove this parallel group from the current workflow context."""
-        from .workflow import current_workflow_context  # noqa: PLC0415 avoid circular import
+        from .workflow import current_workflow_context
         current_context = current_workflow_context()
         graph = current_context.graph._graph
         if graph.has_node(self.task_id):

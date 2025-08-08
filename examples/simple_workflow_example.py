@@ -5,7 +5,7 @@ from graflow.core.task import Task
 from graflow.core.workflow import workflow
 
 
-def main():  # noqa: PLR0915
+def main():
     print("=== Simplified Workflow Example ===\n")
 
     # Example 1: Simple workflow with @task decorator

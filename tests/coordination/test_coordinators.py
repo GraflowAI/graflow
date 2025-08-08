@@ -51,7 +51,7 @@ class TestMultiprocessingCoordinator:
     def test_create_barrier_error_handling(self, coordinator, mocker):
         """Test barrier creation error handling."""
         mocker.patch.object(coordinator.mp, 'Barrier', side_effect=Exception("Test error"))
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017
             coordinator.create_barrier("error_barrier", 2)
 
     def test_wait_barrier_success(self, coordinator):
@@ -106,7 +106,7 @@ class TestMultiprocessingCoordinator:
         """Test worker lifecycle."""
         mock_worker = mocker.MagicMock()
         mock_worker.is_alive.return_value = True
-        mock_process = mocker.patch('multiprocessing.Process', return_value=mock_worker)
+        _mock_process = mocker.patch('multiprocessing.Process', return_value=mock_worker)
 
         coordinator.start_workers()
         assert len(coordinator.workers) == 2
@@ -118,7 +118,7 @@ class TestMultiprocessingCoordinator:
         """Test task execution by workers (mocked)."""
         # Mock the worker process and queue methods
         mock_worker = mocker.MagicMock()
-        mock_process = mocker.patch('multiprocessing.Process', return_value=mock_worker)
+        _mock_process = mocker.patch('multiprocessing.Process', return_value=mock_worker)
         mocker.patch.object(coordinator, 'get_queue_size', side_effect=[0, 1])
 
         def test_task(value):

@@ -21,7 +21,7 @@ def make_decision(context: TaskExecutionContext, data):
 
     value = data.get("value", 0)
 
-    if value > 10:  # noqa: PLR2004
+    if value > 10:
         # Create high-value processing task
         high_task = TaskWrapper(
             "high_value_processor",

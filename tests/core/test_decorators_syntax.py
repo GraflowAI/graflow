@@ -9,10 +9,10 @@ from graflow.core.task import TaskWrapper
 @pytest.fixture(autouse=True)
 def setup_workflow_context():
     """Setup workflow context for each test."""
-    from contextvars import ContextVar  # noqa: PLC0415
+    from contextvars import ContextVar
 
-    import graflow.core.workflow as workflow_module  # noqa: PLC0415
-    from graflow.core.workflow import WorkflowContext  # noqa: PLC0415
+    import graflow.core.workflow as workflow_module
+    from graflow.core.workflow import WorkflowContext
 
     # Create a new context var and workflow context
     context_var = ContextVar('test_workflow_context')

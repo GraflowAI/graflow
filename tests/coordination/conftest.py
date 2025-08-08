@@ -49,7 +49,7 @@ def redis_server():
         if container:
             try:
                 container.stop()
-            except:  # noqa: E722
+            except:
                 pass
 
         # Try to connect to local Redis
