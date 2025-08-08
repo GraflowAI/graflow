@@ -653,7 +653,7 @@ def _render_mermaid_using_api(
                 return img_bytes
 
             # If we get a server error (5xx), retry
-            if 500 <= response.status_code < 600 and attempt < max_retries:  # noqa: PLR2004
+            if 500 <= response.status_code < 600 and attempt < max_retries:
                 # Exponential backoff with jitter
                 sleep_time = retry_delay * (2**attempt) * (0.5 + 0.5 * random.random())
                 time.sleep(sleep_time)
