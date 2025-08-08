@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Optional, Type, TypeVar
 from graflow.channels.base import Channel
 from graflow.channels.memory import MemoryChannel
 from graflow.channels.typed import TypedChannel
+from graflow.coordination.executor import GroupExecutor
 from graflow.core.cycle import CycleController
 from graflow.core.engine import WorkflowEngine
 from graflow.core.graph import TaskGraph
@@ -142,6 +143,9 @@ class ExecutionContext:
         # Task execution context management
         self._task_execution_stack: list[TaskExecutionContext] = []
         self._task_contexts: dict[str, TaskExecutionContext] = {}
+
+        # Group execution
+        self.group_executor: Optional[GroupExecutor] = None
 
         if self.start_node and not self.queue:
             self.queue.append(self.start_node)

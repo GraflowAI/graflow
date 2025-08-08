@@ -7,16 +7,7 @@ import redis
 from graflow.coordination.coordinator import CoordinationBackend, TaskCoordinator
 from graflow.coordination.multiprocessing import MultiprocessingCoordinator
 from graflow.coordination.redis import RedisCoordinator
-
-
-class TaskSpec:
-    """Task specification for parallel execution."""
-
-    def __init__(self, task_id: str, func, args: tuple = (), kwargs: Optional[dict] = None):
-        self.task_id = task_id
-        self.func = func
-        self.args = args
-        self.kwargs = kwargs or {}
+from graflow.coordination.task_spec import TaskSpec
 
 
 class GroupExecutor:
@@ -24,13 +15,16 @@ class GroupExecutor:
 
     def __init__(self, backend: CoordinationBackend = CoordinationBackend.MULTIPROCESSING,
                  backend_config: Optional[Dict[str, Any]] = None):
-        self.backend = backend
-        self.coordinator = self._create_coordinator(backend, backend_config or {})
+        self.backend: CoordinationBackend = backend
+        self.coordinator: Optional[TaskCoordinator] = self._create_coordinator(backend, backend_config or {})
         self.execution_context: Optional[Any] = None
 
-    def _create_coordinator(self, backend: CoordinationBackend, config: Dict[str, Any]) -> TaskCoordinator:
+    def _create_coordinator(self, backend: CoordinationBackend, config: Dict[str, Any]) -> Optional[TaskCoordinator]:
         """Create appropriate coordinator based on backend."""
-        if backend == CoordinationBackend.REDIS:
+        if backend == CoordinationBackend.DIRECT:
+            return None  # No coordinator needed for direct execution
+
+        elif backend == CoordinationBackend.REDIS:
             try:
                 redis_client = config.get("redis_client")
                 if redis_client is None:
@@ -56,20 +50,19 @@ class GroupExecutor:
 
     def execute_parallel_group(self, group_id: str, tasks: List[TaskSpec]) -> None:
         """Execute parallel group with barrier synchronization."""
-        # Create barrier
-        barrier_id = self.coordinator.create_barrier(group_id, len(tasks))
+        if self.backend == CoordinationBackend.DIRECT:
+            return self.direct_execute(group_id, tasks)
+        else:
+            assert self.coordinator is not None, "Coordinator must be initialized for parallel execution"
+            return self.coordinator.execute_group(group_id, tasks)
 
-        try:
-            # Dispatch all tasks
-            for task in tasks:
-                self.coordinator.dispatch_task(task, group_id)
+    def direct_execute(self, group_id: str, tasks: List[TaskSpec]) -> None:
+        """Directly execute tasks without coordination."""
+        print(f"Running parallel group: {group_id}")
+        print(f"  Direct tasks: {[task.task_id for task in tasks]}")
 
-            # Wait for all tasks to complete
-            if not self.coordinator.wait_barrier(barrier_id):
-                raise TimeoutError(f"Barrier wait timeout for group {group_id}")
+        for task in tasks:
+            print(f"  - Executing directly: {task.task_id}")
+            task.func(*task.args, **task.kwargs)
 
-            print(f"Parallel group {group_id} completed successfully")
-
-        finally:
-            # Clean up barrier
-            self.coordinator.cleanup_barrier(barrier_id)
+        print(f"  Direct group {group_id} completed")

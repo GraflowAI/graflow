@@ -8,7 +8,7 @@ from threading import BrokenBarrierError
 from typing import Any, Dict, List, Optional
 
 from graflow.coordination.coordinator import TaskCoordinator
-from graflow.coordination.executor import TaskSpec
+from graflow.coordination.task_spec import TaskSpec
 from graflow.exceptions import GraflowRuntimeError
 
 
@@ -120,7 +120,7 @@ class MultiprocessingCoordinator(TaskCoordinator):
         """Get result from result queue."""
         try:
             return self.result_queue.get(timeout=timeout)
-        except:
+        except:  # noqa: E722
             return None
 
     def get_queue_size(self) -> int:
@@ -165,7 +165,7 @@ class MultiprocessingCoordinator(TaskCoordinator):
                         "status": "error"
                     })
 
-            except:
+            except:  # noqa: E722
                 # Timeout or other exception - continue loop
                 continue
 
@@ -182,5 +182,5 @@ class MultiprocessingCoordinator(TaskCoordinator):
         """Cleanup on destruction."""
         try:
             self.stop_workers()
-        except:
+        except:  # noqa: E722
             pass

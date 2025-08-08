@@ -6,7 +6,7 @@ import time
 from typing import Any, Callable, Dict
 
 from graflow.coordination.coordinator import TaskCoordinator
-from graflow.coordination.executor import TaskSpec
+from graflow.coordination.task_spec import TaskSpec
 
 
 class RedisCoordinator(TaskCoordinator):

@@ -10,10 +10,12 @@ dependencies = [
     "matplotlib>=3.10.3",
     "redis>=6.2.0",
     "requests>=2.32.4",
+    "pytest-mock>=3.14.1",
 ]
 
 [dependency-groups]
 dev = [
+    "docker>=7.1.0",
     "pandas>=2.3.1",
     "pytest>=8.4.1",
     "ruff>=0.12.2",
@@ -57,7 +59,8 @@ ignore = [
     # UP045: Use `X | None` for type annotationsRuff
     "UP045",
     "PLR0913", "C901", "RUF010",
-    "PD901" # https://docs.astral.sh/ruff/rules/pandas-df-variable-name/
+    "PD901", # https://docs.astral.sh/ruff/rules/pandas-df-variable-name/
+    "PLR2004", # https://docs.astral.sh/ruff/rules/magic-value-comparison/
 ]
 
 [tool.ruff.lint.isort]
