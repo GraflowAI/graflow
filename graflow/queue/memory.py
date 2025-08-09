@@ -3,7 +3,7 @@
 from collections import deque
 from typing import Optional
 
-from .base import AbstractTaskQueue, TaskSpec, TaskStatus
+from graflow.queue.base import AbstractTaskQueue, TaskSpec, TaskStatus
 
 
 class InMemoryTaskQueue(AbstractTaskQueue):

@@ -5,9 +5,9 @@ import pytest
 
 from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
-from graflow.core.queue.base import TaskSpec, TaskStatus
-from graflow.core.queue.factory import QueueBackend
-from graflow.core.queue.memory import InMemoryTaskQueue
+from graflow.queue.base import TaskSpec, TaskStatus
+from graflow.queue.factory import QueueBackend
+from graflow.queue.memory import InMemoryTaskQueue
 
 
 @pytest.fixture

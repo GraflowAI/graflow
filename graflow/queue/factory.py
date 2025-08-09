@@ -3,8 +3,8 @@
 from enum import Enum
 from typing import Any, Dict
 
-from .base import AbstractTaskQueue
-from .memory import InMemoryTaskQueue
+from graflow.queue.base import AbstractTaskQueue
+from graflow.queue.memory import InMemoryTaskQueue
 
 
 class QueueBackend(Enum):

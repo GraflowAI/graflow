@@ -8,9 +8,9 @@ import pytest
 
 from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
-from graflow.core.queue.base import TaskSpec, TaskStatus
-from graflow.core.queue.factory import QueueBackend
-from graflow.core.queue.redis import RedisTaskQueue
+from graflow.queue.base import TaskSpec, TaskStatus
+from graflow.queue.factory import QueueBackend
+from graflow.queue.redis import RedisTaskQueue
 
 
 @pytest.fixture
@@ -41,7 +41,7 @@ class TestRedisTaskQueue:
         """Test graceful handling when redis is not available."""
         with patch('graflow.core.queue.redis.redis', None):
             with pytest.raises(ImportError, match="Redis library not installed"):
-                from graflow.core.queue.redis import RedisTaskQueue  # noqa: PLC0415
+                from graflow.queue.redis import RedisTaskQueue  # noqa: PLC0415
                 RedisTaskQueue(execution_context)
 
     @patch('graflow.core.queue.redis.redis')

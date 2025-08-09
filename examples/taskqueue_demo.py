@@ -4,7 +4,7 @@ from typing import cast
 
 from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
-from graflow.core.queue.factory import QueueBackend, TaskQueueFactory
+from graflow.queue.factory import QueueBackend, TaskQueueFactory
 
 
 def demo_in_memory_backend():
@@ -76,7 +76,7 @@ def demo_redis_backend():
         )
 
         print(f"Backend: {type(context.task_queue).__name__}")
-        from graflow.core.queue.redis import RedisTaskQueue  # noqa: PLC0415
+        from graflow.queue.redis import RedisTaskQueue  # noqa: PLC0415
         redis_queue = cast('RedisTaskQueue', context.task_queue)
         print(f"Redis key prefix: {redis_queue.key_prefix}")
         print(f"Session ID: {context.session_id}")

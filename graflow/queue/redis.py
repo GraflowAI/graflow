@@ -5,16 +5,17 @@ from typing import Optional, cast
 
 try:
     import redis
+    from redis import Redis
 except ImportError:
     redis = None
 
-from .base import AbstractTaskQueue, TaskSpec, TaskStatus
+from graflow.queue.base import AbstractTaskQueue, TaskSpec, TaskStatus
 
 
 class RedisTaskQueue(AbstractTaskQueue):
     """Redis distributed task queue with TaskSpec support."""
 
-    def __init__(self, execution_context, redis_client: Optional['redis.Redis'] = None,
+    def __init__(self, execution_context, redis_client: Optional['Redis'] = None,
                  key_prefix: str = "graflow"):
         """Initialize Redis task queue.
 

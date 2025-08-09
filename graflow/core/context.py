@@ -15,9 +15,9 @@ from graflow.coordination.executor import GroupExecutor
 from graflow.core.cycle import CycleController
 from graflow.core.engine import WorkflowEngine
 from graflow.core.graph import TaskGraph
-from graflow.core.queue.base import AbstractTaskQueue
-from graflow.core.queue.factory import QueueBackend, TaskQueueFactory
 from graflow.exceptions import CycleLimitExceededError
+from graflow.queue.base import AbstractTaskQueue
+from graflow.queue.factory import QueueBackend, TaskQueueFactory
 
 if TYPE_CHECKING:
     from .task import Executable
