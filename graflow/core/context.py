@@ -183,14 +183,14 @@ class ExecutionContext:
         """Get the task queue instance."""
         return self.task_queue
 
-    def add_to_queue(self, node: str) -> None:
+    def add_to_queue(self, task_id: str) -> None:
         """Add a node to the execution queue (complete compatibility)."""
-        self.task_queue.add_node(node)
+        self.task_queue.add_node(task_id)
 
-    def mark_executed(self, node: str) -> None:
+    def mark_executed(self, task_id: str) -> None:
         """Mark a node as executed."""
-        if node not in self.executed:
-            self.executed.append(node)
+        if task_id not in self.executed:
+            self.executed.append(task_id)
 
     def is_completed(self) -> bool:
         """Check if execution is completed (complete compatibility)."""
@@ -313,7 +313,7 @@ class ExecutionContext:
             else:
                 return current_task.func(task_ctx)
 
-        from .task import TaskWrapper  # noqa: PLC0415
+        from .task import TaskWrapper
         iteration_task = TaskWrapper(iteration_id, iteration_func, inject_context=False)
         return self.next_task(iteration_task)
 
