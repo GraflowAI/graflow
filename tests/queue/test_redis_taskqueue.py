@@ -39,12 +39,12 @@ class TestRedisTaskQueue:
 
     def test_redis_not_available(self, execution_context):
         """Test graceful handling when redis is not available."""
-        with patch('graflow.core.queue.redis.redis', None):
+        with patch('graflow.queue.redis.redis', None):
             with pytest.raises(ImportError, match="Redis library not installed"):
-                from graflow.queue.redis import RedisTaskQueue  # noqa: PLC0415
+                from graflow.queue.redis import RedisTaskQueue
                 RedisTaskQueue(execution_context)
 
-    @patch('graflow.core.queue.redis.redis')
+    @patch('graflow.queue.redis.redis')
     def test_redis_taskqueue_creation_default_client(self, mock_redis_module, execution_context):
         """Test RedisTaskQueue creation with default client."""
         mock_redis_client = Mock()
@@ -69,7 +69,7 @@ class TestRedisTaskQueue:
 
     def test_redis_taskqueue_creation_custom_client(self, mock_redis, execution_context):
         """Test RedisTaskQueue creation with custom client."""
-        with patch('graflow.core.queue.redis.redis'):
+        with patch('graflow.queue.redis.redis'):
             queue = RedisTaskQueue(execution_context, mock_redis, "test_prefix")
 
             assert queue.redis == mock_redis
@@ -79,7 +79,7 @@ class TestRedisTaskQueue:
 
     def test_enqueue(self, mock_redis, execution_context):
         """Test enqueuing TaskSpec to Redis."""
-        with patch('graflow.core.queue.redis.redis'):
+        with patch('graflow.queue.redis.redis'):
             queue = RedisTaskQueue(execution_context, mock_redis)
 
             task_spec = TaskSpec(
@@ -115,7 +115,7 @@ class TestRedisTaskQueue:
         """Test dequeue from empty queue."""
         mock_redis.lpop.return_value = None
 
-        with patch('graflow.core.queue.redis.redis'):
+        with patch('graflow.queue.redis.redis'):
             queue = RedisTaskQueue(execution_context, mock_redis)
 
             result = queue.dequeue()
@@ -128,7 +128,7 @@ class TestRedisTaskQueue:
         mock_redis.lpop.return_value = "test_node"
         mock_redis.hget.return_value = None
 
-        with patch('graflow.core.queue.redis.redis'):
+        with patch('graflow.queue.redis.redis'):
             queue = RedisTaskQueue(execution_context, mock_redis)
 
             result = queue.dequeue()
@@ -147,7 +147,7 @@ class TestRedisTaskQueue:
         }
         mock_redis.hget.return_value = json.dumps(spec_data)
 
-        with patch('graflow.core.queue.redis.redis'):
+        with patch('graflow.queue.redis.redis'):
             queue = RedisTaskQueue(execution_context, mock_redis)
 
             result = queue.dequeue()
@@ -164,7 +164,7 @@ class TestRedisTaskQueue:
 
     def test_is_empty(self, mock_redis, execution_context):
         """Test is_empty method."""
-        with patch('graflow.core.queue.redis.redis'):
+        with patch('graflow.queue.redis.redis'):
             queue = RedisTaskQueue(execution_context, mock_redis)
 
             # Test empty queue
@@ -183,7 +183,7 @@ class TestRedisTaskQueue:
         """Test size method."""
         mock_redis.llen.return_value = 5
 
-        with patch('graflow.core.queue.redis.redis'):
+        with patch('graflow.queue.redis.redis'):
             queue = RedisTaskQueue(execution_context, mock_redis)
 
             result = queue.size()
@@ -193,7 +193,7 @@ class TestRedisTaskQueue:
 
     def test_peek_next_node(self, mock_redis, execution_context):
         """Test peek_next_node method."""
-        with patch('graflow.core.queue.redis.redis'):
+        with patch('graflow.queue.redis.redis'):
             queue = RedisTaskQueue(execution_context, mock_redis)
 
             # Test empty queue
@@ -212,7 +212,7 @@ class TestRedisTaskQueue:
 
     def test_cleanup(self, mock_redis, execution_context):
         """Test cleanup method."""
-        with patch('graflow.core.queue.redis.redis'):
+        with patch('graflow.queue.redis.redis'):
             queue = RedisTaskQueue(execution_context, mock_redis)
 
             queue.cleanup()
@@ -221,7 +221,7 @@ class TestRedisTaskQueue:
 
     def test_legacy_api_compatibility(self, mock_redis, execution_context):
         """Test legacy API methods work with Redis backend."""
-        with patch('graflow.core.queue.redis.redis'):
+        with patch('graflow.queue.redis.redis'):
             queue = RedisTaskQueue(execution_context, mock_redis)
 
             # Test add_node
@@ -244,7 +244,7 @@ class TestRedisTaskQueueIntegration:
         """Test ExecutionContext integration with Redis backend."""
         graph = TaskGraph()
 
-        with patch('graflow.core.queue.redis.redis'):
+        with patch('graflow.queue.redis.redis'):
             # Test Redis backend creation
             context = ExecutionContext(
                 graph,
@@ -264,7 +264,7 @@ class TestRedisTaskQueueIntegration:
         """Test ExecutionContext with redis string backend."""
         graph = TaskGraph()
 
-        with patch('graflow.core.queue.redis.redis'):
+        with patch('graflow.queue.redis.redis'):
             context = ExecutionContext(
                 graph,
                 start_node="start",
@@ -286,7 +286,7 @@ class TestRedisTaskQueueIntegration:
         }
         mock_redis.hget.return_value = json.dumps(spec_data)
 
-        with patch('graflow.core.queue.redis.redis'):
+        with patch('graflow.queue.redis.redis'):
             context = ExecutionContext(
                 graph,
                 start_node="start",
