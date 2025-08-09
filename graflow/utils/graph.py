@@ -208,9 +208,9 @@ class _EdgeViewer:
 
 def _build_sugiyama_layout(vertices: dict[str, str], edges: list[tuple[str, str]]) -> Any:
     try:
-        from grandalf.graphs import Edge, Graph, Vertex  # noqa: PLC0415
-        from grandalf.layouts import SugiyamaLayout  # noqa: PLC0415
-        from grandalf.routing import route_with_lines  # noqa: PLC0415
+        from grandalf.graphs import Edge, Graph, Vertex
+        from grandalf.layouts import SugiyamaLayout
+        from grandalf.routing import route_with_lines
     except ImportError as exc:
         msg = "Install grandalf to draw graphs: `pip install grandalf`."
         raise ImportError(msg) from exc
@@ -353,7 +353,7 @@ def draw_ascii(graph: nx.DiGraph) -> str:
     return canvas.draw()
 
 
-def draw_mermaid(  # noqa: PLR0912, PLR0915
+def draw_mermaid(
     graph: nx.DiGraph,
     title: str = "Graph",
     *,
@@ -507,7 +507,7 @@ def draw_png(graph: nx.DiGraph, output_path: Optional[str] = None,
         PNG bytes if output_path is None, otherwise None
     """
     try:
-        import pygraphviz as pgv  # noqa: PLC0415
+        import pygraphviz as pgv
     except ImportError as exc:
         msg = "Install pygraphviz to draw PNG graphs: `pip install pygraphviz`."
         raise ImportError(msg) from exc
@@ -610,7 +610,7 @@ def _render_mermaid_using_api(
 ) -> bytes:
     """Renders Mermaid graph using the Mermaid.INK API."""
     try:
-        import requests  # noqa: PLC0415
+        import requests
     except ImportError as e:
         msg = (
             "Install the `requests` module to use the Mermaid.INK API: "

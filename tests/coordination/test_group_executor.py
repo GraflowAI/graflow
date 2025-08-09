@@ -221,6 +221,6 @@ class TestGroupExecutorIntegration:
     def test_redis_import_error_handling(self, mocker):
         """Test Redis import error handling."""
         # Mock both redis import and RedisCoordinator to simulate import error
-        mocker.patch('graflow.coordination.executor.RedisCoordinator', side_effect=ImportError("No module named 'redis'"))  # noqa: E501
+        mocker.patch('graflow.coordination.executor.RedisCoordinator', side_effect=ImportError("No module named 'redis'"))
         with pytest.raises(ImportError, match="Redis backend requires 'redis' package"):
             GroupExecutor(CoordinationBackend.REDIS)

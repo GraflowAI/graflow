@@ -144,7 +144,7 @@ def demo_redis_advanced_features():
         )
 
         # Configure advanced features
-        from graflow.queue.redis import RedisTaskQueue  # noqa: PLC0415
+        from graflow.queue.redis import RedisTaskQueue
         redis_queue = cast(RedisTaskQueue, context.task_queue)
         redis_queue.configure(enable_retry=True, enable_metrics=True)
 

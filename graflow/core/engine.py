@@ -74,7 +74,7 @@ class WorkflowEngine:
             start_node: Starting node for execution
             max_steps: Maximum number of execution steps
         """
-        from .context import ExecutionContext  # noqa: PLC0415
+        from .context import ExecutionContext
 
         # Create ExecutionContext and delegate to it
         exec_context = ExecutionContext.create(graph, start_node, max_steps=max_steps)

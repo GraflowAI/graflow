@@ -76,7 +76,7 @@ def demo_redis_backend():
         )
 
         print(f"Backend: {type(context.task_queue).__name__}")
-        from graflow.queue.redis import RedisTaskQueue  # noqa: PLC0415
+        from graflow.queue.redis import RedisTaskQueue
         redis_queue = cast('RedisTaskQueue', context.task_queue)
         print(f"Redis key prefix: {redis_queue.key_prefix}")
         print(f"Session ID: {context.session_id}")

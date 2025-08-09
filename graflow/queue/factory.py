@@ -25,7 +25,7 @@ class TaskQueueFactory:
             return InMemoryTaskQueue(execution_context, start_node)
 
         elif backend == QueueBackend.REDIS:
-            from .redis import RedisTaskQueue  # noqa: PLC0415
+            from .redis import RedisTaskQueue
             redis_config = kwargs.get('redis_config', {})
             redis_client = kwargs.get('redis_client')
             key_prefix = kwargs.get('key_prefix') or redis_config.get('key_prefix', 'graflow')
