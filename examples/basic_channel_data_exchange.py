@@ -21,7 +21,7 @@ from graflow.core.decorators import task
 from graflow.core.workflow import workflow
 
 
-def demo_simple_data_exchange():
+def demo_simple_data_exchange():  # noqa: PLR0915
     """Demonstrate basic data exchange using get_channel()."""
     print("📡 Basic Channel Data Exchange Demo")
     print("=" * 50)
@@ -200,7 +200,7 @@ def demo_dynamic_communication():
                         elif work_type == "transform":
                             result = [item.upper() for item in data] if isinstance(data, list) else []
                         elif work_type == "validate":
-                            result = all(isinstance(v, int | float) for v in data.values()) if isinstance(data, dict) else False
+                            result = all(isinstance(v, int | float) for v in data.values()) if isinstance(data, dict) else False  # noqa: E501
                         else:
                             result = f"Unknown work type: {work_type}"
 

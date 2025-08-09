@@ -4,8 +4,8 @@ from typing import cast
 
 from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
-from graflow.core.queue.base import TaskSpec
-from graflow.core.queue.factory import QueueBackend
+from graflow.queue.base import TaskSpec
+from graflow.queue.factory import QueueBackend
 
 
 def demo_retry_functionality():
@@ -144,7 +144,7 @@ def demo_redis_advanced_features():
         )
 
         # Configure advanced features
-        from graflow.core.queue.redis import RedisTaskQueue  # noqa: PLC0415
+        from graflow.queue.redis import RedisTaskQueue  # noqa: PLC0415
         redis_queue = cast(RedisTaskQueue, context.task_queue)
         redis_queue.configure(enable_retry=True, enable_metrics=True)
 

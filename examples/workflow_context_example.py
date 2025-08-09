@@ -4,7 +4,7 @@ from graflow.core.decorators import task
 from graflow.core.workflow import workflow
 
 
-def main():
+def main():  # noqa: PLR0915
     print("=== Context Manager Based Workflow Example ===\n")
 
     # Example 1: Simple workflow with context
