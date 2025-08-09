@@ -50,8 +50,8 @@ class TestMultiprocessingCoordinator:
 
     def test_create_barrier_error_handling(self, coordinator, mocker):
         """Test barrier creation error handling."""
-        mocker.patch.object(coordinator.mp, 'Barrier', side_effect=Exception("Test error"))
-        with pytest.raises(Exception):  # noqa: B017
+        mocker.patch.object(coordinator.mp, 'Barrier', side_effect=RuntimeError("Test error"))
+        with pytest.raises(RuntimeError):
             coordinator.create_barrier("error_barrier", 2)
 
     def test_wait_barrier_success(self, coordinator):

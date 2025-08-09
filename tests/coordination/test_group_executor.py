@@ -184,11 +184,11 @@ class TestGroupExecutor:
 
         # Mock coordinator exception
         mock_coordinator.create_barrier.return_value = "barrier_123"
-        mock_coordinator.dispatch_task.side_effect = Exception("Test exception")
+        mock_coordinator.dispatch_task.side_effect = RuntimeError("Test exception")
 
         tasks = [TaskSpec("task1", lambda: None)]
 
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(RuntimeError):
             executor.execute_parallel_group("test_group", tasks)
 
         # Verify cleanup still happens

@@ -82,5 +82,5 @@ class TaskGraph:
 
     def __str__(self) -> str:
         """Return a string representation of the graph."""
-        from graflow.utils.graph import draw_ascii
+        from graflow.utils.graph import draw_ascii  # noqa: PLC0415
         return draw_ascii(self._graph)

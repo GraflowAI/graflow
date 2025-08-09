@@ -120,7 +120,7 @@ class MultiprocessingCoordinator(TaskCoordinator):
         """Get result from result queue."""
         try:
             return self.result_queue.get(timeout=timeout)
-        except:
+        except Exception:
             return None
 
     def get_queue_size(self) -> int:
@@ -165,7 +165,7 @@ class MultiprocessingCoordinator(TaskCoordinator):
                         "status": "error"
                     })
 
-            except:
+            except Exception:
                 # Timeout or other exception - continue loop
                 continue
 
@@ -182,5 +182,5 @@ class MultiprocessingCoordinator(TaskCoordinator):
         """Cleanup on destruction."""
         try:
             self.stop_workers()
-        except:
+        except Exception:
             pass

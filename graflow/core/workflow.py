@@ -68,8 +68,8 @@ class WorkflowContext:
             if start_node is None:
                 raise GraphCompilationError("No valid start node found in the workflow graph.")
 
-        from .context import ExecutionContext
-        from .engine import WorkflowEngine
+        from .context import ExecutionContext  # noqa: PLC0415
+        from .engine import WorkflowEngine  # noqa: PLC0415
 
         exec_context = ExecutionContext.create(self.graph, start_node, max_steps=max_steps)
         engine = WorkflowEngine()

@@ -63,7 +63,7 @@ def task(
             return f(*args, **kwargs)
 
         # Create TaskWrapper instance
-        from .task import TaskWrapper  # Import here to avoid circular imports
+        from .task import TaskWrapper  # Import here to avoid circular imports  # noqa: PLC0415
         task_obj = TaskWrapper(task_id, wrapper, inject_context=inject_context)
 
         # Copy original function attributes to ensure compatibility

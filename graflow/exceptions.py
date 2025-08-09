@@ -32,7 +32,7 @@ class CycleLimitExceededError(GraflowRuntimeError):
         self.max_cycles = max_cycles
 
     def __str__(self) -> str:
-        return f"CycleLimitExceededError(task_id={self.task_id}, cycle_count={self.cycle_count}, max_cycles={self.max_cycles})"
+        return f"CycleLimitExceededError(task_id={self.task_id}, cycle_count={self.cycle_count}, max_cycles={self.max_cycles})"  # noqa: E501
 
 class TaskError(GraflowRuntimeError):
     """Exception raised for errors related to tasks."""

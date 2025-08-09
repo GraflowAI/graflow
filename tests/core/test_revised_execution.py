@@ -42,9 +42,9 @@ def test_execute_with_traditional_tasks():
     clear_workflow_context()
     context = current_workflow_context()
 
-    A = Task("A")
-    B = Task("B")
-    C = Task("C")
+    A = Task("A")  # noqa: N806
+    B = Task("B")  # noqa: N806
+    C = Task("C")  # noqa: N806
 
     A >> B >> C # type: ignore
 

@@ -49,7 +49,7 @@ def redis_server():
         if container:
             try:
                 container.stop()
-            except:
+            except Exception:
                 pass
 
         # Try to connect to local Redis
