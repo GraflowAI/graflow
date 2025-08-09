@@ -148,8 +148,10 @@ def main():
     context.execute()
 
     print("Execution results:")
-    for task_id, result in context.results.items():
-        print(f"  {task_id}: {result}")
+    for task_id in context.executed:
+        result = context.get_result(task_id)
+        if result is not None:
+            print(f"  {task_id}: {result}")
 
     # Access typed channel data
     channel = context.get_channel()
