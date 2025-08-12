@@ -86,18 +86,31 @@ class RedisCoordinator(TaskCoordinator):
         """Dispatch task to Redis queue for worker processing."""
         queue_key = f"task_queue:{group_id}"
 
-        # Serialize task data
+        # Serialize TaskSpec to TaskQueue format
         task_data = {
             "task_id": task_spec.task_id,
-            "func_name": getattr(task_spec.func, '__name__', str(task_spec.func)),
-            "args": task_spec.args if hasattr(task_spec, 'args') else (),
-            "kwargs": task_spec.kwargs if hasattr(task_spec, 'kwargs') else {},
+            "status": getattr(task_spec, 'status', 'READY'),
+            "retry_count": getattr(task_spec, 'retry_count', 0),
+            "max_retries": getattr(task_spec, 'max_retries', 3),
+            "last_error": getattr(task_spec, 'last_error', None),
+            "execution_context_data": self._serialize_execution_context(task_spec.execution_context),
             "group_id": group_id,
             "timestamp": time.time()
         }
 
         # Push task to queue (left push for FIFO with right pop)
-        self.redis.lpush(queue_key, json.dumps(task_data))
+        self.redis.lpush(queue_key, json.dumps(task_data, default=str))
+
+    def _serialize_execution_context(self, execution_context) -> dict:
+        """Serialize execution context to a dictionary."""
+        if execution_context is None:
+            return {}
+
+        return {
+            "session_id": getattr(execution_context, 'session_id', 'default'),
+            "graph_data": getattr(execution_context, 'graph', None),
+            # Add other fields as necessary
+        }
 
     def cleanup_barrier(self, barrier_id: str) -> None:
         """Clean up barrier resources."""
