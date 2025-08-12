@@ -1,0 +1,246 @@
+#!/usr/bin/env python3
+"""TaskWorker independent process entry point."""
+
+import argparse
+import logging
+import os
+import signal
+import sys
+import time
+from typing import Any, Dict
+
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+
+def create_redis_queue(redis_config: Dict[str, Any]) -> Any:
+    """Create Redis TaskQueue connection."""
+    try:
+        import redis
+
+        from graflow.queue.redis import RedisTaskQueue
+
+        # Create Redis client
+        redis_client = redis.Redis(
+            host=redis_config['host'],
+            port=redis_config['port'],
+            db=redis_config.get('db', 0),
+            decode_responses=True
+        )
+
+        # Test connection
+        redis_client.ping()
+        logger.info(f"Connected to Redis at {redis_config['host']}:{redis_config['port']}")
+
+        # Create dummy ExecutionContext
+        class DummyContext:
+            def __init__(self, session_id: str):
+                self.session_id = session_id
+
+        dummy_context = DummyContext(redis_config.get('session_id', 'default_session'))
+
+        return RedisTaskQueue(
+            execution_context=dummy_context,
+            redis_client=redis_client,
+            key_prefix=redis_config.get('key_prefix', 'graflow')
+        )
+
+    except ImportError:
+        logger.error("redis package is required for Redis TaskQueue")
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"Failed to connect to Redis: {e}")
+        sys.exit(1)
+
+
+def create_memory_queue() -> Any:
+    """Create InMemory TaskQueue."""
+    try:
+        from graflow.queue.memory import InMemoryTaskQueue
+
+        # Create dummy ExecutionContext
+        class DummyContext:
+            def __init__(self):
+                self.session_id = 'memory_session'
+
+        return InMemoryTaskQueue(execution_context=DummyContext())
+
+    except ImportError as e:
+        logger.error(f"Failed to import InMemoryTaskQueue: {e}")
+        sys.exit(1)
+
+
+def create_task_handler(handler_config: Dict[str, Any]) -> Any:
+    """Create TaskHandler based on configuration."""
+    try:
+        from graflow.worker.handler import InProcessTaskExecutor
+
+        handler_type = handler_config.get('type', 'inprocess')
+
+        if handler_type == 'inprocess':
+            return InProcessTaskExecutor()
+        else:
+            logger.error(f"Unsupported handler type: {handler_type}")
+            sys.exit(1)
+
+    except ImportError as e:
+        logger.error(f"Failed to import TaskHandler: {e}")
+        sys.exit(1)
+
+
+def parse_arguments():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description='TaskWorker independent process',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+
+    # Worker configuration
+    parser.add_argument(
+        '--worker-id',
+        default=os.environ.get('WORKER_ID', f'worker_{os.getpid()}'),
+        help='Unique worker identifier'
+    )
+    parser.add_argument(
+        '--max-concurrent-tasks',
+        type=int,
+        default=int(os.environ.get('MAX_CONCURRENT_TASKS', '4')),
+        help='Maximum number of concurrent tasks'
+    )
+    parser.add_argument(
+        '--poll-interval',
+        type=float,
+        default=float(os.environ.get('POLL_INTERVAL', '0.1')),
+        help='Polling interval in seconds'
+    )
+
+    # Queue configuration
+    parser.add_argument(
+        '--queue-type',
+        choices=['redis', 'memory'],
+        default=os.environ.get('QUEUE_TYPE', 'redis'),
+        help='Task queue type'
+    )
+
+    # Redis configuration
+    parser.add_argument(
+        '--redis-host',
+        default=os.environ.get('REDIS_HOST', 'localhost'),
+        help='Redis host'
+    )
+    parser.add_argument(
+        '--redis-port',
+        type=int,
+        default=int(os.environ.get('REDIS_PORT', '6379')),
+        help='Redis port'
+    )
+    parser.add_argument(
+        '--redis-db',
+        type=int,
+        default=int(os.environ.get('REDIS_DB', '0')),
+        help='Redis database number'
+    )
+    parser.add_argument(
+        '--session-id',
+        default=os.environ.get('SESSION_ID', 'default_session'),
+        help='Session ID for queue'
+    )
+
+    # Handler configuration
+    parser.add_argument(
+        '--handler-type',
+        choices=['inprocess'],
+        default=os.environ.get('HANDLER_TYPE', 'inprocess'),
+        help='Task handler type'
+    )
+
+    # Logging
+    parser.add_argument(
+        '--log-level',
+        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
+        default=os.environ.get('LOG_LEVEL', 'INFO'),
+        help='Logging level'
+    )
+
+    return parser.parse_args()
+
+
+def setup_signal_handlers(worker: Any) -> None:
+    """Setup signal handlers for graceful shutdown."""
+    def signal_handler(signum: int, frame: Any) -> None:
+        logger.info(f"Received signal {signum}, initiating graceful shutdown...")
+        if worker:
+            worker.stop()
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+
+
+def main():
+    """TaskWorker main entry point."""
+    try:
+        # Parse arguments
+        args = parse_arguments()
+
+        # Setup logging
+        logging.getLogger().setLevel(getattr(logging, args.log_level))
+
+        logger.info(f"Starting TaskWorker: {args.worker_id}")
+        logger.info(f"Configuration: queue={args.queue_type}, handler={args.handler_type}")
+
+        # Create task queue
+        if args.queue_type == 'redis':
+            redis_config = {
+                'host': args.redis_host,
+                'port': args.redis_port,
+                'db': args.redis_db,
+                'session_id': args.session_id
+            }
+            queue = create_redis_queue(redis_config)
+        else:  # memory
+            queue = create_memory_queue()
+
+        # Create task handler
+        handler_config = {'type': args.handler_type}
+        handler = create_task_handler(handler_config)
+
+        # Create TaskWorker
+        from graflow.worker.worker import TaskWorker
+
+        worker = TaskWorker(
+            queue=queue,
+            handler=handler,
+            worker_id=args.worker_id,
+            max_concurrent_tasks=args.max_concurrent_tasks,
+            poll_interval=args.poll_interval
+        )
+
+        # Setup signal handlers
+        setup_signal_handlers(worker)
+
+        # Start worker
+        logger.info(f"TaskWorker {args.worker_id} starting...")
+        worker.start()
+
+        # Keep main thread alive
+        try:
+            while worker.is_running:
+                time.sleep(1.0)
+        except KeyboardInterrupt:
+            logger.info("KeyboardInterrupt received, stopping worker...")
+            worker.stop()
+
+        logger.info(f"TaskWorker {args.worker_id} finished")
+
+    except Exception as e:
+        logger.error(f"TaskWorker failed to start: {e}")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

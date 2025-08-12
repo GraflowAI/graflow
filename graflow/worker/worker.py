@@ -1,0 +1,385 @@
+"""Task worker implementation for processing tasks from queues."""
+
+import logging
+import signal
+import threading
+import time
+from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
+from typing import Any, Dict, Optional, Set
+
+from .handler import TaskHandler
+
+logger = logging.getLogger(__name__)
+
+
+class TaskWorker:
+    """Worker that processes tasks from a queue using a specified handler."""
+
+    def __init__(self, queue: Any, handler: TaskHandler, worker_id: str,
+                 max_concurrent_tasks: int = 4, poll_interval: float = 0.1,
+                 graceful_shutdown_timeout: float = 30.0):
+        """Initialize TaskWorker.
+
+        Args:
+            queue: TaskQueue instance to pull tasks from
+            handler: TaskHandler instance to process tasks
+            worker_id: Unique identifier for this worker
+            max_concurrent_tasks: Maximum number of concurrent tasks
+            poll_interval: Polling interval in seconds
+            graceful_shutdown_timeout: Timeout for graceful shutdown
+        """
+        self.queue = queue
+        self.handler = handler
+        self.worker_id = worker_id
+        self.max_concurrent_tasks = max_concurrent_tasks
+        self.poll_interval = poll_interval
+        self.graceful_shutdown_timeout = graceful_shutdown_timeout
+
+        # Worker state
+        self.is_running = False
+        self.is_stopping = False
+        self._worker_thread: Optional[threading.Thread] = None
+        self._executor: Optional[ThreadPoolExecutor] = None
+
+        # Active tasks tracking
+        self._active_tasks: Set[str] = set()
+        self._active_tasks_lock = threading.Lock()
+
+        # Metrics
+        self.tasks_processed = 0
+        self.tasks_succeeded = 0
+        self.tasks_failed = 0
+        self.tasks_timeout = 0
+        self.total_execution_time = 0.0
+        self.start_time = 0.0
+        self._metrics_lock = threading.Lock()
+
+        # Setup signal handlers
+        self._setup_signal_handlers()
+
+    def _setup_signal_handlers(self) -> None:
+        """Setup signal handlers for graceful shutdown."""
+        def signal_handler(signum: int, frame: Any) -> None:
+            logger.info(f"Worker {self.worker_id} received signal {signum}, initiating graceful shutdown")
+            self.stop()
+
+        try:
+            signal.signal(signal.SIGTERM, signal_handler)
+            signal.signal(signal.SIGINT, signal_handler)
+        except ValueError:
+            # Signal handlers can only be set from main thread
+            logger.debug("Could not set signal handlers (not in main thread)")
+
+    def start(self) -> None:
+        """Start the worker thread."""
+        if self.is_running:
+            logger.warning(f"Worker {self.worker_id} is already running")
+            return
+
+        self.is_running = True
+        self.is_stopping = False
+        self.start_time = time.time()
+
+        # Initialize thread pool executor
+        self._executor = ThreadPoolExecutor(
+            max_workers=self.max_concurrent_tasks,
+            thread_name_prefix=f"worker-{self.worker_id}"
+        )
+
+        # Start worker thread
+        self._worker_thread = threading.Thread(
+            target=self._worker_loop,
+            name=f"worker-{self.worker_id}-main",
+            daemon=True
+        )
+        self._worker_thread.start()
+
+        logger.info(f"TaskWorker {self.worker_id} started")
+
+    def stop(self, timeout: Optional[float] = None) -> None:
+        """Stop the worker gracefully.
+
+        Args:
+            timeout: Maximum time to wait for shutdown
+        """
+        if not self.is_running:
+            logger.warning(f"Worker {self.worker_id} is not running")
+            return
+
+        timeout = timeout or self.graceful_shutdown_timeout
+        logger.info(f"Stopping worker {self.worker_id} (timeout: {timeout}s)")
+
+        self.is_stopping = True
+
+        # Wait for active tasks to complete
+        self._wait_for_active_tasks(timeout)
+
+        # Shutdown executor
+        if self._executor:
+            self._executor.shutdown(wait=True)
+            self._executor = None
+
+        # Wait for worker thread to finish
+        if self._worker_thread and self._worker_thread.is_alive():
+            self._worker_thread.join(timeout=timeout)
+            if self._worker_thread.is_alive():
+                logger.warning(f"TaskWorker {self.worker_id} did not stop within timeout")
+
+        self.is_running = False
+
+        # Final statistics
+        runtime = time.time() - self.start_time
+        logger.info(
+            f"Worker stopped: {self.worker_id} "
+            f"(runtime: {runtime:.1f}s, tasks: {self.tasks_processed})"
+        )
+
+    def _wait_for_active_tasks(self, timeout: float) -> None:
+        """Wait for active tasks to complete.
+
+        Args:
+            timeout: Maximum time to wait
+        """
+        start_time = time.time()
+
+        while time.time() - start_time < timeout:
+            with self._active_tasks_lock:
+                remaining_tasks = len(self._active_tasks)
+
+            if remaining_tasks == 0:
+                logger.info("All active tasks completed")
+                return
+
+            logger.debug(f"Waiting for {remaining_tasks} active tasks to complete...")
+            time.sleep(1.0)
+
+        # Timeout reached
+        with self._active_tasks_lock:
+            remaining_tasks = len(self._active_tasks)
+
+        if remaining_tasks > 0:
+            logger.warning(f"Shutdown timeout reached, {remaining_tasks} tasks still active")
+
+    def _worker_loop(self) -> None:
+        """Main worker loop - polls for tasks and processes them."""
+        logger.info(f"Worker loop started: {self.worker_id}")
+
+        while self.is_running and not self.is_stopping:
+            try:
+                # Check if we can accept more tasks
+                with self._active_tasks_lock:
+                    active_count = len(self._active_tasks)
+
+                if active_count >= self.max_concurrent_tasks:
+                    logger.debug(f"Max concurrent tasks reached ({active_count}), waiting...")
+                    time.sleep(self.poll_interval)
+                    continue
+
+                # Try to get a task
+                task_spec = self.queue.dequeue()
+
+                if task_spec is None:
+                    # No tasks available, wait before next poll
+                    time.sleep(self.poll_interval)
+                    continue
+
+                # Submit task for processing
+                self._submit_task(task_spec)
+
+            except Exception as e:
+                logger.error(f"Error in worker loop: {e}", exc_info=True)
+                time.sleep(self.poll_interval)
+
+        logger.info(f"Worker loop finished: {self.worker_id}")
+
+    def _submit_task(self, task_spec: Any) -> None:
+        """Submit task for processing in thread pool.
+
+        Args:
+            task_spec: TaskSpec to process
+        """
+        if not self._executor:
+            logger.error("Executor not available for task submission")
+            return
+
+        task_id = getattr(task_spec, 'task_id', 'unknown')
+
+        # Add to active tasks
+        with self._active_tasks_lock:
+            self._active_tasks.add(task_id)
+
+        # Submit to thread pool
+        future = self._executor.submit(self._process_task_wrapper, task_spec)
+
+        # Add callback to handle completion
+        future.add_done_callback(lambda f: self._task_completed(task_spec, f))
+
+        logger.debug(f"Task submitted: {task_id}")
+
+    def _process_task_wrapper(self, task_spec: Any) -> Dict[str, Any]:
+        """Wrapper for task processing with timeout and error handling.
+
+        Args:
+            task_spec: TaskSpec to process
+
+        Returns:
+            Processing result dictionary
+        """
+        start_time = time.time()
+        task_id = getattr(task_spec, 'task_id', 'unknown')
+
+        try:
+            # Resolve task from TaskSpec
+            task = self._resolve_task(task_spec)
+            if task is None:
+                raise RuntimeError(f"Could not resolve task from spec: {task_id}")
+
+            # Execute task using handler
+            success = self.handler.process_task(task)
+            duration = time.time() - start_time
+
+            if success:
+                return {
+                    "success": True,
+                    "duration": duration,
+                    "task_id": task_id
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "Task handler returned False",
+                    "duration": duration,
+                    "task_id": task_id
+                }
+
+        except FutureTimeoutError:
+            duration = time.time() - start_time
+            return {
+                "success": False,
+                "error": "Task execution timeout",
+                "duration": duration,
+                "task_id": task_id,
+                "timeout": True
+            }
+        except Exception as e:
+            duration = time.time() - start_time
+            return {
+                "success": False,
+                "error": str(e),
+                "duration": duration,
+                "task_id": task_id
+            }
+
+    def _task_completed(self, task_spec: Any, future: Future) -> None:
+        """Handle task completion callback.
+
+        Args:
+            task_spec: Original TaskSpec
+            future: Completed future
+        """
+        task_id = getattr(task_spec, 'task_id', 'unknown')
+
+        # Remove from active tasks
+        with self._active_tasks_lock:
+            self._active_tasks.discard(task_id)
+
+        try:
+            result = future.result()
+            success = result.get("success", False)
+            duration = result.get("duration", 0.0)
+            is_timeout = result.get("timeout", False)
+
+            # Update metrics
+            self._update_metrics(success, duration, is_timeout)
+
+            if success:
+                logger.info(f"Task {task_id} completed successfully")
+            elif is_timeout:
+                logger.warning(f"Task {task_id} timed out after {duration:.3f}s")
+            else:
+                error = result.get("error", "Unknown error")
+                logger.error(f"Task {task_id} failed: {error}")
+
+        except Exception as e:
+            logger.error(f"Error processing task completion for {task_id}: {e}")
+            self._update_metrics(False, 0.0)
+
+    def _resolve_task(self, task_spec: Any) -> Optional[Any]:
+        """Resolve a Task object from TaskSpec.
+
+        This is a simplified implementation. In a real system,
+        this would use the execution context and graph to resolve the task.
+
+        Args:
+            task_spec: TaskSpec object
+
+        Returns:
+            Task object or None if resolution failed
+        """
+        # For now, create a simple mock task that can be executed
+        # In a real implementation, this would resolve from the execution context
+
+        class MockTask:
+            def __init__(self, task_id: str):
+                self.task_id = task_id
+
+            def __call__(self):
+                # Simple mock execution
+                logger.debug(f"Executing mock task {self.task_id}")
+                return f"Result for {self.task_id}"
+
+        task_id = getattr(task_spec, 'task_id', 'unknown')
+        return MockTask(task_id)
+
+    def _update_metrics(self, success: bool, duration: float, is_timeout: bool = False) -> None:
+        """Update worker metrics.
+
+        Args:
+            success: Whether the task succeeded
+            duration: Task execution duration
+            is_timeout: Whether the task timed out
+        """
+        with self._metrics_lock:
+            self.tasks_processed += 1
+            self.total_execution_time += duration
+
+            if success:
+                self.tasks_succeeded += 1
+            elif is_timeout:
+                self.tasks_timeout += 1
+            else:
+                self.tasks_failed += 1
+
+    def get_metrics(self) -> Dict[str, Any]:
+        """Get worker metrics.
+
+        Returns:
+            Dictionary containing worker performance metrics
+        """
+        with self._metrics_lock:
+            if self.tasks_processed == 0:
+                avg_time = 0.0
+                success_rate = 0.0
+            else:
+                avg_time = self.total_execution_time / self.tasks_processed
+                success_rate = self.tasks_succeeded / self.tasks_processed
+
+            with self._active_tasks_lock:
+                active_count = len(self._active_tasks)
+
+            return {
+                "worker_id": self.worker_id,
+                "is_running": self.is_running,
+                "is_stopping": self.is_stopping,
+                "active_tasks": active_count,
+                "max_concurrent_tasks": self.max_concurrent_tasks,
+                "tasks_processed": self.tasks_processed,
+                "tasks_succeeded": self.tasks_succeeded,
+                "tasks_failed": self.tasks_failed,
+                "tasks_timeout": self.tasks_timeout,
+                "total_execution_time": self.total_execution_time,
+                "average_execution_time": avg_time,
+                "success_rate": success_rate,
+                "runtime": time.time() - self.start_time if self.start_time > 0 else 0.0
+            }
