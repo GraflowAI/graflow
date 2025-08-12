@@ -41,15 +41,3 @@ class Channel(ABC):
     def clear(self) -> None:
         """Clear all data from the channel."""
         pass
-
-    def write(self, data: Any) -> None:
-        """Write data to the channel (legacy method)."""
-        self.set("default", data)
-
-    def read(self, default: Any = None) -> Any:
-        """Read data from the channel (legacy method)."""
-        return self.get("default", default)
-
-    def has_data(self) -> bool:
-        """Check if channel has data (legacy method)."""
-        return self.exists("default")
