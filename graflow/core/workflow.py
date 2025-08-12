@@ -10,7 +10,8 @@ from graflow.core.graph import TaskGraph
 from graflow.exceptions import GraphCompilationError
 
 if TYPE_CHECKING:
-    from .task import Executable
+    from graflow.coordination.executor import GroupExecutor
+    from graflow.core.task import Executable
 
 # Context variable for current workflow context
 _current_context: contextvars.ContextVar[Optional[WorkflowContext]] = contextvars.ContextVar(
@@ -33,6 +34,7 @@ class WorkflowContext:
         self.graph = TaskGraph()
         self._task_counter = 0
         self._group_counter = 0
+        self._group_executor: Optional[GroupExecutor] = None
 
     def __enter__(self):
         """Enter the workflow context."""
@@ -55,6 +57,10 @@ class WorkflowContext:
         """Add an edge between tasks in this workflow's graph."""
         self.graph.add_edge(from_node, to_node)
 
+    def set_group_executor(self, executor: GroupExecutor) -> None:
+        """Set the group executor for parallel execution."""
+        self._group_executor = executor
+
     def execute(self, start_node: Optional[str] = None, max_steps: int = 10) -> None:
         """Execute the workflow starting from the specified node."""
         if start_node is None:
@@ -72,6 +78,8 @@ class WorkflowContext:
         from .engine import WorkflowEngine
 
         exec_context = ExecutionContext.create(self.graph, start_node, max_steps=max_steps)
+        if self._group_executor:
+            exec_context.group_executor = self._group_executor
         engine = WorkflowEngine()
         engine.execute(exec_context)
 
