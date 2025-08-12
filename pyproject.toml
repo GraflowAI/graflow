@@ -59,9 +59,10 @@ ignore = [
     # UP045: Use `X | None` for type annotationsRuff
     "UP045",
     "PLR0913", "C901", "RUF010",
-    "PD901", # https://docs.astral.sh/ruff/rules/pandas-df-variable-name/
-    "PLR2004", # https://docs.astral.sh/ruff/rules/magic-value-comparison/
-    "N802", # https://docs.astral.sh/ruff/rules/invalid-function-name/
+    "PD901",    # https://docs.astral.sh/ruff/rules/pandas-df-variable-name/
+    "PLR2004",  # https://docs.astral.sh/ruff/rules/magic-value-comparison/
+    "N802",     # https://docs.astral.sh/ruff/rules/invalid-function-name/
+    "PLC0415",  # https://docs.astral.sh/ruff/rules/import-outside-top-level/
 ]
 
 [tool.ruff.lint.isort]
