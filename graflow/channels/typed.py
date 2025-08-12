@@ -56,7 +56,7 @@ def _validate_typed_dict(data: Any, typed_dict_class: Type) -> bool:
 T = TypeVar('T')
 
 
-class TypedChannel(Generic[T]):
+class TypedChannel(Channel, Generic[T]):
     """Type-safe wrapper around Channel for structured message passing."""
 
     def __init__(self, channel: Channel, message_type: Type[T]):
@@ -71,6 +71,51 @@ class TypedChannel(Generic[T]):
 
         if not _is_typed_dict(message_type):
             raise ValueError(f"message_type must be a TypedDict, got {message_type}")
+
+    @property
+    def name(self) -> str:
+        """Get channel name."""
+        return self._channel.name
+
+    @property
+    def message_type(self) -> Type[T]:
+        """Get message type."""
+        return self._message_type
+
+    def set(self, key: str, value: Any, ttl: int | None = None) -> None:
+        """Store data in the channel."""
+        if not _validate_typed_dict(value, self._message_type):
+            raise TypeError(f"Value does not conform to {self._message_type.__name__}")
+
+        self._channel.set(key, value, ttl)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Retrieve data from the channel."""
+        data = self._channel.get(key, default)
+
+        if data is None:
+            return None
+
+        if _validate_typed_dict(data, self._message_type):
+            return data
+
+        return None
+
+    def exists(self, key: str) -> bool:
+        """Check if a key exists."""
+        return self._channel.exists(key)
+
+    def delete(self, key: str) -> bool:
+        """Delete a key."""
+        return self._channel.delete(key)
+
+    def keys(self) -> list[str]:
+        """Get all keys."""
+        return self._channel.keys()
+
+    def clear(self) -> None:
+        """Clear all data."""
+        self._channel.clear()
 
     def send(self, key: str, message: T, ttl: int | None = None) -> None:
         """Send a typed message.
@@ -107,32 +152,6 @@ class TypedChannel(Generic[T]):
             return data
 
         return None
-
-    def exists(self, key: str) -> bool:
-        """Check if a key exists."""
-        return self._channel.exists(key)
-
-    def delete(self, key: str) -> bool:
-        """Delete a key."""
-        return self._channel.delete(key)
-
-    def keys(self) -> list[str]:
-        """Get all keys."""
-        return self._channel.keys()
-
-    def clear(self) -> None:
-        """Clear all data."""
-        self._channel.clear()
-
-    @property
-    def name(self) -> str:
-        """Get channel name."""
-        return self._channel.name
-
-    @property
-    def message_type(self) -> Type[T]:
-        """Get message type."""
-        return self._message_type
 
 
 class ChannelTypeRegistry:
