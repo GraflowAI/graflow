@@ -2,7 +2,7 @@
 
 from typing import Any, TypedDict
 
-from .typed import ChannelTypeRegistry
+from graflow.channels.typed import ChannelTypeRegistry
 
 
 class TaskResultMessage(TypedDict):

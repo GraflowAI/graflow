@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, ClassVar, Generic, Type, TypeVar, get_type_hints
 
-from .base import Channel
+from graflow.channels.base import Channel
 
 
 def _is_typed_dict(cls: type) -> bool:

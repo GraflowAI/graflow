@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import ClassVar, Dict, Type
 
-from .base import Channel
-from .memory import MemoryChannel
+from graflow.channels.base import Channel
+from graflow.channels.memory import MemoryChannel
 
 try:
     from .redis import RedisChannel

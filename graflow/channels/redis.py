@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any, List, Optional, Union, cast
 
-from .base import Channel
+from graflow.channels.base import Channel
 
 try:
     import redis
