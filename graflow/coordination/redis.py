@@ -6,20 +6,20 @@ from typing import Any, Callable, Dict
 
 from graflow.coordination.coordinator import TaskCoordinator
 from graflow.coordination.task_spec import TaskSpec
+from graflow.queue.redis import RedisTaskQueue
 
 
 class RedisCoordinator(TaskCoordinator):
     """Redis-based task coordination for distributed execution."""
 
-    def __init__(self, redis_client, task_queue):
-        """Initialize Redis coordinator with Redis client and task queue.
+    def __init__(self, task_queue: RedisTaskQueue):
+        """Initialize Redis coordinator with RedisTaskQueue.
 
         Args:
-            redis_client: Redis client instance
-            task_queue: RedisTaskQueue instance for task dispatch
+            task_queue: RedisTaskQueue instance for task dispatch and barrier coordination
         """
-        self.redis = redis_client
         self.task_queue = task_queue
+        self.redis = task_queue.redis  # Use Redis client from task queue
         self.active_barriers: Dict[str, Dict[str, Any]] = {}
         self._lock = threading.Lock()
 
@@ -89,8 +89,20 @@ class RedisCoordinator(TaskCoordinator):
 
     def dispatch_task(self, task_spec: TaskSpec, group_id: str) -> None:
         """Dispatch task to Redis queue for worker processing."""
+        # Convert coordination TaskSpec to queue TaskSpec format
+        queue_task_spec = self._convert_to_queue_task_spec(task_spec)
+        
         # Use RedisTaskQueue's enqueue method
-        self.task_queue.enqueue(task_spec)
+        self.task_queue.enqueue(queue_task_spec)
+
+    def _convert_to_queue_task_spec(self, coord_task_spec: TaskSpec) -> 'TaskSpec':
+        """Convert coordination TaskSpec to queue TaskSpec format."""
+        from graflow.queue.base import TaskSpec as QueueTaskSpec
+        
+        return QueueTaskSpec(
+            node_id=coord_task_spec.task_id,
+            execution_context=coord_task_spec.execution_context or self.task_queue.execution_context
+        )
 
     def cleanup_barrier(self, barrier_id: str) -> None:
         """Clean up barrier resources."""
