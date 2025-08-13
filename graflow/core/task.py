@@ -151,7 +151,7 @@ class ParallelGroup(Executable):
             else:
                 task_func = task.run
 
-            task_specs.append(TaskSpec(task.task_id, task_func))
+            task_specs.append(TaskSpec(task.task_id, context, task_func))
 
         executor.execute_parallel_group(self.task_id, task_specs)
 
