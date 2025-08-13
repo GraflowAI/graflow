@@ -2,8 +2,6 @@
 
 from typing import Any, Dict, List, Optional
 
-import redis
-
 from graflow.coordination.coordinator import CoordinationBackend, TaskCoordinator
 from graflow.coordination.multiprocessing import MultiprocessingCoordinator
 from graflow.coordination.redis import RedisCoordinator
@@ -26,6 +24,7 @@ class GroupExecutor:
 
         elif backend == CoordinationBackend.REDIS:
             try:
+                import redis
                 redis_client = config.get("redis_client")
                 if redis_client is None:
                     redis_client = redis.Redis(
