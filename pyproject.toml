@@ -63,6 +63,9 @@ ignore = [
     "PLR2004",  # https://docs.astral.sh/ruff/rules/magic-value-comparison/
     "N802",     # https://docs.astral.sh/ruff/rules/invalid-function-name/
     "PLC0415",  # https://docs.astral.sh/ruff/rules/import-outside-top-level/
+    "PLR0915",  # https://docs.astral.sh/ruff/rules/too-many-statements/
+    "E501",     # https://docs.astral.sh/ruff/rules/line-too-long/
+
 ]
 
 [tool.ruff.lint.isort]
