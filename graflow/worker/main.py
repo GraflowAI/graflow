@@ -9,6 +9,10 @@ import sys
 import time
 from typing import Any, Dict
 
+from graflow.queue.base import AbstractTaskQueue
+from graflow.queue.factory import QueueBackend, TaskQueueFactory
+from graflow.worker.handler import TaskHandler
+
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
@@ -17,12 +21,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def create_redis_queue(redis_config: Dict[str, Any]) -> Any:
-    """Create Redis TaskQueue connection."""
+def create_redis_queue(redis_config: Dict[str, Any]) -> AbstractTaskQueue:
+    """Create Redis TaskQueue connection using factory."""
     try:
         import redis
-
-        from graflow.queue.redis import RedisTaskQueue
 
         # Create Redis client
         redis_client = redis.Redis(
@@ -43,7 +45,9 @@ def create_redis_queue(redis_config: Dict[str, Any]) -> Any:
 
         dummy_context = DummyContext(redis_config.get('session_id', 'default_session'))
 
-        return RedisTaskQueue(
+        # Use factory to create Redis queue
+        return TaskQueueFactory.create(
+            backend=QueueBackend.REDIS,
             execution_context=dummy_context,
             redis_client=redis_client,
             key_prefix=redis_config.get('key_prefix', 'graflow')
@@ -57,24 +61,26 @@ def create_redis_queue(redis_config: Dict[str, Any]) -> Any:
         sys.exit(1)
 
 
-def create_memory_queue() -> Any:
-    """Create InMemory TaskQueue."""
+def create_memory_queue() -> AbstractTaskQueue:
+    """Create InMemory TaskQueue using factory."""
     try:
-        from graflow.queue.memory import InMemoryTaskQueue
-
         # Create dummy ExecutionContext
         class DummyContext:
             def __init__(self):
                 self.session_id = 'memory_session'
 
-        return InMemoryTaskQueue(execution_context=DummyContext())
+        # Use factory to create in-memory queue
+        return TaskQueueFactory.create(
+            backend=QueueBackend.IN_MEMORY,
+            execution_context=DummyContext()
+        )
 
     except ImportError as e:
         logger.error(f"Failed to import InMemoryTaskQueue: {e}")
         sys.exit(1)
 
 
-def create_task_handler(handler_config: Dict[str, Any]) -> Any:
+def create_task_handler(handler_config: Dict[str, Any]) -> TaskHandler:
     """Create TaskHandler based on configuration."""
     try:
         from graflow.worker.handler import InProcessTaskExecutor
