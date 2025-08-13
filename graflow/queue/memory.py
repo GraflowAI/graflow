@@ -14,7 +14,7 @@ class InMemoryTaskQueue(AbstractTaskQueue):
         self._queue = deque()
         if start_node:
             task_spec = TaskSpec(
-                node_id=start_node,
+                task_id=start_node,
                 execution_context=execution_context
             )
             self._queue.append(task_spec)
@@ -23,7 +23,7 @@ class InMemoryTaskQueue(AbstractTaskQueue):
     def enqueue(self, task_spec: TaskSpec) -> bool:
         """Add TaskSpec to queue (FIFO)."""
         self._queue.append(task_spec)
-        self._task_specs[task_spec.node_id] = task_spec
+        self._task_specs[task_spec.task_id] = task_spec
 
         # Phase 3: Metrics
         if self.enable_metrics:

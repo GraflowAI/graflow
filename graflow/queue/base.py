@@ -21,7 +21,7 @@ class TaskStatus(Enum):
 @dataclass
 class TaskSpec:
     """Task specification and metadata (Phase 1 implementation)."""
-    node_id: str
+    task_id: str
     execution_context: 'ExecutionContext'
     status: TaskStatus = TaskStatus.READY
     created_at: float = field(default_factory=time.time)
@@ -86,7 +86,7 @@ class AbstractTaskQueue(ABC):
     def add_node(self, node_id: str) -> None:
         """Add node ID to queue (ExecutionContext.add_to_queue compatibility)."""
         task_spec = TaskSpec(
-            node_id=node_id,
+            task_id=node_id,
             execution_context=self.execution_context
         )
         self.enqueue(task_spec)
@@ -94,7 +94,7 @@ class AbstractTaskQueue(ABC):
     def get_next_node(self) -> Optional[str]:
         """Get next execution node ID (ExecutionContext.get_next_node compatibility)."""
         task_spec = self.dequeue()
-        return task_spec.node_id if task_spec else None
+        return task_spec.task_id if task_spec else None
 
     # === Optional extended interface ===
     def size(self) -> int:

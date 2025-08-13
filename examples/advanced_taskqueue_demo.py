@@ -23,7 +23,7 @@ def demo_retry_functionality():
     # Get initial task
     task_spec = context.task_queue.dequeue()
     assert task_spec is not None, "No task to retry"
-    print(f"Initial task: {task_spec.node_id}, Retry count: {task_spec.retry_count}")
+    print(f"Initial task: {task_spec.task_id}, Retry count: {task_spec.retry_count}")
 
     # Simulate task failures
     for attempt in range(1, 5):
@@ -98,12 +98,12 @@ def demo_task_spec_advanced_features():
 
     # Create task with custom retry settings
     task_spec = TaskSpec(
-        node_id="advanced_task",
+        task_id="advanced_task",
         execution_context=context,
         max_retries=2
     )
 
-    print(f"Task: {task_spec.node_id}")
+    print(f"Task: {task_spec.task_id}")
     print(f"Initial retry count: {task_spec.retry_count}")
     print(f"Max retries: {task_spec.max_retries}")
     print(f"Can retry: {task_spec.can_retry()}")
@@ -157,7 +157,7 @@ def demo_redis_advanced_features():
         # Add tasks with different retry settings
         for i in range(3):
             task_spec = TaskSpec(
-                node_id=f"redis_task_{i}",
+                task_id=f"redis_task_{i}",
                 execution_context=context,
                 max_retries=i + 1  # Different retry limits
             )
@@ -170,13 +170,13 @@ def demo_redis_advanced_features():
         while not context.task_queue.is_empty():
             task_spec = context.task_queue.dequeue()
             if task_spec:
-                print(f"\nProcessing: {task_spec.node_id}")
+                print(f"\nProcessing: {task_spec.task_id}")
                 print(f"  Max retries: {task_spec.max_retries}")
 
                 # Simulate failure for demonstration
                 if task_spec.retry_count == 0:  # First attempt
                     should_retry = context.task_queue.handle_task_failure(
-                        task_spec, f"Simulated error for {task_spec.node_id}"
+                        task_spec, f"Simulated error for {task_spec.task_id}"
                     )
                     if should_retry:
                         context.task_queue.enqueue(task_spec)

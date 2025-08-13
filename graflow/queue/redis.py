@@ -46,7 +46,7 @@ class RedisTaskQueue(AbstractTaskQueue):
         """Add TaskSpec to Redis queue (FIFO)."""
         # Serialize TaskSpec to JSON and store in hash
         spec_data = {
-            'node_id': task_spec.node_id,
+            'node_id': task_spec.task_id,
             'status': task_spec.status.value,
             'created_at': task_spec.created_at,
             # Phase 3: Advanced features
@@ -54,11 +54,11 @@ class RedisTaskQueue(AbstractTaskQueue):
             'max_retries': task_spec.max_retries,
             'last_error': task_spec.last_error
         }
-        self.redis.hset(self.specs_key, task_spec.node_id, json.dumps(spec_data))
-        self._task_specs[task_spec.node_id] = task_spec
+        self.redis.hset(self.specs_key, task_spec.task_id, json.dumps(spec_data))
+        self._task_specs[task_spec.task_id] = task_spec
 
         # Add node ID to queue
-        self.redis.rpush(self.queue_key, task_spec.node_id)
+        self.redis.rpush(self.queue_key, task_spec.task_id)
 
         # Phase 3: Metrics
         if self.enable_metrics:
@@ -82,7 +82,7 @@ class RedisTaskQueue(AbstractTaskQueue):
 
         spec_data = json.loads(spec_json)
         task_spec = TaskSpec(
-            node_id=spec_data['node_id'],
+            task_id=spec_data['node_id'],
             execution_context=self.execution_context,
             status=TaskStatus(spec_data['status']),
             created_at=spec_data['created_at'],

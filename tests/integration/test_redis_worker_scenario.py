@@ -214,7 +214,7 @@ def test_producer_consumer_with_typed_channels(redis_queue, task_worker, clean_r
     # Create producer tasks
     for i in range(2):
         task_spec = TaskSpec(
-            node_id=f"producer_task_{i}",
+            task_id=f"producer_task_{i}",
             execution_context=redis_queue.execution_context,
             status=TaskStatus.READY
         )
@@ -223,7 +223,7 @@ def test_producer_consumer_with_typed_channels(redis_queue, task_worker, clean_r
     # Create consumer tasks
     for i in range(2):
         task_spec = TaskSpec(
-            node_id=f"consumer_task_{i}",
+            task_id=f"consumer_task_{i}",
             execution_context=redis_queue.execution_context,
             status=TaskStatus.READY
         )
@@ -231,7 +231,7 @@ def test_producer_consumer_with_typed_channels(redis_queue, task_worker, clean_r
 
     # Create aggregator task
     task_spec = TaskSpec(
-        node_id="aggregator_task",
+        task_id="aggregator_task",
         execution_context=redis_queue.execution_context,
         status=TaskStatus.READY
     )
@@ -293,7 +293,7 @@ def test_parallel_coordination_with_redis(redis_queue, clean_redis, redis_coordi
         # Create tasks
         for i in range(4):
             task_spec = TaskSpec(
-                node_id=f"simple_task_{i}",
+                task_id=f"simple_task_{i}",
                 execution_context=execution_context,
                 status=TaskStatus.READY
             )

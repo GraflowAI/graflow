@@ -83,7 +83,7 @@ class TestRedisTaskQueue:
             queue = RedisTaskQueue(execution_context, mock_redis)
 
             task_spec = TaskSpec(
-                node_id="test_node",
+                task_id="test_node",
                 execution_context=execution_context,
                 status=TaskStatus.READY,
                 created_at=1234567890.0
@@ -153,7 +153,7 @@ class TestRedisTaskQueue:
             result = queue.dequeue()
 
             assert result is not None
-            assert result.node_id == "test_node"
+            assert result.task_id == "test_node"
             assert result.status == TaskStatus.RUNNING
             assert result.created_at == 1234567890.0
             assert result.execution_context == execution_context

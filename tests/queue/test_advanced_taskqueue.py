@@ -23,7 +23,7 @@ class TestTaskSpecAdvancedFeatures:
     def test_task_spec_retry_fields(self, execution_context):
         """Test TaskSpec retry-related fields."""
         task_spec = TaskSpec(
-            node_id="test_task",
+            task_id="test_task",
             execution_context=execution_context,
             max_retries=5
         )
@@ -36,7 +36,7 @@ class TestTaskSpecAdvancedFeatures:
     def test_task_spec_can_retry(self, execution_context):
         """Test can_retry logic."""
         task_spec = TaskSpec(
-            node_id="test_task",
+            task_id="test_task",
             execution_context=execution_context,
             max_retries=2
         )
@@ -59,7 +59,7 @@ class TestTaskSpecAdvancedFeatures:
     def test_task_spec_increment_retry(self, execution_context):
         """Test increment_retry behavior."""
         task_spec = TaskSpec(
-            node_id="test_task",
+            task_id="test_task",
             execution_context=execution_context,
             status=TaskStatus.ERROR
         )
@@ -108,7 +108,7 @@ class TestAbstractTaskQueueAdvancedFeatures:
         queue.configure(enable_retry=False, enable_metrics=True)
 
         task_spec = TaskSpec(
-            node_id="test_task",
+            task_id="test_task",
             execution_context=execution_context
         )
 
@@ -124,7 +124,7 @@ class TestAbstractTaskQueueAdvancedFeatures:
         queue.configure(enable_retry=True, enable_metrics=True)
 
         task_spec = TaskSpec(
-            node_id="test_task",
+            task_id="test_task",
             execution_context=execution_context,
             max_retries=2
         )
@@ -145,7 +145,7 @@ class TestAbstractTaskQueueAdvancedFeatures:
         queue.configure(enable_retry=True, enable_metrics=True)
 
         task_spec = TaskSpec(
-            node_id="test_task",
+            task_id="test_task",
             execution_context=execution_context,
             max_retries=1,
             retry_count=1  # Already at max
@@ -188,7 +188,7 @@ class TestInMemoryTaskQueueAdvancedFeatures:
         queue.configure(enable_metrics=True)
 
         task_spec = TaskSpec(
-            node_id="test_task",
+            task_id="test_task",
             execution_context=execution_context
         )
 
@@ -212,7 +212,7 @@ class TestInMemoryTaskQueueAdvancedFeatures:
         queue.configure(enable_retry=True, enable_metrics=True)
 
         task_spec = TaskSpec(
-            node_id="test_task",
+            task_id="test_task",
             execution_context=execution_context,
             status=TaskStatus.ERROR,
             retry_count=1,
@@ -233,7 +233,7 @@ class TestInMemoryTaskQueueAdvancedFeatures:
         queue.configure(enable_retry=True)
 
         task_spec = TaskSpec(
-            node_id="test_task",
+            task_id="test_task",
             execution_context=execution_context,
             status=TaskStatus.ERROR,
             retry_count=3,
@@ -252,7 +252,7 @@ class TestInMemoryTaskQueueAdvancedFeatures:
         queue.configure(enable_retry=False)
 
         task_spec = TaskSpec(
-            node_id="test_task",
+            task_id="test_task",
             execution_context=execution_context,
             status=TaskStatus.ERROR
         )
