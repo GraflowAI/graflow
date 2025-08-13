@@ -35,8 +35,8 @@ class TestMultiprocessingCoordinator:
 
     def test_multiprocessing_coordinator_process_count(self):
         """Test process count configuration."""
-        coord = MultiprocessingCoordinator(process_count=4)
-        assert coord.process_count == 4
+        coord = MultiprocessingCoordinator(thread_count=4)
+        assert coord.thread_count == 4
 
     def test_create_barrier(self, coordinator):
         """Test barrier creation."""

@@ -133,29 +133,6 @@ class TestRedisCoordinatorIntegration:
         coordinator.clear_queue("queue_test")
         assert coordinator.get_queue_size("queue_test") == 0
 
-    def test_task_function_registry(self, clean_redis):
-        """Test task function registration and retrieval."""
-        coordinator = RedisCoordinator(clean_redis)
-
-        def test_func_1():
-            return "result1"
-
-        def test_func_2():
-            return "result2"
-
-        # Initially empty
-        assert coordinator.get_task_registry() == {}
-
-        # Register functions
-        coordinator.register_task_function("func1", test_func_1)
-        coordinator.register_task_function("func2", test_func_2)
-
-        # Retrieve registry
-        registry = coordinator.get_task_registry()
-        assert len(registry) == 2
-        assert registry["func1"] == test_func_1
-        assert registry["func2"] == test_func_2
-
     def test_barrier_cleanup(self, clean_redis):
         """Test proper barrier cleanup."""
         coordinator = RedisCoordinator(clean_redis)

@@ -12,9 +12,15 @@ from graflow.coordination.task_spec import TaskSpec
 class RedisCoordinator(TaskCoordinator):
     """Redis-based task coordination for distributed execution."""
 
-    def __init__(self, redis_client):
-        """Initialize Redis coordinator with Redis client."""
+    def __init__(self, redis_client, task_queue):
+        """Initialize Redis coordinator with Redis client and task queue.
+        
+        Args:
+            redis_client: Redis client instance
+            task_queue: RedisTaskQueue instance for task dispatch
+        """
         self.redis = redis_client
+        self.task_queue = task_queue
         self.active_barriers: Dict[str, Dict[str, Any]] = {}
         self._lock = threading.Lock()
 
@@ -84,33 +90,8 @@ class RedisCoordinator(TaskCoordinator):
 
     def dispatch_task(self, task_spec: TaskSpec, group_id: str) -> None:
         """Dispatch task to Redis queue for worker processing."""
-        queue_key = f"task_queue:{group_id}"
-
-        # Serialize TaskSpec to TaskQueue format
-        task_data = {
-            "task_id": task_spec.task_id,
-            "status": getattr(task_spec, 'status', 'READY'),
-            "retry_count": getattr(task_spec, 'retry_count', 0),
-            "max_retries": getattr(task_spec, 'max_retries', 3),
-            "last_error": getattr(task_spec, 'last_error', None),
-            "execution_context_data": self._serialize_execution_context(task_spec.execution_context),
-            "group_id": group_id,
-            "timestamp": time.time()
-        }
-
-        # Push task to queue (left push for FIFO with right pop)
-        self.redis.lpush(queue_key, json.dumps(task_data, default=str))
-
-    def _serialize_execution_context(self, execution_context) -> dict:
-        """Serialize execution context to a dictionary."""
-        if execution_context is None:
-            return {}
-
-        return {
-            "session_id": getattr(execution_context, 'session_id', 'default'),
-            "graph_data": getattr(execution_context, 'graph', None),
-            # Add other fields as necessary
-        }
+        # Use RedisTaskQueue's enqueue method
+        self.task_queue.enqueue(task_spec)
 
     def cleanup_barrier(self, barrier_id: str) -> None:
         """Clean up barrier resources."""
@@ -139,10 +120,8 @@ class RedisCoordinator(TaskCoordinator):
 
     def get_queue_size(self, group_id: str) -> int:
         """Get current queue size for a group."""
-        queue_key = f"task_queue:{group_id}"
-        return self.redis.llen(queue_key)
+        return self.task_queue.size()
 
     def clear_queue(self, group_id: str) -> None:
         """Clear all tasks from a group's queue."""
-        queue_key = f"task_queue:{group_id}"
-        self.redis.delete(queue_key)
+        self.task_queue.cleanup()

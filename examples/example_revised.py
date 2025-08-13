@@ -34,37 +34,39 @@ def task_E():
     print("Executing task E logic")
     return "Result E"
 
-print("=== Building Dependencies with Operators ===")
-# Build dependencies using operators (auto-registers to global graph)
-task_A >> task_B >> task_C # type: ignore
-task_D >> task_E # type: ignore
+if __name__ == '__main__':
+    print("=== Building Dependencies with Operators ===")
+    # Build dependencies using operators (auto-registers to global graph)
+    task_A >> task_B >> task_C # type: ignore
+    task_D >> task_E # type: ignore
 
-# Create parallel group
-parallel_group = task_B | task_C
-print(f"Created parallel group: {parallel_group}")
+    # Create parallel group
+    parallel_group = task_B | task_C
+    print(f"Created parallel group: {parallel_group}")
 
-# Complex flow
-task_A >> (task_B | task_C) >> task_D # type: ignore
+    # Complex flow
+    task_A >> (task_B | task_C) >> task_D # type: ignore
 
-print("\n=== Graph Information ===")
-ctx.show_info()
+    print("\n=== Graph Information ===")
+    ctx.show_info()
 
-print("\n=== Dependencies Visualization ===")
-ctx.visualize_dependencies()
+    print("\n=== Dependencies Visualization ===")
+    ctx.visualize_dependencies()
 
-print("\n=== Execution ===")
-ctx.execute("task_A", max_steps=10)
+    print("\n=== Execution ===")
+    # Use direct execution to avoid multiprocessing issues
+    ctx.execute("task_A", max_steps=10)
 
-print("\n=== Traditional Task Objects ===")
-# Traditional Task objects still work
-clear_workflow_context()
-ctx = current_workflow_context()
+    print("\n=== Traditional Task Objects ===")
+    # Traditional Task objects still work
+    clear_workflow_context()
+    ctx = current_workflow_context()
 
-X = Task("X")
-Y = Task("Y")
-Z = Task("Z")
+    X = Task("X")
+    Y = Task("Y")
+    Z = Task("Z")
 
-X >> Y >> Z # type: ignore
+    X >> Y >> Z # type: ignore
 
-ctx.show_info()
-ctx.execute("X", max_steps=5)
+    ctx.show_info()
+    ctx.execute("X", max_steps=5)
