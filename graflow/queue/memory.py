@@ -11,7 +11,7 @@ class InMemoryTaskQueue(AbstractTaskQueue):
 
     def __init__(self, execution_context, start_node: Optional[str] = None):
         super().__init__(execution_context)
-        self._queue = deque()
+        self._queue: deque[TaskSpec] = deque()
         if start_node:
             task_spec = TaskSpec(
                 task_id=start_node,
@@ -58,11 +58,11 @@ class InMemoryTaskQueue(AbstractTaskQueue):
 
     def peek_next_node(self) -> Optional[str]:
         """Peek next node without removing."""
-        return self._queue[0].node_id if self._queue else None
+        return self._queue[0].task_id if self._queue else None
 
     def to_list(self) -> list[str]:
         """Get list of node IDs in queue order."""
-        return [task_spec.node_id for task_spec in self._queue]
+        return [task_spec.task_id for task_spec in self._queue]
 
     # === Phase 3: Advanced features ===
     def retry_failed_task(self, task_spec: TaskSpec) -> bool:

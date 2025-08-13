@@ -20,7 +20,7 @@ class RedisCoordinator(TaskCoordinator):
             task_queue: RedisTaskQueue instance for task dispatch and barrier coordination
         """
         self.task_queue = task_queue
-        self.redis = task_queue.redis  # Use Redis client from task queue
+        self.redis = task_queue.redis_client  # Use Redis client from task queue
         self.active_barriers: Dict[str, Dict[str, Any]] = {}
         self._lock = threading.Lock()
 

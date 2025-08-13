@@ -53,7 +53,7 @@ class TestRedisTaskQueue:
         queue = RedisTaskQueue(execution_context)
 
         assert queue.execution_context == execution_context
-        assert queue.redis == mock_redis_client
+        assert queue.redis_client == mock_redis_client
         assert queue.key_prefix == "graflow"
         assert queue.session_id == execution_context.session_id
 
@@ -72,7 +72,7 @@ class TestRedisTaskQueue:
         with patch('graflow.queue.redis.redis'):
             queue = RedisTaskQueue(execution_context, mock_redis, "test_prefix")
 
-            assert queue.redis == mock_redis
+            assert queue.redis_client == mock_redis
             assert queue.key_prefix == "test_prefix"
             assert queue.queue_key.startswith("test_prefix:queue:")
             assert queue.specs_key.startswith("test_prefix:specs:")
@@ -257,7 +257,7 @@ class TestRedisTaskQueueIntegration:
             )
 
             assert isinstance(context.task_queue, RedisTaskQueue)
-            assert context.task_queue.redis == mock_redis
+            assert context.task_queue.redis_client == mock_redis
             assert context.task_queue.key_prefix == 'test'
 
     def test_execution_context_redis_string_backend(self, mock_redis):

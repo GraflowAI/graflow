@@ -17,13 +17,26 @@ except ImportError:
 class RedisChannel(Channel):
     """Redis-based channel implementation for inter-task communication."""
 
-    def __init__(self, name: str, host: str = "localhost", port: int = 6379, db: int = 0, **kwargs):
-        """Initialize Redis channel."""
+    def __init__(self, name: str, redis_client: Optional[Redis] = None, host: str = "localhost", port: int = 6379, db: int = 0, **kwargs):
+        """Initialize Redis channel.
+
+        Args:
+            name: Channel name
+            redis_client: Optional Redis client instance. If not provided, creates new one with host/port/db
+            host: Redis host (used only if redis_client is None)
+            port: Redis port (used only if redis_client is None)
+            db: Redis database (used only if redis_client is None)
+            **kwargs: Additional arguments passed to Redis constructor (used only if redis_client is None)
+        """
         super().__init__(name)
         if redis is None:
             raise ImportError("redis package is required for RedisChannel")
 
-        self.redis_client: Redis = redis.Redis(host=host, port=port, db=db, decode_responses=True, **kwargs)
+        if redis_client is not None:
+            self.redis_client = redis_client
+        else:
+            self.redis_client: Redis = redis.Redis(host=host, port=port, db=db, decode_responses=True, **kwargs)
+
         self.key_prefix = f"graflow:channel:{name}:"
 
     def _get_key(self, key: str) -> str:
