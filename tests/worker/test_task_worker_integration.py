@@ -2,39 +2,37 @@
 
 import logging
 import time
-from typing import Any
+from typing import Any, Optional
+
+from graflow.core.context import ExecutionContext
+from graflow.queue.base import AbstractTaskQueue, TaskSpec
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
-class MockTaskSpec:
-    """Mock TaskSpec for testing."""
-
-    def __init__(self, task_id: str):
-        self.task_id = task_id
-        from graflow.queue.base import TaskStatus
-        self.status = TaskStatus.READY
-        self.retry_count = 0
-        self.max_retries = 3
-        self.last_error = None
-        self.execution_context = None
-
-
-class MockTaskQueue:
-    """Mock TaskQueue for testing."""
+class MockExecutionContext(ExecutionContext):
+    """Mock ExecutionContext for testing."""
 
     def __init__(self):
+        self.session_id = "test_session"
+
+
+class MockTaskQueue(AbstractTaskQueue):
+    """Mock TaskQueue for testing that extends AbstractTaskQueue."""
+
+    def __init__(self):
+        super().__init__(MockExecutionContext())
         self.tasks = []
         self.dequeue_count = 0
 
-    def enqueue(self, task_spec: MockTaskSpec):
+    def enqueue(self, task_spec: TaskSpec) -> bool:
         """Add a task to the queue."""
         self.tasks.append(task_spec)
         logger.info(f"Enqueued task: {task_spec.task_id}")
+        return True
 
-    def dequeue(self) -> Any:
+    def dequeue(self) -> Optional[TaskSpec]:
         """Get a task from the queue."""
         self.dequeue_count += 1
         if self.tasks:
@@ -47,6 +45,14 @@ class MockTaskQueue:
         """Check if queue is empty."""
         return len(self.tasks) == 0
 
+    def cleanup(self) -> None:
+        """Cleanup resources."""
+        self.tasks.clear()
+
+    def to_list(self) -> list[str]:
+        """Get list of node IDs in queue order."""
+        return [task.task_id for task in self.tasks]
+
 
 def test_basic_task_execution():
     """Test basic TaskWorker functionality."""
@@ -58,9 +64,9 @@ def test_basic_task_execution():
 
         # Create mock queue and add some tasks
         queue = MockTaskQueue()
-        queue.enqueue(MockTaskSpec("task_1"))
-        queue.enqueue(MockTaskSpec("task_2"))
-        queue.enqueue(MockTaskSpec("task_3"))
+        queue.enqueue(TaskSpec("task_1", queue.execution_context))
+        queue.enqueue(TaskSpec("task_2", queue.execution_context))
+        queue.enqueue(TaskSpec("task_3", queue.execution_context))
 
         # Create handler and worker with concurrent execution
         handler = InProcessTaskExecutor()
@@ -122,7 +128,7 @@ def test_concurrent_task_execution():
         # Create mock queue with more tasks
         queue = MockTaskQueue()
         for i in range(10):
-            queue.enqueue(MockTaskSpec(f"concurrent_task_{i}"))
+            queue.enqueue(TaskSpec(f"concurrent_task_{i}", queue.execution_context))
 
         # Create handler and worker with higher concurrency
         handler = InProcessTaskExecutor()
@@ -165,19 +171,15 @@ def test_concurrent_task_execution():
         traceback.print_exc()
 
 
-def test_redis_coordinator_dispatch():
+def test_redis_coordinator_dispatch(clean_redis: Any):
     """Test RedisCoordinator dispatch_task functionality."""
     print("\n=== Testing RedisCoordinator dispatch_task ===")
 
     try:
         from graflow.coordination.redis import RedisCoordinator
-        from graflow.coordination.task_spec import TaskSpec
-
-        # Create mock TaskSpec
-        task_spec = TaskSpec("test_node", None)  # execution_context can be None for testing
 
         # This would normally require Redis, so we'll just test the method exists
-        coordinator = RedisCoordinator(None)  # Will fail, but we can test the interface
+        coordinator = RedisCoordinator(clean_redis)  # Will fail, but we can test the interface
 
         # Test that the method exists and has the right signature
         assert hasattr(coordinator, 'dispatch_task'), "dispatch_task method not found"
@@ -197,6 +199,10 @@ if __name__ == "__main__":
 
     test_basic_task_execution()
     test_concurrent_task_execution()
-    test_redis_coordinator_dispatch()
+
+    from tests.conftest import clean_redis, redis_server
+    redis_server = redis_server()
+    clean_redis = clean_redis(redis_server)
+    test_redis_coordinator_dispatch(clean_redis)
 
     print("\n🎉 Integration tests completed!")
