@@ -17,7 +17,7 @@ class TestMultiprocessingCoordinator:
     @pytest.fixture
     def coordinator(self):
         """Create coordinator for tests."""
-        return MultiprocessingCoordinator(process_count=2)
+        return MultiprocessingCoordinator(thread_count=2)
 
     @pytest.fixture(autouse=True)
     def cleanup_coordinator(self, coordinator):
