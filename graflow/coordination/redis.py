@@ -1,6 +1,5 @@
 """Redis-based coordination backend for distributed parallel execution."""
 
-import json
 import threading
 import time
 from typing import Any, Callable, Dict
@@ -14,7 +13,7 @@ class RedisCoordinator(TaskCoordinator):
 
     def __init__(self, redis_client, task_queue):
         """Initialize Redis coordinator with Redis client and task queue.
-        
+
         Args:
             redis_client: Redis client instance
             task_queue: RedisTaskQueue instance for task dispatch
