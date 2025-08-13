@@ -110,14 +110,9 @@ class RedisCoordinator(TaskCoordinator):
 
     def _convert_to_queue_task_spec(self, task_spec: TaskSpec) -> QueueTaskSpec:
         """Convert coordination TaskSpec to queue TaskSpec format."""
-        from graflow.queue.base import TaskSpec as QueueTaskSpec
-
         return QueueTaskSpec(
-            node_id=task_spec.task_id,
+            task_id=task_spec.task_id,
             execution_context=task_spec.execution_context,
-            func=task_spec.func,
-            args=task_spec.args,
-            kwargs=task_spec.kwargs
         )
 
     def cleanup_barrier(self, barrier_id: str) -> None:
