@@ -2,10 +2,11 @@
 
 import threading
 import time
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, List
 
 from graflow.coordination.coordinator import TaskCoordinator
 from graflow.coordination.task_spec import TaskSpec
+from graflow.queue.base import TaskSpec as QueueTaskSpec
 from graflow.queue.redis import RedisTaskQueue
 
 
@@ -22,6 +23,18 @@ class RedisCoordinator(TaskCoordinator):
         self.redis = task_queue.redis  # Use Redis client from task queue
         self.active_barriers: Dict[str, Dict[str, Any]] = {}
         self._lock = threading.Lock()
+
+    def execute_group(self, group_id: str, tasks: List[TaskSpec]) -> None:
+        """Execute parallel group with barrier synchronization."""
+        barrier_id = self.create_barrier(group_id, len(tasks))
+        try:
+            for task in tasks:
+                self.dispatch_task(task, group_id)
+            if not self.wait_barrier(barrier_id):
+                raise TimeoutError(f"Barrier wait timeout for group {group_id}")
+            print(f"Parallel group {group_id} completed successfully")
+        finally:
+            self.cleanup_barrier(barrier_id)
 
     def create_barrier(self, barrier_id: str, participant_count: int) -> str:
         """Create a barrier for parallel task synchronization."""
@@ -91,17 +104,20 @@ class RedisCoordinator(TaskCoordinator):
         """Dispatch task to Redis queue for worker processing."""
         # Convert coordination TaskSpec to queue TaskSpec format
         queue_task_spec = self._convert_to_queue_task_spec(task_spec)
-        
+
         # Use RedisTaskQueue's enqueue method
         self.task_queue.enqueue(queue_task_spec)
 
-    def _convert_to_queue_task_spec(self, coord_task_spec: TaskSpec) -> 'TaskSpec':
+    def _convert_to_queue_task_spec(self, task_spec: TaskSpec) -> QueueTaskSpec:
         """Convert coordination TaskSpec to queue TaskSpec format."""
         from graflow.queue.base import TaskSpec as QueueTaskSpec
-        
+
         return QueueTaskSpec(
-            node_id=coord_task_spec.task_id,
-            execution_context=coord_task_spec.execution_context or self.task_queue.execution_context
+            node_id=task_spec.task_id,
+            execution_context=task_spec.execution_context,
+            func=task_spec.func,
+            args=task_spec.args,
+            kwargs=task_spec.kwargs
         )
 
     def cleanup_barrier(self, barrier_id: str) -> None:
