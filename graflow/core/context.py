@@ -140,13 +140,13 @@ class ExecutionContext:
         self.steps = steps
         self.executed = []
 
-        # Phase 1: Abstract TaskQueue implementation
-        if isinstance(queue_backend, str):
-            queue_backend = QueueBackend(queue_backend)
-
         queue_config = queue_config or {}
         if start_node:
             queue_config['start_node'] = start_node
+
+        # Phase 1: Abstract TaskQueue implementation
+        if isinstance(queue_backend, str):
+            queue_backend = QueueBackend(queue_backend)
 
         self.task_queue: AbstractTaskQueue = TaskQueueFactory.create(
             queue_backend, self, **queue_config
