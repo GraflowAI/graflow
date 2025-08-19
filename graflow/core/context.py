@@ -14,6 +14,7 @@ from graflow.channels.typed import TypedChannel
 from graflow.coordination.executor import GroupExecutor
 from graflow.core.cycle import CycleController
 from graflow.core.engine import WorkflowEngine
+from graflow.core.function_registry import TaskFunctionManager
 from graflow.core.graph import TaskGraph
 from graflow.exceptions import CycleLimitExceededError
 from graflow.queue.base import AbstractTaskQueue
@@ -89,6 +90,11 @@ class TaskExecutionContext:
         channel = self.execution_context.get_channel()
         return TypedChannel(channel, message_type)
 
+    @property
+    def function_manager(self) -> TaskFunctionManager:
+        """Get the function manager instance from execution context."""
+        return self.execution_context.function_manager
+
     def get_result(self, node: str, default: Any = None) -> Any:
         """Get execution result for a node from channel."""
         return self.execution_context.get_result(node, default)
@@ -154,6 +160,7 @@ class ExecutionContext:
 
         self.cycle_controller = CycleController(default_max_cycles)
         self.channel = MemoryChannel(session_id) # Use session_id for unique channel name
+        self._function_manager = TaskFunctionManager()
 
         # Task execution context management
         self._task_execution_stack: list[TaskExecutionContext] = []
@@ -183,6 +190,11 @@ class ExecutionContext:
         """Get the task queue instance."""
         return self.task_queue
 
+    @property
+    def function_manager(self) -> TaskFunctionManager:
+        """Get the function manager instance."""
+        return self._function_manager
+
     def add_to_queue(self, task_id: str) -> None:
         """Add a node to the execution queue (complete compatibility)."""
         self.task_queue.add_node(task_id)
@@ -196,7 +208,7 @@ class ExecutionContext:
         """Check if execution is completed (complete compatibility)."""
         return self.task_queue.is_empty() or self.steps >= self.max_steps
 
-    def get_next_node(self) -> Optional[str]:
+    def get_next_task(self) -> Optional[str]:
         """Get the next node to execute (complete compatibility)."""
         return self.task_queue.get_next_node()
 
