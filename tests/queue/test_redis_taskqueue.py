@@ -312,10 +312,10 @@ class TestRedisTaskQueueIntegration:
             mock_redis.hget.side_effect = mock_hget
 
             # Test getting nodes
-            node1 = context.get_next_node()
-            node2 = context.get_next_node()
-            node3 = context.get_next_node()
-            node4 = context.get_next_node()
+            node1 = context.get_next_task()
+            node2 = context.get_next_task()
+            node3 = context.get_next_task()
+            node4 = context.get_next_task()
 
             assert node1 == "start"
             assert node2 == "task1"

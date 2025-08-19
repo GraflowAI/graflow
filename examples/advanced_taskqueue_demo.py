@@ -76,7 +76,7 @@ def demo_metrics_collection():
 
     # Process tasks
     while not context.is_completed():
-        task = context.get_next_node()
+        task = context.get_next_task()
         if task:
             print(f"  Processed: {task}")
         context.increment_step()

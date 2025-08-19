@@ -25,7 +25,7 @@ def demo_in_memory_backend():
 
     # Process tasks
     while not context.is_completed():
-        next_task = context.get_next_node()
+        next_task = context.get_next_task()
         print(f"Processing: {next_task}")
         context.increment_step()
 
@@ -51,7 +51,7 @@ def demo_explicit_in_memory_backend():
     print(f"Next node (peek): {context.task_queue.peek_next_node()}")
 
     # Process first node
-    node = context.get_next_node()
+    node = context.get_next_task()
     print(f"Got node: {node}")
     print(f"Queue now empty: {context.is_completed()}")
     print()
@@ -91,7 +91,7 @@ def demo_redis_backend():
         # Process tasks
         tasks_processed = []
         while not context.is_completed() and context.steps < 5:
-            next_task = context.get_next_node()
+            next_task = context.get_next_task()
             if next_task:
                 print(f"Processing: {next_task}")
                 tasks_processed.append(next_task)

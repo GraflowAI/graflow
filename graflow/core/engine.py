@@ -35,7 +35,7 @@ class WorkflowEngine:
         print(f"Starting execution from: {context.start_node}")
 
         while not context.is_completed():
-            node = context.get_next_node()
+            node = context.get_next_task()
             if node is None:
                 break
 
