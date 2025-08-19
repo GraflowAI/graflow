@@ -36,7 +36,7 @@ class RedisTaskQueue(AbstractTaskQueue):
         if redis_client is not None:
             self.redis_client = redis_client
         else:
-            self.redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+            self.redis_client = redis.Redis(host=host, port=port, db=db, decode_responses=True)
 
         self.key_prefix = key_prefix
         self.session_id = execution_context.session_id
