@@ -79,11 +79,12 @@ class Executable(ABC):
 class Task(Executable):
     """A pseudo root task that serves as the starting point for workflow execution."""
 
-    def __init__(self, task_id: str) -> None:
+    def __init__(self, task_id: str, register_to_context: bool = True) -> None:
         """Initialize a task."""
         self._task_id = task_id
         # Register to current workflow context
-        self._register_to_context()
+        if register_to_context:
+            self._register_to_context()
 
     @property
     def task_id(self) -> str:
