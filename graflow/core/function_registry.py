@@ -199,14 +199,14 @@ class FunctionSerializer:
         """Deserialize function from source code."""
         source_code = func_data["source"]
         func_name = func_data["name"]
-        
+
         # Create a temporary namespace to execute the source code
         namespace = {}
-        
+
         try:
             # Execute the source code in the namespace
             exec(source_code, namespace)
-            
+
             # Get the function from the namespace
             if func_name in namespace:
                 func = namespace[func_name]
@@ -216,11 +216,11 @@ class FunctionSerializer:
                 if callables:
                     func = callables[0]  # Take the first callable
                 else:
-                    raise FunctionResolutionError(f"No callable function found in source code")
-            
+                    raise FunctionResolutionError("No callable function found in source code")
+
             logger.debug(f"Function recreated from source: {func_name}")
             return func, "source"
-            
+
         except Exception as e:
             raise FunctionResolutionError(f"Failed to execute source code for {func_name}: {e}") from e
 
