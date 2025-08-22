@@ -48,10 +48,18 @@ class RedisTaskQueue(AbstractTaskQueue):
     def enqueue(self, task_spec: TaskSpec) -> bool:
         """Add TaskSpec to Redis queue (FIFO)."""
         # Serialize TaskSpec to JSON and store in hash
+        try:
+            function_data = task_spec.function_data
+        except ValueError:
+            # If function can't be serialized, store None
+            function_data = None
+
         spec_data = {
-            'node_id': task_spec.task_id,
+            'task_id': task_spec.task_id,
             'status': task_spec.status.value,
             'created_at': task_spec.created_at,
+            'strategy': task_spec.strategy,
+            'function_data': function_data,
             # Phase 3: Advanced features
             'retry_count': task_spec.retry_count,
             'max_retries': task_spec.max_retries,
@@ -84,9 +92,33 @@ class RedisTaskQueue(AbstractTaskQueue):
         spec_json = cast(str, spec_json)
 
         spec_data = json.loads(spec_json)
+
+        # Try to reconstruct the executable with proper function data
+        task_id_from_spec = spec_data.get('task_id', spec_data.get('node_id', task_id))
+        function_data = spec_data.get('function_data')
+
+        if function_data:
+            # Deserialize the function and create a proper executable
+            try:
+                func = self.execution_context.function_manager.resolve_task_function(function_data)
+
+                # Create a TaskWrapper with the resolved function
+                from graflow.core.task import TaskWrapper
+                placeholder_task = TaskWrapper(task_id_from_spec, func, register_to_context=False)
+
+            except Exception:
+                # Fall back to placeholder if deserialization fails
+                from graflow.core.task import Task
+                placeholder_task = Task(task_id_from_spec, register_to_context=False)
+        else:
+            # No function data available, use placeholder
+            from graflow.core.task import Task
+            placeholder_task = Task(task_id_from_spec, register_to_context=False)
+
         task_spec = TaskSpec(
-            task_id=spec_data['task_id'],
+            executable=placeholder_task,
             execution_context=self.execution_context,
+            strategy=spec_data.get('strategy', 'reference'),
             status=TaskStatus(spec_data['status']),
             created_at=spec_data['created_at'],
             # Phase 3: Advanced features

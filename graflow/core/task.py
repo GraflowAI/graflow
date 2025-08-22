@@ -216,13 +216,14 @@ class ParallelGroup(Executable):
 class TaskWrapper(Executable):
     """Wrapper class for function-based tasks created with @task decorator."""
 
-    def __init__(self, task_id: str, func, inject_context: bool = False) -> None:
+    def __init__(self, task_id: str, func, inject_context: bool = False, , register_to_context: bool = True) -> None:
         """Initialize a task wrapper with task_id and function."""
         self._task_id = task_id
         self.func = func
         self.inject_context = inject_context
         # Register to current workflow context or global graph
-        self._register_to_context()
+        if register_to_context:
+            self._register_to_context()
 
     @property
     def task_id(self) -> str:
