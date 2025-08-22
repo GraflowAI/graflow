@@ -4,6 +4,8 @@ from typing import cast
 
 from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
+from graflow.core.task import Task
+from graflow.queue.base import TaskSpec
 from graflow.queue.factory import QueueBackend, TaskQueueFactory
 
 
@@ -18,9 +20,11 @@ def demo_in_memory_backend():
     print(f"Backend: {type(context.task_queue).__name__}")
     print(f"Initial queue size: {context.queue.size()}")
 
-    # Add tasks
-    context.add_to_queue("task2")
-    context.add_to_queue("task3")
+    # Add tasks - create simple task objects
+    task2 = Task("task2")
+    task3 = Task("task3")
+    context.add_to_queue(task2)
+    context.add_to_queue(task3)
     print(f"After adding tasks - queue size: {context.queue.size()}")
 
     # Process tasks
@@ -81,9 +85,11 @@ def demo_redis_backend():
         print(f"Redis key prefix: {redis_queue.key_prefix}")
         print(f"Session ID: {context.session_id}")
 
-        # Add tasks
-        context.add_to_queue("redis_task2")
-        context.add_to_queue("redis_task3")
+        # Add tasks - create simple task objects
+        redis_task2 = Task("redis_task2")
+        redis_task3 = Task("redis_task3")
+        context.add_to_queue(redis_task2)
+        context.add_to_queue(redis_task3)
 
         print(f"Queue size: {context.task_queue.size()}")
         print(f"Is empty: {context.is_completed()}")
@@ -151,10 +157,16 @@ def demo_configuration_based():
             print(f"  Backend: {type(queue).__name__}")
             print(f"  Initial size: {queue.size()}")
 
-            queue.add_node("test")
+            # Create a simple task and enqueue it
+            test_task = Task("test")
+            task_spec = TaskSpec(
+                executable=test_task,
+                execution_context=context
+            )
+            queue.enqueue(task_spec)
             print(f"  After add: {queue.size()}")
 
-            node = queue.get_next_node()
+            node = queue.get_next_task()
             print(f"  Got node: {node}")
             print(f"  Final size: {queue.size()}")
 

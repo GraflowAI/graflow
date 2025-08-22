@@ -8,6 +8,7 @@ import pytest
 
 from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
+from graflow.core.task import Task
 from graflow.queue.base import TaskSpec, TaskStatus
 from graflow.queue.factory import QueueBackend
 from graflow.queue.redis import RedisTaskQueue
@@ -70,7 +71,7 @@ class TestRedisTaskQueue:
     def test_redis_taskqueue_creation_custom_client(self, mock_redis, execution_context):
         """Test RedisTaskQueue creation with custom client."""
         with patch('graflow.queue.redis.redis'):
-            queue = RedisTaskQueue(execution_context, mock_redis, "test_prefix")
+            queue = RedisTaskQueue(execution_context, redis_client=mock_redis, key_prefix="test_prefix")
 
             assert queue.redis_client == mock_redis
             assert queue.key_prefix == "test_prefix"
@@ -83,7 +84,7 @@ class TestRedisTaskQueue:
             queue = RedisTaskQueue(execution_context, mock_redis)
 
             task_spec = TaskSpec(
-                task_id="test_node",
+                executable=Task("test_node", register_to_context=False),
                 execution_context=execution_context,
                 status=TaskStatus.READY,
                 created_at=1234567890.0
@@ -96,9 +97,16 @@ class TestRedisTaskQueue:
 
             # Verify Redis calls
             expected_spec_data = {
-                'node_id': 'test_node',
+                'task_id': 'test_node',
                 'status': 'ready',
                 'created_at': 1234567890.0,
+                'strategy': 'reference',
+                'function_data': {
+                    'strategy': 'reference',
+                    'module': 'graflow.core.task',
+                    'name': 'run',
+                    'qualname': 'Task.run'
+                },
                 # Phase 3: Advanced features
                 'retry_count': 0,
                 'max_retries': 3,
@@ -219,23 +227,6 @@ class TestRedisTaskQueue:
 
             mock_redis.delete.assert_called_once_with(queue.queue_key, queue.specs_key)
 
-    def test_legacy_api_compatibility(self, mock_redis, execution_context):
-        """Test legacy API methods work with Redis backend."""
-        with patch('graflow.queue.redis.redis'):
-            queue = RedisTaskQueue(execution_context, mock_redis)
-
-            # Test add_node
-            queue.add_node("test_node")
-
-            # Verify enqueue was called via add_node
-            mock_redis.hset.assert_called_once()
-            mock_redis.rpush.assert_called_once_with(queue.queue_key, "test_node")
-
-            # Test get_next_node (empty queue)
-            mock_redis.lpop.return_value = None
-            result = queue.get_next_node()
-            assert result is None
-
 
 class TestRedisTaskQueueIntegration:
     """Integration tests for Redis TaskQueue with ExecutionContext."""
@@ -280,7 +271,7 @@ class TestRedisTaskQueueIntegration:
 
         # Configure mock to return proper data for dequeue
         spec_data = {
-            'node_id': 'start',
+            'task_id': 'start',
             'status': 'ready',
             'created_at': time.time()
         }
@@ -294,9 +285,11 @@ class TestRedisTaskQueueIntegration:
                 queue_config={'redis_client': mock_redis}
             )
 
-            # Test compatibility methods
-            context.add_to_queue("task1")
-            context.add_to_queue("task2")
+            # Test compatibility methods - create simple tasks
+            task1 = Task("task1")
+            task2 = Task("task2")
+            context.add_to_queue(task1)
+            context.add_to_queue(task2)
 
             # Mock dequeue responses - lpop returns node_ids, hget returns spec data
             mock_redis.lpop.side_effect = ["start", "task1", "task2", None]
@@ -304,7 +297,7 @@ class TestRedisTaskQueueIntegration:
             # Setup hget to return appropriate spec data for each node
             def mock_hget(specs_key, node_id):
                 spec_data = {
-                    'node_id': node_id,
+                    'task_id': node_id,
                     'status': 'ready',
                     'created_at': time.time()
                 }

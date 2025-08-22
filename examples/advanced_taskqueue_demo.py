@@ -4,6 +4,7 @@ from typing import cast
 
 from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
+from graflow.core.task import Task
 from graflow.queue.base import TaskSpec
 from graflow.queue.factory import QueueBackend
 
@@ -70,7 +71,8 @@ def demo_metrics_collection():
     # Simulate activity
     print("\nSimulating queue activity...")
     for i in range(3):
-        context.add_to_queue(f"task_{i}")
+        task = Task(f"task_{i}")
+        context.add_to_queue(task)
 
     print(f"After enqueueing: {context.task_queue.get_metrics()}")
 
@@ -98,7 +100,7 @@ def demo_task_spec_advanced_features():
 
     # Create task with custom retry settings
     task_spec = TaskSpec(
-        task_id="advanced_task",
+        executable=Task("advanced_task"),
         execution_context=context,
         max_retries=2
     )
@@ -157,7 +159,7 @@ def demo_redis_advanced_features():
         # Add tasks with different retry settings
         for i in range(3):
             task_spec = TaskSpec(
-                task_id=f"redis_task_{i}",
+                executable=Task(f"redis_task_{i}"),
                 execution_context=context,
                 max_retries=i + 1  # Different retry limits
             )

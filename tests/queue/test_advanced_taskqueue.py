@@ -5,6 +5,7 @@ import pytest
 
 from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
+from graflow.core.task import Task
 from graflow.queue.base import TaskSpec, TaskStatus
 from graflow.queue.factory import QueueBackend
 from graflow.queue.memory import InMemoryTaskQueue
@@ -20,10 +21,10 @@ def execution_context():
 class TestTaskSpecAdvancedFeatures:
     """Test TaskSpec advanced features."""
 
-    def test_task_spec_retry_fields(self, execution_context):
+    def test_task_spec_retry_fields(self, execution_context: ExecutionContext):
         """Test TaskSpec retry-related fields."""
         task_spec = TaskSpec(
-            task_id="test_task",
+            executable=Task("test_task", register_to_context=False),
             execution_context=execution_context,
             max_retries=5
         )
@@ -33,10 +34,10 @@ class TestTaskSpecAdvancedFeatures:
         assert task_spec.last_error is None
         assert task_spec.can_retry() is True
 
-    def test_task_spec_can_retry(self, execution_context):
+    def test_task_spec_can_retry(self, execution_context: ExecutionContext):
         """Test can_retry logic."""
         task_spec = TaskSpec(
-            task_id="test_task",
+            executable=Task("test_task", register_to_context=False),
             execution_context=execution_context,
             max_retries=2
         )
@@ -56,10 +57,10 @@ class TestTaskSpecAdvancedFeatures:
         assert task_spec.can_retry() is False
         assert task_spec.last_error == "Second error"
 
-    def test_task_spec_increment_retry(self, execution_context):
+    def test_task_spec_increment_retry(self, execution_context: ExecutionContext):
         """Test increment_retry behavior."""
         task_spec = TaskSpec(
-            task_id="test_task",
+            executable=Task("test_task", register_to_context=False),
             execution_context=execution_context,
             status=TaskStatus.ERROR
         )
@@ -74,7 +75,7 @@ class TestTaskSpecAdvancedFeatures:
 class TestAbstractTaskQueueAdvancedFeatures:
     """Test AbstractTaskQueue advanced features."""
 
-    def test_queue_configuration(self, execution_context):
+    def test_queue_configuration(self, execution_context: ExecutionContext):
         """Test queue configuration."""
         queue = InMemoryTaskQueue(execution_context)
 
@@ -88,7 +89,7 @@ class TestAbstractTaskQueueAdvancedFeatures:
         assert queue.enable_retry is True
         assert queue.enable_metrics is True
 
-    def test_metrics_initialization(self, execution_context):
+    def test_metrics_initialization(self, execution_context: ExecutionContext):
         """Test metrics initialization."""
         queue = InMemoryTaskQueue(execution_context)
 
@@ -102,13 +103,13 @@ class TestAbstractTaskQueueAdvancedFeatures:
 
         assert metrics == expected_metrics
 
-    def test_handle_task_failure_without_retry(self, execution_context):
+    def test_handle_task_failure_without_retry(self, execution_context: ExecutionContext):
         """Test task failure handling without retry enabled."""
         queue = InMemoryTaskQueue(execution_context)
         queue.configure(enable_retry=False, enable_metrics=True)
 
         task_spec = TaskSpec(
-            task_id="test_task",
+            executable=Task("test_task", register_to_context=False),
             execution_context=execution_context
         )
 
@@ -118,13 +119,13 @@ class TestAbstractTaskQueueAdvancedFeatures:
         assert task_spec.status == TaskStatus.ERROR
         assert queue.get_metrics()['failures'] == 1
 
-    def test_handle_task_failure_with_retry(self, execution_context):
+    def test_handle_task_failure_with_retry(self, execution_context: ExecutionContext):
         """Test task failure handling with retry enabled."""
         queue = InMemoryTaskQueue(execution_context)
         queue.configure(enable_retry=True, enable_metrics=True)
 
         task_spec = TaskSpec(
-            task_id="test_task",
+            executable=Task("test_task", register_to_context=False),
             execution_context=execution_context,
             max_retries=2
         )
@@ -139,13 +140,13 @@ class TestAbstractTaskQueueAdvancedFeatures:
         assert queue.get_metrics()['failures'] == 1
         assert queue.get_metrics()['retries'] == 1
 
-    def test_handle_task_failure_max_retries_exceeded(self, execution_context):
+    def test_handle_task_failure_max_retries_exceeded(self, execution_context: ExecutionContext):
         """Test task failure when max retries exceeded."""
         queue = InMemoryTaskQueue(execution_context)
         queue.configure(enable_retry=True, enable_metrics=True)
 
         task_spec = TaskSpec(
-            task_id="test_task",
+            executable=Task("test_task", register_to_context=False),
             execution_context=execution_context,
             max_retries=1,
             retry_count=1  # Already at max
@@ -158,7 +159,7 @@ class TestAbstractTaskQueueAdvancedFeatures:
         assert queue.get_metrics()['failures'] == 1
         assert queue.get_metrics()['retries'] == 0  # No more retries
 
-    def test_reset_metrics(self, execution_context):
+    def test_reset_metrics(self, execution_context: ExecutionContext):
         """Test metrics reset."""
         queue = InMemoryTaskQueue(execution_context)
         queue.configure(enable_metrics=True)
@@ -182,13 +183,13 @@ class TestAbstractTaskQueueAdvancedFeatures:
 class TestInMemoryTaskQueueAdvancedFeatures:
     """Test InMemoryTaskQueue advanced features."""
 
-    def test_enqueue_with_metrics(self, execution_context):
+    def test_enqueue_with_metrics(self, execution_context: ExecutionContext):
         """Test enqueue with metrics enabled."""
         queue = InMemoryTaskQueue(execution_context)
         queue.configure(enable_metrics=True)
 
         task_spec = TaskSpec(
-            task_id="test_task",
+            executable=Task("test_task", register_to_context=False),
             execution_context=execution_context
         )
 
@@ -196,7 +197,7 @@ class TestInMemoryTaskQueueAdvancedFeatures:
 
         assert queue.get_metrics()['enqueued'] == 1
 
-    def test_dequeue_with_metrics(self, execution_context):
+    def test_dequeue_with_metrics(self, execution_context: ExecutionContext):
         """Test dequeue with metrics enabled."""
         queue = InMemoryTaskQueue(execution_context, start_node="start")
         queue.configure(enable_metrics=True)
@@ -206,13 +207,13 @@ class TestInMemoryTaskQueueAdvancedFeatures:
         assert task_spec is not None
         assert queue.get_metrics()['dequeued'] == 1
 
-    def test_retry_failed_task(self, execution_context):
+    def test_retry_failed_task(self, execution_context: ExecutionContext):
         """Test retry_failed_task method."""
         queue = InMemoryTaskQueue(execution_context)
         queue.configure(enable_retry=True, enable_metrics=True)
 
         task_spec = TaskSpec(
-            task_id="test_task",
+            executable=Task("test_task", register_to_context=False),
             execution_context=execution_context,
             status=TaskStatus.ERROR,
             retry_count=1,
@@ -227,13 +228,13 @@ class TestInMemoryTaskQueueAdvancedFeatures:
         assert queue.size() == 1
         assert queue.get_metrics()['enqueued'] == 1
 
-    def test_retry_failed_task_max_retries_exceeded(self, execution_context):
+    def test_retry_failed_task_max_retries_exceeded(self, execution_context: ExecutionContext):
         """Test retry when max retries exceeded."""
         queue = InMemoryTaskQueue(execution_context)
         queue.configure(enable_retry=True)
 
         task_spec = TaskSpec(
-            task_id="test_task",
+            executable=Task("test_task", register_to_context=False),
             execution_context=execution_context,
             status=TaskStatus.ERROR,
             retry_count=3,
@@ -246,13 +247,13 @@ class TestInMemoryTaskQueueAdvancedFeatures:
         assert result is False
         assert queue.size() == 0
 
-    def test_retry_failed_task_retry_disabled(self, execution_context):
+    def test_retry_failed_task_retry_disabled(self, execution_context: ExecutionContext):
         """Test retry when retry is disabled."""
         queue = InMemoryTaskQueue(execution_context)
         queue.configure(enable_retry=False)
 
         task_spec = TaskSpec(
-            task_id="test_task",
+            executable=Task("test_task", register_to_context=False),
             execution_context=execution_context,
             status=TaskStatus.ERROR
         )
@@ -292,5 +293,6 @@ class TestExecutionContextAdvancedFeatures:
         assert context.task_queue.enable_metrics is True
 
         # Test metrics are updated
-        context.add_to_queue("task1")
+        task1 = Task("task1", register_to_context=False)
+        context.add_to_queue(task1)
         assert context.task_queue.get_metrics()['enqueued'] == 1
