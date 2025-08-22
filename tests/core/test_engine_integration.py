@@ -20,7 +20,7 @@ def test_engine_integration():
     def task_a(task_ctx):
         print(f"🅰️  Task A - ID: {task_ctx.task_id}")
         print(f"    Session: {task_ctx.session_id}")
-        print(f"    Elapsed: {task_ctx.elapsed_time:.4f}s")
+        print(f"    Elapsed: {task_ctx.elapsed_time():.4f}s")
 
         # Store some data
         task_ctx.set_local_data("processed_by", "task_a")
@@ -55,8 +55,8 @@ def test_engine_integration():
     task_b.set_execution_context(exec_context)
 
     # Add tasks to execution queue manually for testing
-    exec_context.add_to_queue("task_a")
-    exec_context.add_to_queue("task_b")
+    exec_context.add_to_queue(task_a)
+    exec_context.add_to_queue(task_b)
 
     print("\n1. Testing engine execution:")
     exec_context.execute()

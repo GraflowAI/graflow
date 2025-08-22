@@ -216,7 +216,7 @@ class ParallelGroup(Executable):
 class TaskWrapper(Executable):
     """Wrapper class for function-based tasks created with @task decorator."""
 
-    def __init__(self, task_id: str, func, inject_context: bool = False, , register_to_context: bool = True) -> None:
+    def __init__(self, task_id: str, func, inject_context: bool = False, register_to_context: bool = True) -> None:
         """Initialize a task wrapper with task_id and function."""
         self._task_id = task_id
         self.func = func
