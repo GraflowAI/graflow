@@ -276,7 +276,7 @@ class ExecutionContext:
 
         Args:
             executable: Executable object to execute as the new task
-            goto: If True, explicitly jump to existing task (skip successors of current task)
+            goto: If True, skip successors of current task (works for both existing and new tasks)
 
         Returns:
             The task ID from the executable
@@ -284,23 +284,29 @@ class ExecutionContext:
         task_id = executable.task_id
 
         if goto:
-            # Explicit goto: Jump to existing task
-            if task_id not in self.graph.nodes:
-                raise ValueError(f"goto=True but task '{task_id}' not found in graph")
-            print(f"🔄 Goto: Jumping to existing task: {task_id}")
-            self.add_to_queue(executable)
+            # Explicit goto: Skip successors regardless of whether task is new or existing
+            if task_id in self.graph.nodes:
+                # Existing task: Jump to it
+                print(f"🔄 Goto: Jumping to existing task: {task_id}")
+                self.add_to_queue(executable)
+            else:
+                # New task: Create it but still skip successors
+                print(f"✨ Goto: Creating new task (skip successors): {task_id}")
+                self.graph.add_node(task_id, task=executable)
+                self.add_to_queue(executable)
             self._goto_called_in_current_task = True
-        # Auto-detect or new task creation
+        # Auto-detect behavior (no goto specified)
         elif task_id in self.graph.nodes:
-            # Existing task: Jump to it (add to queue without creating new node)
+            # Existing task: Jump to it (auto-detected, skip successors)
             print(f"🔄 Jumping to existing task: {task_id}")
             self.add_to_queue(executable)
             self._goto_called_in_current_task = True
         else:
-            # New task: Create dynamic task (add to both graph and queue)
+            # New task: Create dynamic task (normal successor processing)
             print(f"✨ Creating new dynamic task: {task_id}")
             self.graph.add_node(task_id, task=executable)
             self.add_to_queue(executable)
+            # Note: _goto_called_in_current_task remains False for normal processing
 
         return task_id
 
