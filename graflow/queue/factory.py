@@ -29,7 +29,7 @@ class TaskQueueFactory:
             redis_config = kwargs.get('redis_config', {})
             redis_client = kwargs.get('redis_client')
             key_prefix = kwargs.get('key_prefix') or redis_config.get('key_prefix', 'graflow')
-            return RedisTaskQueue(execution_context, redis_client, key_prefix)
+            return RedisTaskQueue(execution_context, redis_client=redis_client, key_prefix=key_prefix)
 
         else:
             raise ValueError(f"Unsupported backend: {backend}")

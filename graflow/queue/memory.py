@@ -1,9 +1,12 @@
 """In-memory task queue implementation."""
 
 from collections import deque
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from graflow.queue.base import AbstractTaskQueue, TaskSpec, TaskStatus
+
+if TYPE_CHECKING:
+    pass
 
 
 class InMemoryTaskQueue(AbstractTaskQueue):
@@ -13,8 +16,11 @@ class InMemoryTaskQueue(AbstractTaskQueue):
         super().__init__(execution_context)
         self._queue: deque[TaskSpec] = deque()
         if start_node:
+            # Create a simple task for the start node (import locally to avoid circular import)
+            from graflow.core.task import Task
+            start_task = Task(start_node, register_to_context=False)
             task_spec = TaskSpec(
-                task_id=start_node,
+                executable=start_task,
                 execution_context=execution_context
             )
             self._queue.append(task_spec)

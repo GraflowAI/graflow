@@ -17,7 +17,7 @@ from graflow.core.engine import WorkflowEngine
 from graflow.core.function_registry import TaskFunctionManager
 from graflow.core.graph import TaskGraph
 from graflow.exceptions import CycleLimitExceededError
-from graflow.queue.base import AbstractTaskQueue
+from graflow.queue.base import AbstractTaskQueue, TaskSpec
 from graflow.queue.factory import QueueBackend, TaskQueueFactory
 
 if TYPE_CHECKING:
@@ -70,9 +70,9 @@ class TaskExecutionContext:
         """Create iteration task using this task's context."""
         return self.execution_context.next_iteration(data, self.task_id)
 
-    def next_task(self, executable: Executable) -> str:
-        """Create new dynamic task."""
-        return self.execution_context.next_task(executable)
+    def next_task(self, executable: Executable, goto: bool = False) -> str:
+        """Create new dynamic task or jump to existing task."""
+        return self.execution_context.next_task(executable, goto=goto)
 
     def get_channel(self) -> Channel:
         """Get communication channel."""
@@ -169,6 +169,9 @@ class ExecutionContext:
         # Group execution
         self.group_executor: Optional[GroupExecutor] = None
 
+        # Track if goto (jump to existing task) was called in current task execution
+        self._goto_called_in_current_task: bool = False
+
     @classmethod
     def create(cls, graph: TaskGraph, start_node: str, max_steps: int = 10,
                default_max_cycles: int = 10, default_max_retries: int = 3,
@@ -195,9 +198,13 @@ class ExecutionContext:
         """Get the function manager instance."""
         return self._function_manager
 
-    def add_to_queue(self, task_id: str) -> None:
-        """Add a node to the execution queue (complete compatibility)."""
-        self.task_queue.add_node(task_id)
+    def add_to_queue(self, executable: Executable) -> None:
+        """Add executable to execution queue."""
+        task_spec = TaskSpec(
+            executable=executable,
+            execution_context=self
+        )
+        self.task_queue.enqueue(task_spec)
 
     def mark_executed(self, task_id: str) -> None:
         """Mark a node as executed."""
@@ -210,20 +217,20 @@ class ExecutionContext:
 
     def get_next_task(self) -> Optional[str]:
         """Get the next node to execute (complete compatibility)."""
-        return self.task_queue.get_next_node()
+        return self.task_queue.get_next_task()
 
     def increment_step(self) -> None:
         """Increment the step counter."""
         self.steps += 1
 
-    def set_result(self, node: str, result: Any) -> None:
+    def set_result(self, task_id: str, result: Any) -> None:
         """Store execution result for a node using channel."""
-        channel_key = f"{node}.__result__"
+        channel_key = f"{task_id}.__result__"
         self.channel.set(channel_key, result)
 
-    def get_result(self, node: str, default: Any = None) -> Any:
+    def get_result(self, task_id: str, default: Any = None) -> Any:
         """Get execution result for a node from channel."""
-        channel_key = f"{node}.__result__"
+        channel_key = f"{task_id}.__result__"
         return self.channel.get(channel_key, default)
 
     def get_channel(self) -> Channel:
@@ -255,19 +262,45 @@ class ExecutionContext:
         ctx = self.current_task_context
         return ctx.task_id if ctx else None
 
-    def next_task(self, executable: Executable) -> str:
-        """Generate a new task dynamically during execution.
+    @property
+    def goto_called(self) -> bool:
+        """Check if goto was called in current task execution."""
+        return self._goto_called_in_current_task
+
+    def reset_goto_flag(self) -> None:
+        """Reset goto flag for next task execution."""
+        self._goto_called_in_current_task = False
+
+    def next_task(self, executable: Executable, goto: bool = False) -> str:
+        """Generate a new task or jump to existing task node.
 
         Args:
             executable: Executable object to execute as the new task
+            goto: If True, explicitly jump to existing task (skip successors of current task)
 
         Returns:
             The task ID from the executable
         """
         task_id = executable.task_id
 
-        # Add to execution queue
-        self.add_to_queue(task_id)
+        if goto:
+            # Explicit goto: Jump to existing task
+            if task_id not in self.graph.nodes:
+                raise ValueError(f"goto=True but task '{task_id}' not found in graph")
+            print(f"🔄 Goto: Jumping to existing task: {task_id}")
+            self.add_to_queue(executable)
+            self._goto_called_in_current_task = True
+        # Auto-detect or new task creation
+        elif task_id in self.graph.nodes:
+            # Existing task: Jump to it (add to queue without creating new node)
+            print(f"🔄 Jumping to existing task: {task_id}")
+            self.add_to_queue(executable)
+            self._goto_called_in_current_task = True
+        else:
+            # New task: Create dynamic task (add to both graph and queue)
+            print(f"✨ Creating new dynamic task: {task_id}")
+            self.graph.add_node(task_id, task=executable)
+            self.add_to_queue(executable)
 
         return task_id
 

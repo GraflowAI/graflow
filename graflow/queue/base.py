@@ -4,10 +4,11 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Dict, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
 if TYPE_CHECKING:
     from graflow.core.context import ExecutionContext
+    from graflow.core.task import Executable
 
 
 class TaskStatus(Enum):
@@ -20,15 +21,42 @@ class TaskStatus(Enum):
 
 @dataclass
 class TaskSpec:
-    """Task specification and metadata (Phase 1 implementation)."""
-    task_id: str
+    """Task specification and metadata with function serialization support."""
+    executable: 'Executable'
     execution_context: 'ExecutionContext'
+    strategy: str = "reference"
     status: TaskStatus = TaskStatus.READY
     created_at: float = field(default_factory=time.time)
     # Phase 3: Advanced features
     retry_count: int = 0
     max_retries: int = 3
     last_error: Optional[str] = None
+
+    @property
+    def task_id(self) -> str:
+        """Get task_id from executable."""
+        return self.executable.task_id
+
+    @property
+    def function_data(self) -> Dict[str, Any]:
+        """Get function_data by serializing executable's function."""
+        func = None
+
+        # Import classes locally to avoid circular imports
+        from graflow.core.task import TaskWrapper
+
+        # Extract function based on executable type
+        if isinstance(self.executable, TaskWrapper):
+            func = self.executable.func
+        elif hasattr(self.executable, 'run') and callable(self.executable.run):
+            # For Task and other Executable types, use the run method
+            func = self.executable.run
+
+        if func is not None:
+            return self.execution_context.function_manager.serialize_task_function(func, self.strategy)
+        else:
+            # If no function can be extracted from executable, raise an error
+            raise ValueError(f"No serializable function found in executable '{self.executable}' for task_id '{self.task_id}'")
 
     def __lt__(self, other: 'TaskSpec') -> bool:
         """For queue sorting (FIFO: older first)."""
@@ -44,6 +72,22 @@ class TaskSpec:
         self.last_error = error_message
         self.status = TaskStatus.READY  # Reset to ready for retry
 
+    def get_function(self) -> Optional[Callable[..., Any]]:
+        """Get function for this task by deserializing stored data.
+
+        Returns:
+            Function object or None if no function data available
+
+        Raises:
+            FunctionResolutionError: If function cannot be resolved
+        """
+        try:
+            function_data = self.function_data
+            return self.execution_context.function_manager.resolve_task_function(function_data)
+        except ValueError:
+            return None
+        except Exception:
+            return None
 
 class AbstractTaskQueue(ABC):
     """Abstract base class for TaskQueue (TaskSpec support)."""
@@ -83,16 +127,9 @@ class AbstractTaskQueue(ABC):
         pass
 
     # === Legacy API compatibility ===
-    def add_node(self, node_id: str) -> None:
-        """Add node ID to queue (ExecutionContext.add_to_queue compatibility)."""
-        task_spec = TaskSpec(
-            task_id=node_id,
-            execution_context=self.execution_context
-        )
-        self.enqueue(task_spec)
 
-    def get_next_node(self) -> Optional[str]:
-        """Get next execution node ID (ExecutionContext.get_next_node compatibility)."""
+    def get_next_task(self) -> Optional[str]:
+        """Get next execution node ID (ExecutionContext.get_next_task compatibility)."""
         task_spec = self.dequeue()
         return task_spec.task_id if task_spec else None
 
@@ -107,12 +144,12 @@ class AbstractTaskQueue(ABC):
 
     @abstractmethod
     def to_list(self) -> list[str]:
-        """Get list of node IDs in queue order."""
+        """Get list of task IDs in queue order."""
         pass
 
-    def get_task_spec(self, node_id: str) -> Optional[TaskSpec]:
-        """Get TaskSpec by node ID."""
-        return self._task_specs.get(node_id)
+    def get_task_spec(self, task_id: str) -> Optional[TaskSpec]:
+        """Get TaskSpec by task ID."""
+        return self._task_specs.get(task_id)
 
     # === Phase 3: Advanced features ===
     def configure(self, enable_retry: bool = False, enable_metrics: bool = False) -> None:

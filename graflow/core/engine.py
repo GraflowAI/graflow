@@ -35,34 +35,40 @@ class WorkflowEngine:
         print(f"Starting execution from: {context.start_node}")
 
         while not context.is_completed():
-            node = context.get_next_task()
-            if node is None:
+            task_id = context.get_next_task()
+            if task_id is None:
                 break
 
-            # Check if node exists in graph
+            # Check if task exists in graph
             graph = context.graph.nx_graph()
-            if node not in graph.nodes:
-                print(f"Warning: Node {node} not found in graph")
+            if task_id not in graph.nodes:
+                print(f"Warning: Node {task_id} not found in graph")
                 continue
 
             # Execute the task
-            task = graph.nodes[node]["task"]
+            task = graph.nodes[task_id]["task"]
 
             # Execute task with proper context management
             try:
                 with context.executing_task(task) as _ctx:
                     result = task.run()
-                    context.set_result(node, result)
-                    context.mark_executed(node)
+                    context.set_result(task_id, result)
+                    context.mark_executed(task_id)
             except Exception as e:
-                context.set_result(node, e)
+                context.set_result(task_id, e)
                 raise exceptions.as_runtime_error(e) from e
 
             context.increment_step()
 
-            # Add successor nodes to queue
-            for succ in graph.successors(node):
-                context.add_to_queue(succ)
+            # Handle task completion and successor scheduling
+            if context.goto_called:
+                # If goto was called, skip successors entirely
+                print(f"🚫 Goto called in {task_id}, skipping successors")
+            else:
+                # Add successor nodes to queue
+                for succ in graph.successors(task_id):
+                    succ_task = graph.nodes[succ]["task"]
+                    context.add_to_queue(succ_task)
 
         print(f"Execution completed after {context.steps} steps")
 
