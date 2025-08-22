@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List, Set
+from typing import TYPE_CHECKING, List
 
 import networkx as nx
+from networkx.classes.reportviews import EdgeView, NodeView
 
 from graflow.exceptions import DuplicateTaskError
 
@@ -44,12 +45,12 @@ class TaskGraph:
         return self._graph.nodes[task_id]["task"]
 
     @property
-    def nodes(self) -> Set[str]:
+    def nodes(self) -> NodeView:
         """Get all node names in the graph."""
         return self._graph.nodes()
 
     @property
-    def edges(self) -> Set[tuple]:
+    def edges(self) -> EdgeView:
         """Get all edges in the graph."""
         return self._graph.edges()
 
