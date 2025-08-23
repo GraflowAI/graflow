@@ -32,9 +32,9 @@ def test_dynamic_task_with_successors():
         return "final_complete"
 
     # Build graph with edges
-    graph.add_node("main_task", task=main_task)
-    graph.add_node("dynamic_cleanup", task=dynamic_cleanup)
-    graph.add_node("final_task", task=final_task)
+    graph.add_node(main_task, "main_task")
+    graph.add_node(dynamic_cleanup, "dynamic_cleanup")
+    graph.add_node(final_task, "final_task")
 
     # Add edges: main_task -> final_task
     graph.add_edge("main_task", "final_task")
@@ -77,9 +77,9 @@ def test_dynamic_task_with_manual_successors():
         return "final_complete"
 
     # Build initial graph
-    graph.add_node("controller", task=controller)
-    graph.add_node("cleanup_task2", task=cleanup_task2)
-    graph.add_node("final_task2", task=final_task2)
+    graph.add_node(controller, "controller")
+    graph.add_node(cleanup_task2, "cleanup_task2")
+    graph.add_node(final_task2, "final_task2")
 
     # Add edges
     graph.add_edge("controller", "final_task2")

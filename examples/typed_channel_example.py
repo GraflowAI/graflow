@@ -134,9 +134,9 @@ def main():
     graph = TaskGraph()
 
     # Add tasks to graph
-    graph.add_task(generate_data)
-    graph.add_task(process_data)
-    graph.add_task(collect_results)
+    graph.add_node(generate_data)
+    graph.add_node(process_data)
+    graph.add_node(collect_results)
 
     # Add dependencies
     graph.add_edge("data_generator", "data_processor")

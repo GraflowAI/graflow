@@ -33,7 +33,7 @@ def test_task_execution_context_basic():
         return f"Task executed: {task_ctx.task_id}"
 
     # Set up task
-    graph.add_node("test_task", task=test_task)
+    graph.add_node(test_task, "test_task")
     test_task.set_execution_context(exec_context)
 
     print("\n1. Testing direct task execution:")
@@ -94,7 +94,7 @@ def test_cycle_management():
         return {"count": count, "cycle": task_ctx.cycle_count}
 
     # Set up task
-    graph.add_node("cycle_task", task=cycle_task)
+    graph.add_node(cycle_task, "cycle_task")
     cycle_task.set_execution_context(exec_context)
 
     print("\n1. Testing cycle management:")
@@ -147,7 +147,7 @@ def test_parallel_context_simulation():
         return results
 
     # Set up tasks
-    # graph.add_node("parallel_group_task", task=parallel_group_task)
+    # graph.add_node(parallel_group_task, "parallel_group_task")
     parallel_group_task.set_execution_context(exec_context)
 
     print("\n1. Testing simulated parallel execution:")
@@ -179,8 +179,8 @@ def test_task_communication():
         return f"Receiver got: {message}"
 
     # Set up tasks
-    graph.add_node("sender_task", task=sender_task)
-    graph.add_node("receiver_task", task=receiver_task)
+    graph.add_node(sender_task, "sender_task")
+    graph.add_node(receiver_task, "receiver_task")
     sender_task.set_execution_context(exec_context)
     receiver_task.set_execution_context(exec_context)
 

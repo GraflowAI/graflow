@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Optional
 
 import networkx as nx
 from networkx.classes.reportviews import EdgeView, NodeView
@@ -24,12 +24,10 @@ class TaskGraph:
         """Get the underlying NetworkX graph."""
         return self._graph
 
-    def add_task(self, task: Executable) -> None:
+    def add_node(self, task: Executable, task_id: Optional[str] = None) -> None:
         """Add a task node to the graph."""
-        self.add_node(task.task_id, task)
-
-    def add_node(self, task_id: str, task: Executable) -> None:
-        """Add a task node to the graph."""
+        if task_id is None:
+            task_id = task.task_id
         if task_id in self._graph.nodes:
             raise DuplicateTaskError(task_id)
         self._graph.add_node(task_id, task=task)

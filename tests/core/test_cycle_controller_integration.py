@@ -46,7 +46,7 @@ def test_cycle_controller_integration():
         return {"count": count, "cycle_info": cycle_info}
 
     # Set up task in graph
-    graph.add_node("counting_task", task=counting_task)
+    graph.add_node(counting_task, "counting_task")
     counting_task.set_execution_context(context)
 
     print("\n1. Testing default cycle limit (3):")
@@ -92,7 +92,7 @@ def test_custom_cycle_limits():
     context.cycle_controller.set_node_max_cycles("limited_task", 5)
 
     # Set up task
-    graph.add_node("limited_task", task=limited_task)
+    graph.add_node(limited_task, "limited_task")
     limited_task.set_execution_context(context)
     # Create and push task context instead of setting current_task_id
     task_ctx = context.create_task_context("limited_task")
@@ -134,7 +134,7 @@ def test_cycle_info_methods():
         print("📋 Task executing")
         return "done"
 
-    graph.add_node("info_task", task=info_task)
+    graph.add_node(info_task, "info_task")
     info_task.set_execution_context(context)
     # Create and push task context instead of setting current_task_id
     task_ctx = context.create_task_context("info_task")
@@ -198,7 +198,7 @@ def test_error_handling():
         return {"attempt": attempt}
 
     # Set up task
-    graph.add_node("error_task", task=error_task)
+    graph.add_node(error_task, "error_task")
     error_task.set_execution_context(context)
     # Create and push task context instead of setting current_task_id
     task_ctx = context.create_task_context("error_task")

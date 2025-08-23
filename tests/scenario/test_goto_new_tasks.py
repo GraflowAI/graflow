@@ -27,8 +27,8 @@ def test_goto_true_with_new_task():
         return "successor_complete"
 
     # Build graph with edges
-    graph.add_node("main_task", task=main_task)
-    graph.add_node("successor_task", task=successor_task)
+    graph.add_node(main_task, "main_task")
+    graph.add_node(successor_task, "successor_task")
 
     # Add edge: main_task -> successor_task
     graph.add_edge("main_task", "successor_task")
@@ -62,8 +62,8 @@ def test_goto_false_with_new_task():
         return "successor_complete"
 
     # Build graph
-    graph.add_node("main_task2", task=main_task2)
-    graph.add_node("successor_task2", task=successor_task2)
+    graph.add_node(main_task2, "main_task2")
+    graph.add_node(successor_task2, "successor_task2")
 
     # Add edge: main_task2 -> successor_task2
     graph.add_edge("main_task2", "successor_task2")
@@ -107,8 +107,8 @@ def test_mixed_goto_behaviors():
         return "normal_complete"
 
     # Build graph
-    graph.add_node("dispatcher", task=dispatcher)
-    graph.add_node("normal_successor", task=normal_successor)
+    graph.add_node(dispatcher, "dispatcher")
+    graph.add_node(normal_successor, "normal_successor")
 
     # Add edge: dispatcher -> normal_successor
     graph.add_edge("dispatcher", "normal_successor")

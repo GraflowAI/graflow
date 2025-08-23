@@ -47,8 +47,8 @@ def test_engine_integration():
         return f"Task B got: {a_result}"
 
     # Set up graph
-    graph.add_node("task_a", task=task_a)
-    graph.add_node("task_b", task=task_b)
+    graph.add_node(task_a, "task_a")
+    graph.add_node(task_b, "task_b")
 
     # Set execution contexts
     task_a.set_execution_context(exec_context)

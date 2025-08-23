@@ -117,7 +117,7 @@ def test_context_access_patterns():
         print(f"Analysis result: {result}")
 
     # Add iteration task to graph for testing
-    graph.add_node("iteration_example", task=iteration_example)
+    graph.add_node(iteration_example, "iteration_example")
 
     # Test iteration pattern
     print("\n2. Testing iteration pattern:")

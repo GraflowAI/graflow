@@ -292,7 +292,7 @@ class ExecutionContext:
             else:
                 # New task: Create it but still skip successors
                 print(f"✨ Goto: Creating new task (skip successors): {task_id}")
-                self.graph.add_node(task_id, task=executable)
+                self.graph.add_node(executable, task_id)
                 self.add_to_queue(executable)
             self._goto_called_in_current_task = True
         # Auto-detect behavior (no goto specified)
@@ -304,7 +304,7 @@ class ExecutionContext:
         else:
             # New task: Create dynamic task (normal successor processing)
             print(f"✨ Creating new dynamic task: {task_id}")
-            self.graph.add_node(task_id, task=executable)
+            self.graph.add_node(executable, task_id)
             self.add_to_queue(executable)
             # Note: _goto_called_in_current_task remains False for normal processing
 

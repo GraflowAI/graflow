@@ -52,7 +52,7 @@ class WorkflowContext:
 
     def add_node(self, name: str, task: Executable) -> None:
         """Add a task node to this workflow's graph."""
-        self.graph.add_node(name, task)
+        self.graph.add_node(task, name)
 
     def add_edge(self, from_node: str, to_node: str) -> None:
         """Add an edge between tasks in this workflow's graph."""
