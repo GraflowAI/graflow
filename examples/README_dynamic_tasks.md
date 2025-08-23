@@ -7,23 +7,30 @@ This directory contains examples demonstrating Graflow's dynamic task generation
 Dynamic Task Generation allows workflows to create new tasks at runtime based on execution results, enabling:
 
 - **Conditional Processing**: Create different tasks based on data conditions
-- **Iterative Workflows**: Generate repeated tasks with updated data
+- **Iterative Workflows**: Generate repeated tasks with updated data  
 - **Adaptive Execution**: Respond to runtime conditions with appropriate tasks
 - **Error Recovery**: Create retry or error handling tasks dynamically
+- **Goto Jumps**: Jump directly to existing tasks, bypassing normal successor execution
 
 ## Key Methods
 
-### `context.next_task(executable: Executable) -> str`
+### `context.next_task(executable: Executable, goto: bool = False) -> str`
 
-Creates a new task dynamically during execution.
+Creates a new task dynamically during execution or jumps to existing task.
 
 ```python
-# Create a task wrapper
+# Create new dynamic task (normal successor processing)
 task = TaskWrapper("processor", lambda: process_data())
-
-# Add it to the workflow dynamically
 task_id = context.next_task(task)
+
+# Jump to existing task (skip current task's successors)
+existing_task = graph.nodes["validator"]["task"]
+task_id = context.next_task(existing_task, goto=True)
 ```
+
+**Parameters:**
+- `executable`: TaskWrapper or other Executable object to execute
+- `goto`: If `True`, jump to existing task and skip current task's successors
 
 ### `context.next_iteration(data: Any = None, task_id: Optional[str] = None) -> str`
 
@@ -129,6 +136,59 @@ def process_with_retry(context, data):
             context.next_task(error_task)
 ```
 
+### Pattern 4: Goto Jump to Existing Tasks
+
+Jump to existing task nodes in the graph, skipping normal successor execution:
+
+```python
+@task(id="controller", inject_context=True)
+def controller_task(task_ctx):
+    condition = analyze_condition()
+    
+    if condition == "emergency":
+        # Jump directly to emergency handler (skip normal successors)
+        emergency_task = graph.nodes["emergency_handler"]["task"]
+        task_ctx.next_task(emergency_task, goto=True)
+        
+    elif condition == "validation_needed":
+        # Jump to validation task (skip normal successors)
+        validator_task = graph.nodes["data_validator"]["task"]
+        task_ctx.next_task(validator_task, goto=True)
+        
+    else:
+        # Normal processing - create new dynamic task (successors will run)
+        processor = TaskWrapper("normal_processor", lambda: process_normal())
+        task_ctx.next_task(processor)  # goto=False (default)
+    
+    return {"condition": condition}
+
+# In graph setup:
+# controller_task -> normal_successor  # This edge is SKIPPED when goto=True
+# emergency_handler and data_validator are existing nodes in graph
+```
+
+#### Key Differences:
+
+- **`next_task(task, goto=True)`**: Jump to existing task, **skip current task's successors**
+- **`next_task(task)`** or **`next_task(task, goto=False)`**: Create/execute task, **normal successor processing**
+
+```python
+# Example with mixed usage:
+@task(id="dispatcher", inject_context=True)  
+def dispatcher(task_ctx):
+    # Create new dynamic task (successors will run normally)
+    worker = TaskWrapper("worker", work_function)
+    task_ctx.next_task(worker)
+    
+    # Jump to existing special task (skip dispatcher's successors)
+    special = graph.nodes["special_handler"]["task"]
+    task_ctx.next_task(special, goto=True)
+    
+    return "dispatched"
+
+# Result: worker -> special_handler (dispatcher's successors are skipped)
+```
+
 ## Key Concepts
 
 ### TaskWrapper Creation
@@ -191,6 +251,15 @@ Dynamic tasks work with all existing Graflow features:
 - Channel-based communication
 - Error handling and retries
 - Workflow context management
+
+### Goto Jump Control
+
+The `goto` parameter provides fine-grained control over workflow execution:
+
+- **`goto=False` (default)**: Normal execution, successors of current task will run
+- **`goto=True`**: Jump behavior, successors of current task are skipped
+- **Auto-detection**: When `goto=False`, automatically detects existing vs new tasks
+- **Explicit control**: Use `goto=True` for conditional workflow routing
 
 ## Running the Examples
 
