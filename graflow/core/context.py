@@ -352,7 +352,7 @@ class ExecutionContext:
         cycle_count = task_ctx.register_cycle()
 
         # Get the current task function
-        current_task = self.graph.nx_graph().nodes[task_id]['task']
+        current_task = self.graph.get_node(task_id)
 
         # Generate iteration task ID with cycle count
         iteration_id = f"{task_id}_cycle_{cycle_count}_{uuid.uuid4().hex[:8]}"
@@ -360,9 +360,9 @@ class ExecutionContext:
         # Create iteration function with data
         def iteration_func():
             if data is not None:
-                return current_task.func(task_ctx, data)
+                return current_task(task_ctx, data)
             else:
-                return current_task.func(task_ctx)
+                return current_task(task_ctx)
 
         from .task import TaskWrapper
         iteration_task = TaskWrapper(iteration_id, iteration_func, inject_context=False)
