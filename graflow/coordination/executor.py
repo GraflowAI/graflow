@@ -6,6 +6,9 @@ from graflow.coordination.coordinator import CoordinationBackend, TaskCoordinato
 from graflow.coordination.multiprocessing import MultiprocessingCoordinator
 from graflow.coordination.redis import RedisCoordinator
 from graflow.coordination.task_spec import TaskSpec
+from graflow.core.context import ExecutionContext
+from graflow.queue.base import AbstractTaskQueue
+from graflow.queue.redis import RedisTaskQueue
 
 
 class GroupExecutor:
@@ -14,25 +17,16 @@ class GroupExecutor:
     def __init__(self, backend: CoordinationBackend = CoordinationBackend.MULTIPROCESSING,
                  backend_config: Optional[Dict[str, Any]] = None):
         self.backend: CoordinationBackend = backend
-        self.coordinator: Optional[TaskCoordinator] = self._create_coordinator(backend, backend_config or {})
-        self.execution_context: Optional[Any] = None
+        self.backend_config: Dict[str, Any] = backend_config or {}
 
-    def _create_coordinator(self, backend: CoordinationBackend, config: Dict[str, Any]) -> Optional[TaskCoordinator]:
+    def _create_coordinator(self, backend: CoordinationBackend, config: Dict[str, Any], exec_context: ExecutionContext) -> TaskCoordinator:
         """Create appropriate coordinator based on backend."""
-        if backend == CoordinationBackend.DIRECT:
-            return None  # No coordinator needed for direct execution
-
-        elif backend == CoordinationBackend.REDIS:
+        if backend == CoordinationBackend.REDIS:
             try:
-                import redis
-                redis_client = config.get("redis_client")
-                if redis_client is None:
-                    redis_client = redis.Redis(
-                        host=config.get("host", "localhost"),
-                        port=config.get("port", 6379),
-                        db=config.get("db", 0)
-                    )
-                return RedisCoordinator(redis_client)
+                task_queue: AbstractTaskQueue = exec_context.queue
+                if not isinstance(task_queue, RedisTaskQueue):
+                    raise ValueError(f"Execution context must provide a valid RedisTaskQueue for Redis backend: {type(task_queue)}")
+                return RedisCoordinator(task_queue)
             except ImportError as e:
                 raise ImportError("Redis backend requires 'redis' package") from e
 
@@ -43,19 +37,15 @@ class GroupExecutor:
         else:
             raise ValueError(f"Unsupported backend: {backend}")
 
-    def set_execution_context(self, context: Any) -> None:
-        """Set execution context for result tracking."""
-        self.execution_context = context
-
-    def execute_parallel_group(self, group_id: str, tasks: List[TaskSpec]) -> None:
+    def execute_parallel_group(self, group_id: str, tasks: List[TaskSpec], exec_context: ExecutionContext) -> None:
         """Execute parallel group with barrier synchronization."""
         if self.backend == CoordinationBackend.DIRECT:
-            return self.direct_execute(group_id, tasks)
+            return self.direct_execute(group_id, tasks, exec_context)
         else:
-            assert self.coordinator is not None, "Coordinator must be initialized for parallel execution"
-            return self.coordinator.execute_group(group_id, tasks)
+            coordinator = self._create_coordinator(self.backend, self.backend_config, exec_context)
+            return coordinator.execute_group(group_id, tasks)
 
-    def direct_execute(self, group_id: str, tasks: List[TaskSpec]) -> None:
+    def direct_execute(self, group_id: str, tasks: List[TaskSpec], execution_context: ExecutionContext) -> None:
         """Directly execute tasks without coordination."""
         print(f"Running parallel group: {group_id}")
         print(f"  Direct tasks: {[task.task_id for task in tasks]}")

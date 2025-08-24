@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING, List
 
 if TYPE_CHECKING:
     from graflow.coordination.task_spec import TaskSpec
-    from graflow.core.context import ExecutionContext
 
 
 class CoordinationBackend(Enum):
@@ -17,6 +16,6 @@ class TaskCoordinator(ABC):
     """Abstract base class for task coordination."""
 
     @abstractmethod
-    def execute_group(self, group_id: str, tasks: List[TaskSpec], execution_context: ExecutionContext) -> None:
+    def execute_group(self, group_id: str, tasks: List[TaskSpec]) -> None:
         """Execute parallel group with barrier synchronization."""
         pass
