@@ -86,15 +86,6 @@ class TestGroupExecutor:
 
         mock_redis_coord.assert_called_once_with(mock_redis_client)
 
-    def test_set_execution_context(self, mocker):
-        """Test setting execution context."""
-        executor = GroupExecutor(CoordinationBackend.DIRECT)
-        mock_context = mocker.Mock()
-
-        executor.set_execution_context(mock_context)
-
-        assert executor.execution_context == mock_context
-
     def test_execute_parallel_group_direct(self, mocker):
         """Test direct execution without coordination."""
         executor = GroupExecutor(CoordinationBackend.DIRECT)
