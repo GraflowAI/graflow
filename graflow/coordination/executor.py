@@ -1,14 +1,16 @@
 """Parallel execution orchestrator for coordinating task groups."""
 
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from graflow.coordination.coordinator import CoordinationBackend, TaskCoordinator
 from graflow.coordination.multiprocessing import MultiprocessingCoordinator
 from graflow.coordination.redis import RedisCoordinator
 from graflow.coordination.task_spec import TaskSpec
-from graflow.core.context import ExecutionContext
 from graflow.queue.base import AbstractTaskQueue
 from graflow.queue.redis import RedisTaskQueue
+
+if TYPE_CHECKING:
+    from graflow.core.context import ExecutionContext
 
 
 class GroupExecutor:
@@ -19,7 +21,7 @@ class GroupExecutor:
         self.backend: CoordinationBackend = backend
         self.backend_config: Dict[str, Any] = backend_config or {}
 
-    def _create_coordinator(self, backend: CoordinationBackend, config: Dict[str, Any], exec_context: ExecutionContext) -> TaskCoordinator:
+    def _create_coordinator(self, backend: CoordinationBackend, config: Dict[str, Any], exec_context: 'ExecutionContext') -> TaskCoordinator:
         """Create appropriate coordinator based on backend."""
         if backend == CoordinationBackend.REDIS:
             try:
@@ -37,7 +39,7 @@ class GroupExecutor:
         else:
             raise ValueError(f"Unsupported backend: {backend}")
 
-    def execute_parallel_group(self, group_id: str, tasks: List[TaskSpec], exec_context: ExecutionContext) -> None:
+    def execute_parallel_group(self, group_id: str, tasks: List[TaskSpec], exec_context: 'ExecutionContext') -> None:
         """Execute parallel group with barrier synchronization."""
         if self.backend == CoordinationBackend.DIRECT:
             return self.direct_execute(group_id, tasks, exec_context)
@@ -45,7 +47,7 @@ class GroupExecutor:
             coordinator = self._create_coordinator(self.backend, self.backend_config, exec_context)
             return coordinator.execute_group(group_id, tasks)
 
-    def direct_execute(self, group_id: str, tasks: List[TaskSpec], execution_context: ExecutionContext) -> None:
+    def direct_execute(self, group_id: str, tasks: List[TaskSpec], execution_context: 'ExecutionContext') -> None:
         """Directly execute tasks without coordination."""
         print(f"Running parallel group: {group_id}")
         print(f"  Direct tasks: {[task.task_id for task in tasks]}")

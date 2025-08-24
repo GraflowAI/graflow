@@ -16,6 +16,6 @@ class TaskCoordinator(ABC):
     """Abstract base class for task coordination."""
 
     @abstractmethod
-    def execute_group(self, group_id: str, tasks: List[TaskSpec]) -> None:
+    def execute_group(self, group_id: str, tasks: List['TaskSpec']) -> None:
         """Execute parallel group with barrier synchronization."""
         pass
