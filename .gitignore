@@ -74,3 +74,4 @@ Thumbs.db
 .env.production
 credentials/
 .cache/
+.serena/
