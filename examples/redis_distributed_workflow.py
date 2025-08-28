@@ -3,12 +3,13 @@ Comprehensive Redis-based distributed workflow example.
 
 This example demonstrates:
 - Redis task queue for distributed task processing
-- Redis channels for inter-task communication
+- Redis channels for inter-task communication (auto-configured via ExecutionContext)
 - Redis coordinator for barrier synchronization
 - GroupExecutor used indirectly through | operator
 - Docker Redis container management
 - Strongly typed task parameters and return values using type hints
 - TypedChannel for type-safe communication
+- Unified backend configuration (single config for queue and channel)
 
 Usage:
     python examples/redis_distributed_workflow.py
@@ -19,7 +20,6 @@ import random
 import time
 from typing import Optional, TypedDict
 
-from graflow.channels.redis import RedisChannel
 from graflow.channels.schemas import DataTransferMessage
 from graflow.channels.typed import TypedChannel
 from graflow.coordination.coordinator import CoordinationBackend
@@ -607,17 +607,10 @@ def main():
 
     try:
         with redis_docker_container() as redis_client:
-            # Initialize Redis channel for execution context
-            redis_channel = RedisChannel("workflow_demo", redis_client=redis_client)
-            redis_channel.clear()
-
-            # We'll let the workflow create its own ExecutionContext,
-            # but we'll provide the Redis configuration for later use
-
             # Create task registry for use by workers later
             task_registry = create_task_registry()
 
-            # We'll set up workers after the workflow creates the execution context
+            # TaskWorkers will be set up after ExecutionContext configures Redis backends
             print("🔄 TaskWorkers will be set up after workflow execution context is ready...")
 
             # Configure GroupExecutor with Redis backend (now fixed)
@@ -665,31 +658,27 @@ def main():
                 if not start_nodes:
                     raise ValueError("No start nodes found in workflow")
 
-                # Create execution context with Redis backend
+                # ExecutionContext now supports independent queue and channel backends
+                # with unified configuration - no need for manual channel setup!
                 exec_context = ExecutionContext.create(
                     graph=wf.graph,
                     start_node=start_nodes[0],
                     max_steps=50,  # Allow more steps for distributed processing
-                    queue_backend=QueueBackend.REDIS,
-                    queue_config={
+                    queue_backend=QueueBackend.REDIS,     # Redis task queue for distribution
+                    channel_backend="redis",              # Redis channel for inter-task communication
+                    config={                              # Unified config for both backends
                         "redis_client": redis_client,
                         "key_prefix": "workflow_demo"
                     }
                 )
 
-                # Note: ExecutionContext uses its own channel for inter-task communication
-                # The Redis channel will be used separately for workflow coordination
-
-                if wf._group_executor:
-                    exec_context.group_executor = wf._group_executor
+                # Get the task queue from execution context for monitoring
+                redis_task_queue = exec_context.task_queue
+                assert isinstance(redis_task_queue, RedisTaskQueue), "Expected RedisTaskQueue"
 
                 engine = WorkflowEngine()
                 engine.execute(exec_context)
                 print("✅ Workflow execution completed\n")
-
-                # Get the task queue from execution context for monitoring
-                redis_task_queue = exec_context.task_queue
-                assert isinstance(redis_task_queue, RedisTaskQueue), "Expected RedisTaskQueue"
 
                 # Now start TaskWorker processes with the proper queue
                 print("\n🔄 Starting TaskWorker processes...")
@@ -727,7 +716,7 @@ def main():
 
                 # Final Results
                 print("\n📋 Final Results:")
-                # Get results from execution context's channel
+                # Get results from ExecutionContext's Redis channel
                 execution_channel = exec_context.get_channel()
                 final_results = execution_channel.get("quality_check_results")
                 if final_results and isinstance(final_results, dict):
@@ -764,10 +753,8 @@ def main():
 
             # Cleanup
             print("\n🧹 Cleaning up Redis data...")
-            redis_channel.clear()
             if 'redis_task_queue' in locals():
                 redis_task_queue.cleanup()
-            redis_channel.close()
 
     except Exception as e:
         print(f"❌ Workflow failed: {e}")
