@@ -58,6 +58,12 @@ class DuplicateTaskError(GraphCompilationError):
         super().__init__(f"Duplicate task ID: {task_id}")
         self.task_id = task_id
 
+class ConfigError(GraflowError):
+    """Exception raised for configuration errors."""
+
+    def __init__(self, message: str, cause: Optional[Exception] = None):
+        super().__init__(message, cause)
+
 def as_runtime_error(ex: Exception) -> GraflowRuntimeError:
     """Wrap a generic exception into a GraflowRuntimeError."""
     if isinstance(ex, GraflowRuntimeError):

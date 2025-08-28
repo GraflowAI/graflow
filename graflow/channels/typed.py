@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, ClassVar, Generic, Type, TypeVar, get_type_hints
 
 from graflow.channels.base import Channel
+from graflow.exceptions import ConfigError
 
 
 def _is_typed_dict(cls: type) -> bool:
@@ -176,5 +177,5 @@ class ChannelTypeRegistry:
         """Create a typed channel from registered type."""
         message_type = cls.get(type_name)
         if message_type is None:
-            raise ValueError(f"Message type '{type_name}' not registered")
+            raise ConfigError(f"Message type '{type_name}' not registered")
         return TypedChannel(channel, message_type)

@@ -6,9 +6,10 @@ from typing import ClassVar, Dict, Type
 
 from graflow.channels.base import Channel
 from graflow.channels.memory import MemoryChannel
+from graflow.exceptions import ConfigError
 
 try:
-    from .redis import RedisChannel
+    from graflow.channels.redis import RedisChannel
     REDIS_AVAILABLE = True
 except ImportError:
     RedisChannel = None
@@ -38,11 +39,11 @@ class ChannelFactory:
             Channel instance
 
         Raises:
-            ValueError: If backend is not supported
+            ConfigError: If backend is not supported
         """
         if backend not in cls._backends:
             available_backends = list(cls._backends.keys())
-            raise ValueError(f"Unsupported backend '{backend}'. Available backends: {available_backends}")
+            raise ConfigError(f"Unsupported backend '{backend}'. Available backends: {available_backends}")
 
         channel_class = cls._backends[backend]
         return channel_class(name, **kwargs)
