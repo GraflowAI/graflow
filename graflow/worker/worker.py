@@ -8,7 +8,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from typing import Any, Dict, Optional, Set
 
-from graflow.queue.base import AbstractTaskQueue
+from graflow.queue.base import TaskQueue
 from graflow.worker.handler import TaskHandler
 
 logger = logging.getLogger(__name__)
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class TaskWorker:
     """Worker that processes tasks from a queue using a specified handler."""
 
-    def __init__(self, queue: AbstractTaskQueue, handler: TaskHandler, worker_id: str,
+    def __init__(self, queue: TaskQueue, handler: TaskHandler, worker_id: str,
                  max_concurrent_tasks: int = 4, poll_interval: float = 0.1,
                  graceful_shutdown_timeout: float = 30.0):
         """Initialize TaskWorker.

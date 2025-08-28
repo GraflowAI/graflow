@@ -3,13 +3,13 @@
 from collections import deque
 from typing import TYPE_CHECKING, Optional
 
-from graflow.queue.base import AbstractTaskQueue, TaskSpec, TaskStatus
+from graflow.queue.base import TaskQueue, TaskSpec, TaskStatus
 
 if TYPE_CHECKING:
     pass
 
 
-class InMemoryTaskQueue(AbstractTaskQueue):
+class InMemoryTaskQueue(TaskQueue):
     """In-memory task queue with TaskSpec support (Phase 1 implementation)."""
 
     def __init__(self, execution_context, start_node: Optional[str] = None):

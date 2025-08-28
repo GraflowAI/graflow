@@ -6,7 +6,7 @@ from graflow.coordination.coordinator import CoordinationBackend, TaskCoordinato
 from graflow.coordination.multiprocessing import MultiprocessingCoordinator
 from graflow.coordination.redis import RedisCoordinator
 from graflow.coordination.task_spec import TaskSpec
-from graflow.queue.base import AbstractTaskQueue
+from graflow.queue.base import TaskQueue
 from graflow.queue.redis import RedisTaskQueue
 
 if TYPE_CHECKING:
@@ -25,7 +25,7 @@ class GroupExecutor:
         """Create appropriate coordinator based on backend."""
         if backend == CoordinationBackend.REDIS:
             try:
-                task_queue: AbstractTaskQueue = exec_context.queue
+                task_queue: TaskQueue = exec_context.queue
                 if not isinstance(task_queue, RedisTaskQueue):
                     raise ValueError(f"Execution context must provide a valid RedisTaskQueue for Redis backend: {type(task_queue)}")
                 return RedisCoordinator(task_queue)

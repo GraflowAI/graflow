@@ -89,7 +89,7 @@ class TaskSpec:
         except Exception:
             return None
 
-class AbstractTaskQueue(ABC):
+class TaskQueue(ABC):
     """Abstract base class for TaskQueue (TaskSpec support)."""
 
     def __init__(self, execution_context: 'ExecutionContext'):

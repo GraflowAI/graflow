@@ -9,10 +9,10 @@ try:
 except ImportError:
     redis = None
 
-from graflow.queue.base import AbstractTaskQueue, TaskSpec, TaskStatus
+from graflow.queue.base import TaskQueue, TaskSpec, TaskStatus
 
 
-class RedisTaskQueue(AbstractTaskQueue):
+class RedisTaskQueue(TaskQueue):
     """Redis distributed task queue with TaskSpec support."""
 
     def __init__(self, execution_context, redis_client: Optional['Redis'] = None,

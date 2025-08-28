@@ -17,7 +17,7 @@ from graflow.core.engine import WorkflowEngine
 from graflow.core.function_registry import TaskFunctionManager
 from graflow.core.graph import TaskGraph
 from graflow.exceptions import CycleLimitExceededError
-from graflow.queue.base import AbstractTaskQueue, TaskSpec
+from graflow.queue.base import TaskQueue, TaskSpec
 from graflow.queue.factory import QueueBackend, TaskQueueFactory
 
 if TYPE_CHECKING:
@@ -154,7 +154,7 @@ class ExecutionContext:
         if isinstance(queue_backend, str):
             queue_backend = QueueBackend(queue_backend)
 
-        self.task_queue: AbstractTaskQueue = TaskQueueFactory.create(
+        self.task_queue: TaskQueue = TaskQueueFactory.create(
             queue_backend, self, **queue_config
         )
 
@@ -189,7 +189,7 @@ class ExecutionContext:
         )
 
     @property
-    def queue(self) -> AbstractTaskQueue:
+    def queue(self) -> TaskQueue:
         """Get the task queue instance."""
         return self.task_queue
 

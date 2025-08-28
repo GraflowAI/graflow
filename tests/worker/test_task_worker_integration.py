@@ -5,7 +5,7 @@ import time
 from typing import Any, Optional
 
 from graflow.core.context import ExecutionContext
-from graflow.queue.base import AbstractTaskQueue, TaskSpec
+from graflow.queue.base import TaskQueue, TaskSpec
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -18,7 +18,7 @@ class MockExecutionContext(ExecutionContext):
         self.session_id = "test_session"
 
 
-class MockTaskQueue(AbstractTaskQueue):
+class MockTaskQueue(TaskQueue):
     """Mock TaskQueue for testing that extends AbstractTaskQueue."""
 
     def __init__(self):

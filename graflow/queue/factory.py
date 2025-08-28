@@ -3,7 +3,7 @@
 from enum import Enum
 from typing import Any, Dict
 
-from graflow.queue.base import AbstractTaskQueue
+from graflow.queue.base import TaskQueue
 from graflow.queue.memory import InMemoryTaskQueue
 
 
@@ -17,7 +17,7 @@ class TaskQueueFactory:
     """Factory class for TaskQueue."""
 
     @staticmethod
-    def create(backend: QueueBackend, execution_context, **kwargs) -> AbstractTaskQueue:
+    def create(backend: QueueBackend, execution_context, **kwargs) -> TaskQueue:
         """Create TaskQueue with specified backend."""
 
         if backend == QueueBackend.IN_MEMORY:
@@ -35,7 +35,7 @@ class TaskQueueFactory:
             raise ValueError(f"Unsupported backend: {backend}")
 
     @staticmethod
-    def create_from_config(execution_context, config: Dict[str, Any]) -> AbstractTaskQueue:
+    def create_from_config(execution_context, config: Dict[str, Any]) -> TaskQueue:
         """Create TaskQueue from configuration dictionary."""
         backend_name = config.get('backend', 'in_memory')
         backend = QueueBackend(backend_name)

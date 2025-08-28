@@ -9,7 +9,7 @@ import sys
 import time
 from typing import Any, Dict
 
-from graflow.queue.base import AbstractTaskQueue
+from graflow.queue.base import TaskQueue
 from graflow.queue.factory import QueueBackend, TaskQueueFactory
 from graflow.worker.handler import TaskHandler
 
@@ -21,7 +21,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def create_redis_queue(redis_config: Dict[str, Any]) -> AbstractTaskQueue:
+def create_redis_queue(redis_config: Dict[str, Any]) -> TaskQueue:
     """Create Redis TaskQueue connection using factory."""
     try:
         import redis
@@ -61,7 +61,7 @@ def create_redis_queue(redis_config: Dict[str, Any]) -> AbstractTaskQueue:
         sys.exit(1)
 
 
-def create_memory_queue() -> AbstractTaskQueue:
+def create_memory_queue() -> TaskQueue:
     """Create InMemory TaskQueue using factory."""
     try:
         # Create dummy ExecutionContext
