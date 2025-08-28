@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, Dict, Optional, Type, TypeVar, Union
 
 from graflow.channels.base import Channel
-from graflow.channels.memory import MemoryChannel
+from graflow.channels.factory import ChannelFactory
 from graflow.channels.typed import TypedChannel
 from graflow.coordination.executor import GroupExecutor
 from graflow.core.cycle import CycleController
@@ -132,9 +132,10 @@ class ExecutionContext:
         default_max_cycles: int = 10,
         default_max_retries: int = 3,
         steps: int = 0,
-        # Phase 1: Optional parameters for TaskQueue integration
+        # Backend configuration
         queue_backend: Union[QueueBackend, str] = QueueBackend.IN_MEMORY,
-        queue_config: Optional[Dict[str, Any]] = None
+        channel_backend: str = "memory",
+        config: Optional[Dict[str, Any]] = None
     ):
         """Initialize ExecutionContext with configurable queue backend."""
         session_id = str(uuid.uuid4().int)
@@ -146,20 +147,30 @@ class ExecutionContext:
         self.steps = steps
         self.executed = []
 
-        queue_config = queue_config or {}
+        # Use single config for both queue and channel
+        config = config or {}
+
+        # Add start_node to config for queue
         if start_node:
-            queue_config['start_node'] = start_node
+            config = {**config, 'start_node': start_node}
 
         # Phase 1: Abstract TaskQueue implementation
         if isinstance(queue_backend, str):
             queue_backend = QueueBackend(queue_backend)
 
         self.task_queue: TaskQueue = TaskQueueFactory.create(
-            queue_backend, self, **queue_config
+            queue_backend, self, **config
         )
 
         self.cycle_controller = CycleController(default_max_cycles)
-        self.channel = MemoryChannel(session_id) # Use session_id for unique channel name
+
+        # Create channel using factory with same config
+        self.channel = ChannelFactory.create_channel(
+            backend=channel_backend,
+            name=session_id,
+            **config
+        )
+
         self._function_manager = TaskFunctionManager()
 
         # Task execution context management
@@ -176,8 +187,15 @@ class ExecutionContext:
     def create(cls, graph: TaskGraph, start_node: str, max_steps: int = 10,
                default_max_cycles: int = 10, default_max_retries: int = 3,
                queue_backend: Union[QueueBackend, str] = QueueBackend.IN_MEMORY,
-               queue_config: Optional[Dict[str, Any]] = None) -> ExecutionContext:
-        """Create a new execution context."""
+               channel_backend: str = "memory",
+               config: Optional[Dict[str, Any]] = None) -> ExecutionContext:
+        """Create a new execution context with configurable queue and channel backends.
+
+        Args:
+            queue_backend: Backend for task queue (default: IN_MEMORY)
+            channel_backend: Backend for inter-task communication (default: memory)
+            config: Configuration applied to both queue and channel (e.g., redis_client, key_prefix)
+        """
         return cls(
             graph=graph,
             start_node=start_node,
@@ -185,7 +203,8 @@ class ExecutionContext:
             default_max_cycles=default_max_cycles,
             default_max_retries=default_max_retries,
             queue_backend=queue_backend,
-            queue_config=queue_config,
+            channel_backend=channel_backend,
+            config=config,
         )
 
     @property
