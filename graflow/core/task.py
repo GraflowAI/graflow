@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, List
 
 from graflow.coordination.executor import GroupExecutor
 from graflow.coordination.task_spec import TaskSpec
@@ -135,7 +135,7 @@ class ParallelGroup(Executable):
         context = self.get_execution_context()
         executor = context.group_executor or GroupExecutor()
 
-        task_specs = []
+        task_specs: List[TaskSpec] = []
 
         for task in self.tasks:
             # Set execution context for each task
@@ -154,7 +154,7 @@ class ParallelGroup(Executable):
 
             task_specs.append(TaskSpec(task.task_id, context, task_func))
 
-        executor.execute_parallel_group(self.task_id, task_specs)
+        executor.execute_parallel_group(self.task_id, task_specs, context)
 
     def __rshift__(self, other: Executable) -> Executable:
         """Create dependency from all tasks in parallel group to other."""
