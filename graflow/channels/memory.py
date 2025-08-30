@@ -11,7 +11,7 @@ from graflow.channels.base import Channel
 class MemoryChannel(Channel):
     """Memory-based channel implementation for inter-task communication."""
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, **kwargs):
         """Initialize memory channel."""
         super().__init__(name)
         self.data: Dict[str, Any] = {}
