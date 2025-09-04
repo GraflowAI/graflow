@@ -21,7 +21,7 @@ from graflow.queue.base import TaskQueue, TaskSpec
 from graflow.queue.factory import QueueBackend, TaskQueueFactory
 
 if TYPE_CHECKING:
-    from .task import Executable
+    from graflow.core.task import Executable
 
 T = TypeVar('T')
 
