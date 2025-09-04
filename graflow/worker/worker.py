@@ -8,7 +8,8 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from typing import Any, Dict, Optional, Set
 
-from graflow.queue.base import TaskQueue
+from graflow.exceptions import GraflowRuntimeError
+from graflow.queue.base import TaskQueue, TaskSpec
 from graflow.worker.handler import TaskHandler
 
 logger = logging.getLogger(__name__)
@@ -194,7 +195,7 @@ class TaskWorker:
 
         logger.info(f"Worker loop finished: {self.worker_id}")
 
-    def _submit_task(self, task_spec: Any) -> None:
+    def _submit_task(self, task_spec: TaskSpec) -> None:
         """Submit task for processing in thread pool.
 
         Args:
@@ -218,7 +219,7 @@ class TaskWorker:
 
         logger.debug(f"Task submitted: {task_id}")
 
-    def _process_task_wrapper(self, task_spec: Any) -> Dict[str, Any]:
+    def _process_task_wrapper(self, task_spec: TaskSpec) -> Dict[str, Any]:
         """Wrapper for task processing with timeout and error handling.
 
         Args:
@@ -232,9 +233,9 @@ class TaskWorker:
 
         try:
             # Resolve task from TaskSpec
-            task = self._resolve_task(task_spec)
+            task = task_spec.get_function()
             if task is None:
-                raise RuntimeError(f"Could not resolve task from spec: {task_id}")
+                raise GraflowRuntimeError(f"Could not resolve task from spec: {task_id}")
 
             # Execute task using handler
             success = self.handler.process_task(task)
@@ -305,33 +306,6 @@ class TaskWorker:
         except Exception as e:
             logger.error(f"Error processing task completion for {task_id}: {e}")
             self._update_metrics(False, 0.0)
-
-    def _resolve_task(self, task_spec: Any) -> Optional[Any]:
-        """Resolve a Task object from TaskSpec.
-
-        This is a simplified implementation. In a real system,
-        this would use the execution context and graph to resolve the task.
-
-        Args:
-            task_spec: TaskSpec object
-
-        Returns:
-            Task object or None if resolution failed
-        """
-        # For now, create a simple mock task that can be executed
-        # In a real implementation, this would resolve from the execution context
-
-        class MockTask:
-            def __init__(self, task_id: str):
-                self.task_id = task_id
-
-            def __call__(self):
-                # Simple mock execution
-                logger.debug(f"Executing mock task {self.task_id}")
-                return f"Result for {self.task_id}"
-
-        task_id = getattr(task_spec, 'task_id', 'unknown')
-        return MockTask(task_id)
 
     def _update_metrics(self, success: bool, duration: float, is_timeout: bool = False) -> None:
         """Update worker metrics.

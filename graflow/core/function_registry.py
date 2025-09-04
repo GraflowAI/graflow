@@ -4,11 +4,13 @@ This module provides function serialization, registration, and resolution
 capabilities for executing tasks across distributed workers.
 """
 
+from __future__ import annotations
+
 import base64
 import importlib
 import inspect
 import logging
-from typing import Any, Callable, ClassVar, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Any, ClassVar, Dict, Optional, Tuple
 
 try:
     import cloudpickle
@@ -16,6 +18,9 @@ except ImportError:
     import pickle as cloudpickle
 
 from graflow.exceptions import GraflowRuntimeError
+
+if TYPE_CHECKING:
+    from graflow.core.task import Executable
 
 logger = logging.getLogger(__name__)
 
@@ -28,10 +33,10 @@ class FunctionResolutionError(GraflowRuntimeError):
 class FunctionRegistry:
     """Global function registry for fallback resolution."""
 
-    _registry: ClassVar[Dict[str, Callable[..., Any]]] = {}
+    _registry: ClassVar[Dict[str, Executable]] = {}
 
     @classmethod
-    def register(cls, name: str, func: Callable[..., Any]) -> None:
+    def register(cls, name: str, func: Executable) -> None:
         """Register function in global registry.
 
         Args:
@@ -42,7 +47,7 @@ class FunctionRegistry:
         logger.debug(f"Registered function: {name}")
 
     @classmethod
-    def get(cls, name: str) -> Optional[Callable[..., Any]]:
+    def get(cls, name: str) -> Optional[Executable]:
         """Get function from registry.
 
         Args:
@@ -68,7 +73,7 @@ class FunctionSerializer:
     """Handles function serialization and deserialization."""
 
     @staticmethod
-    def serialize_function(func: Callable[..., Any],
+    def serialize_function(func: Executable,
                           strategy: str = "reference") -> Dict[str, Any]:
         """Serialize function using specified strategy.
 
@@ -92,7 +97,7 @@ class FunctionSerializer:
             raise ValueError(f"Unsupported serialization strategy: {strategy}")
 
     @staticmethod
-    def _serialize_reference(func: Callable[..., Any]) -> Dict[str, Any]:
+    def _serialize_reference(func: Executable) -> Dict[str, Any]:
         """Serialize function as importable reference."""
         return {
             "strategy": "reference",
@@ -102,7 +107,7 @@ class FunctionSerializer:
         }
 
     @staticmethod
-    def _serialize_source(func: Callable[..., Any]) -> Dict[str, Any]:
+    def _serialize_source(func: Executable) -> Dict[str, Any]:
         """Serialize function as source code."""
         try:
             source_code = inspect.getsource(func)
@@ -117,7 +122,7 @@ class FunctionSerializer:
             raise FunctionResolutionError(f"Failed to get source for function: {e}") from e
 
     @staticmethod
-    def _serialize_pickle(func: Callable[..., Any]) -> Dict[str, Any]:
+    def _serialize_pickle(func: Executable) -> Dict[str, Any]:
         """Serialize function using cloudpickle."""
         try:
             pickled_data = cloudpickle.dumps(func)
@@ -132,7 +137,7 @@ class FunctionSerializer:
             raise FunctionResolutionError(f"Failed to pickle function: {e}") from e
 
     @staticmethod
-    def deserialize_function(func_data: Dict[str, Any]) -> Tuple[Callable[..., Any], str]:
+    def deserialize_function(func_data: Dict[str, Any]) -> Tuple[Executable, str]:
         """Deserialize function with fallback strategy.
 
         Strategy resolution order:
@@ -183,7 +188,7 @@ class FunctionSerializer:
         raise FunctionResolutionError(f"Cannot resolve function: {func_ref}")
 
     @staticmethod
-    def _deserialize_reference(func_data: Dict[str, Any]) -> Tuple[Callable[..., Any], str]:
+    def _deserialize_reference(func_data: Dict[str, Any]) -> Tuple[Executable, str]:
         """Deserialize function from importable reference."""
         module_name = func_data["module"]
         func_name = func_data["name"]
@@ -195,37 +200,48 @@ class FunctionSerializer:
         return func, "import"
 
     @staticmethod
-    def _deserialize_source(func_data: Dict[str, Any]) -> Tuple[Callable[..., Any], str]:
+    def _deserialize_source(func_data: Dict[str, Any]) -> Tuple[Executable, str]:
         """Deserialize function from source code."""
         source_code = func_data["source"]
         func_name = func_data["name"]
+        func_module = func_data.get("module", "__main__")
 
-        # Create a temporary namespace to execute the source code
-        namespace = {}
+        # Create temporary module namespace
+        module_namespace = {"__name__": func_module}
+
+        # Import commonly used modules into the namespace
+        try:
+            import builtins
+            module_namespace.update(vars(builtins))
+        except ImportError:
+            pass
 
         try:
-            # Execute the source code in the namespace
-            exec(source_code, namespace)
+            # Execute the source code in the temporary namespace
+            exec(source_code, module_namespace)
 
-            # Get the function from the namespace
-            if func_name in namespace:
-                func = namespace[func_name]
-            else:
-                # Look for any callable in the namespace
-                callables = [v for v in namespace.values() if callable(v) and hasattr(v, '__name__')]
-                if callables:
-                    func = callables[0]  # Take the first callable
-                else:
-                    raise FunctionResolutionError("No callable function found in source code")
+            # Find the function by name
+            if func_name not in module_namespace:
+                raise FunctionResolutionError(f"Function {func_name} not found in source")
 
-            logger.debug(f"Function recreated from source: {func_name}")
+            func = module_namespace[func_name]
+
+            # Check if it's callable instead of isinstance check
+            if not callable(func):
+                raise FunctionResolutionError(f"Deserialized object is not callable: {type(func)}")
+
+            # For stricter checking, ensure it has the expected Executable interface
+            from graflow.core.task import Executable
+            if not isinstance(func, Executable):
+                raise FunctionResolutionError(f"Deserialized object is not an Executable: {type(func)}")
+
             return func, "source"
 
         except Exception as e:
             raise FunctionResolutionError(f"Failed to execute source code for {func_name}: {e}") from e
 
     @staticmethod
-    def _deserialize_pickle(func_data: Dict[str, Any]) -> Tuple[Callable[..., Any], str]:
+    def _deserialize_pickle(func_data: Dict[str, Any]) -> Tuple[Executable, str]:
         """Deserialize function from cloudpickle data."""
         encoded_data = func_data["data"]
         pickled_data = base64.b64decode(encoded_data.encode('utf-8'))
@@ -236,7 +252,7 @@ class FunctionSerializer:
         return func, "pickle"
 
     @staticmethod
-    def try_deserialize_function(func_data: Dict[str, Any]) -> Tuple[Optional[Callable[..., Any]], str]:
+    def try_deserialize_function(func_data: Dict[str, Any]) -> Tuple[Optional[Executable], str]:
         """Safe wrapper that returns None instead of raising exception.
 
         Args:
@@ -265,7 +281,7 @@ class TaskFunctionManager:
         self.default_strategy = default_strategy
         self.serializer = FunctionSerializer()
 
-    def register_task_function(self, task_id: str, func: Callable[..., Any]) -> None:
+    def register_task_function(self, task_id: str, func: Executable) -> None:
         """Register a task function for later resolution.
 
         Args:
@@ -280,7 +296,7 @@ class TaskFunctionManager:
             func_ref = f"{func.__module__}.{func.__name__}"
             FunctionRegistry.register(func_ref, func)
 
-    def serialize_task_function(self, func: Callable[..., Any],
+    def serialize_task_function(self, func: Executable,
                                strategy: Optional[str] = None) -> Dict[str, Any]:
         """Serialize task function for storage.
 
@@ -294,7 +310,7 @@ class TaskFunctionManager:
         strategy = strategy or self.default_strategy
         return self.serializer.serialize_function(func, strategy)
 
-    def resolve_task_function(self, func_data: Dict[str, Any]) -> Callable[..., Any]:
+    def resolve_task_function(self, func_data: Dict[str, Any]) -> Executable:
         """Resolve task function from serialized data.
 
         Args:
@@ -310,7 +326,7 @@ class TaskFunctionManager:
         logger.debug(f"Resolved function via {method}")
         return func
 
-    def get_registered_functions(self) -> Dict[str, Callable[..., Any]]:
+    def get_registered_functions(self) -> Dict[str, Executable]:
         """Get all registered functions."""
         return FunctionRegistry._registry.copy()
 
@@ -319,14 +335,14 @@ class TaskFunctionManager:
 default_function_manager = TaskFunctionManager()
 
 # Convenience functions
-def register_task_function(task_id: str, func: Callable[..., Any]) -> None:
+def register_task_function(task_id: str, func: Executable) -> None:
     """Register a task function globally."""
     default_function_manager.register_task_function(task_id, func)
 
-def serialize_function(func: Callable[..., Any], strategy: str = "reference") -> Dict[str, Any]:
+def serialize_function(func: Executable, strategy: str = "reference") -> Dict[str, Any]:
     """Serialize function globally."""
     return default_function_manager.serialize_task_function(func, strategy)
 
-def resolve_function(func_data: Dict[str, Any]) -> Callable[..., Any]:
+def resolve_function(func_data: Dict[str, Any]) -> Executable:
     """Resolve function globally."""
     return default_function_manager.resolve_task_function(func_data)

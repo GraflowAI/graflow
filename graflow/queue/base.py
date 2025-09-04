@@ -4,7 +4,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 if TYPE_CHECKING:
     from graflow.core.context import ExecutionContext
@@ -40,23 +40,7 @@ class TaskSpec:
     @property
     def function_data(self) -> Dict[str, Any]:
         """Get function_data by serializing executable's function."""
-        func = None
-
-        # Import classes locally to avoid circular imports
-        from graflow.core.task import TaskWrapper
-
-        # Extract function based on executable type
-        if isinstance(self.executable, TaskWrapper):
-            func = self.executable.func
-        elif hasattr(self.executable, 'run') and callable(self.executable.run):
-            # For Task and other Executable types, use the run method
-            func = self.executable.run
-
-        if func is not None:
-            return self.execution_context.function_manager.serialize_task_function(func, self.strategy)
-        else:
-            # If no function can be extracted from executable, raise an error
-            raise ValueError(f"No serializable function found in executable '{self.executable}' for task_id '{self.task_id}'")
+        return self.execution_context.function_manager.serialize_task_function(self.executable, self.strategy)
 
     def __lt__(self, other: 'TaskSpec') -> bool:
         """For queue sorting (FIFO: older first)."""
@@ -72,7 +56,7 @@ class TaskSpec:
         self.last_error = error_message
         self.status = TaskStatus.READY  # Reset to ready for retry
 
-    def get_function(self) -> Optional[Callable[..., Any]]:
+    def get_function(self) -> Optional['Executable']:
         """Get function for this task by deserializing stored data.
 
         Returns:
