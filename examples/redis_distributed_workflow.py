@@ -29,7 +29,7 @@ from graflow.core.decorators import task
 from graflow.core.workflow import workflow
 from graflow.queue.factory import QueueBackend
 from graflow.queue.redis import RedisTaskQueue
-from graflow.worker.handler import InProcessTaskExecutor
+from graflow.worker.handler import TaskHandler
 from graflow.worker.worker import TaskWorker
 
 try:
@@ -542,7 +542,7 @@ def create_task_registry():
     }
 
 
-class WorkflowTaskHandler(InProcessTaskExecutor):
+class WorkflowTaskHandler(TaskHandler):
     """Custom task handler that can execute workflow tasks."""
 
     def __init__(self, task_registry: dict, execution_context: ExecutionContext):
