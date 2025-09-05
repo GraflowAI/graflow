@@ -40,13 +40,13 @@ class WorkflowEngine:
                 break
 
             # Check if task exists in graph
-            graph = context.graph.nx_graph()
+            graph = context.graph
             if task_id not in graph.nodes:
                 print(f"Warning: Node {task_id} not found in graph")
                 continue
 
             # Execute the task
-            task = graph.nodes[task_id]["task"]
+            task = graph.get_node(task_id)
 
             # Execute task with proper context management
             try:
@@ -67,7 +67,7 @@ class WorkflowEngine:
             else:
                 # Add successor nodes to queue
                 for succ in graph.successors(task_id):
-                    succ_task = graph.nodes[succ]["task"]
+                    succ_task = graph.get_node(succ)
                     context.add_to_queue(succ_task)
 
         print(f"Execution completed after {context.steps} steps")
