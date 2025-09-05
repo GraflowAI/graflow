@@ -3,7 +3,8 @@
 import logging
 import time
 from abc import ABC, abstractmethod
-from typing import Any
+
+from graflow.core.task import Executable
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +12,7 @@ logger = logging.getLogger(__name__)
 class TaskHandler(ABC):
     """Abstract base class for task processing handlers."""
 
-    def process_task(self, task: Any) -> bool:
+    def process_task(self, task: Executable) -> bool:
         """Process a task and return success status.
 
         Args:
@@ -37,7 +38,7 @@ class TaskHandler(ABC):
             return False
 
     @abstractmethod
-    def _process_task(self, task: Any) -> bool:
+    def _process_task(self, task: Executable) -> bool:
         """Custom task processing implementation point.
 
         Args:
@@ -48,7 +49,7 @@ class TaskHandler(ABC):
         """
         pass
 
-    def on_task_success(self, task: Any, duration: float) -> None:
+    def on_task_success(self, task: Executable, duration: float) -> None:
         """Callback for successful task completion.
 
         Args:
@@ -57,7 +58,7 @@ class TaskHandler(ABC):
         """
         logger.info(f"Task {getattr(task, 'task_id', 'unknown')} succeeded after {duration:.3f}s")
 
-    def on_task_failure(self, task: Any, error: Exception, duration: float) -> None:
+    def on_task_failure(self, task: Executable, error: Exception, duration: float) -> None:
         """Callback for task failure.
 
         Args:
@@ -69,7 +70,7 @@ class TaskHandler(ABC):
         error_msg = str(error) if error else "Unknown error"
         logger.error(f"Task {task_id} failed after {duration:.3f}s: {error_msg}")
 
-    def on_task_timeout(self, task: Any, duration: float) -> None:
+    def on_task_timeout(self, task: Executable, duration: float) -> None:
         """Callback for task timeout.
 
         Args:
@@ -83,7 +84,7 @@ class TaskHandler(ABC):
 class InProcessTaskExecutor(TaskHandler):
     """Task executor that runs tasks directly in the worker process."""
 
-    def _process_task(self, task: Any) -> bool:
+    def _process_task(self, task: Executable) -> bool:
         """Execute task directly in the current process.
 
         Args:
