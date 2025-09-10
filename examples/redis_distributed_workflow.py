@@ -26,6 +26,7 @@ from graflow.coordination.coordinator import CoordinationBackend
 from graflow.coordination.executor import GroupExecutor
 from graflow.core.context import ExecutionContext, TaskExecutionContext
 from graflow.core.decorators import task
+from graflow.core.task import Executable
 from graflow.core.workflow import workflow
 from graflow.queue.factory import QueueBackend
 from graflow.queue.redis import RedisTaskQueue
@@ -526,36 +527,19 @@ def perform_quality_check(ctx: TaskExecutionContext) -> QualityCheckResult:
     return result
 
 
-def create_task_registry():
-    """Create task registry mapping task IDs to actual task functions."""
-    return {
-        "extract_database": extract_database_data,
-        "extract_api": extract_api_data,
-        "extract_files": extract_files_data,
-        "extract_stream": extract_stream_data,
-        "transform_database": transform_database_data,
-        "transform_api": transform_api_data,
-        "transform_files": transform_files_data,
-        "transform_stream": transform_stream_data,
-        "aggregate_data": aggregate_all_data,
-        "quality_check": perform_quality_check
-    }
-
-
 class WorkflowTaskHandler(TaskHandler):
     """Custom task handler that can execute workflow tasks."""
 
-    def __init__(self, task_registry: dict, execution_context: ExecutionContext):
+    def __init__(self, execution_context: ExecutionContext):
         """Initialize with task registry and execution context.
 
         Args:
             task_registry: Mapping of task_id to task functions
             execution_context: ExecutionContext for task execution
         """
-        self.task_registry = task_registry
         self.execution_context = execution_context
 
-    def _process_task(self, task) -> bool:
+    def _process_task(self, task: Executable) -> bool:
         """Execute task from TaskSpec using registered functions.
 
         Args:
@@ -565,11 +549,6 @@ class WorkflowTaskHandler(TaskHandler):
             bool: True if task completed successfully, False otherwise
         """
         task_id = task.task_id
-
-        if task_id not in self.task_registry:
-            raise ValueError(f"Task {task_id} not found in task registry")
-
-        task_func = self.task_registry[task_id]
 
         try:
             # Create task execution context
@@ -607,9 +586,6 @@ def main():
 
     try:
         with redis_docker_container() as redis_client:
-            # Create task registry for use by workers later
-            task_registry = create_task_registry()
-
             # TaskWorkers will be set up after ExecutionContext configures Redis backends
             print("🔄 TaskWorkers will be set up after workflow execution context is ready...")
 
@@ -682,7 +658,7 @@ def main():
 
                 # Now start TaskWorker processes with the proper queue
                 print("\n🔄 Starting TaskWorker processes...")
-                task_handler = WorkflowTaskHandler(task_registry, exec_context)
+                task_handler = WorkflowTaskHandler(exec_context)
 
                 for i in range(3):  # Start 3 workers
                     worker = TaskWorker(
