@@ -554,10 +554,11 @@ class TestIntegrationScenarios:
     def test_end_to_end_task_serialization(self):
         """Test complete end-to-end task serialization workflow."""
         # Define a complex task function
+        @task
         def complex_task(data):
             result = []
             for item in data:
-                if isinstance(item, (int, float)):
+                if isinstance(item, int | float):
                     result.append(item * 2)
                 else:
                     result.append(str(item).upper())
