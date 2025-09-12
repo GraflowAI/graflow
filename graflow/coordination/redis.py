@@ -1,11 +1,14 @@
 """Redis-based coordination backend for distributed parallel execution."""
 
+import json
 import threading
 import time
-from typing import Any, Callable, Dict, List
+from typing import TYPE_CHECKING, Any, Callable, Dict, List
+
+if TYPE_CHECKING:
+    from graflow.core.task import Executable
 
 from graflow.coordination.coordinator import TaskCoordinator
-from graflow.coordination.task_spec import TaskSpec
 from graflow.queue.base import TaskSpec as QueueTaskSpec
 from graflow.queue.redis import RedisTaskQueue
 
@@ -24,7 +27,7 @@ class RedisCoordinator(TaskCoordinator):
         self.active_barriers: Dict[str, Dict[str, Any]] = {}
         self._lock = threading.Lock()
 
-    def execute_group(self, group_id: str, tasks: List[TaskSpec]) -> None:
+    def execute_group(self, group_id: str, tasks: List['Executable']) -> None:
         """Execute parallel group with barrier synchronization."""
         barrier_id = self.create_barrier(group_id, len(tasks))
         try:
@@ -100,20 +103,18 @@ class RedisCoordinator(TaskCoordinator):
             if current_count >= barrier_info["expected"]:
                 self.redis.publish(barrier_info["channel"], "complete")
 
-    def dispatch_task(self, task_spec: TaskSpec, group_id: str) -> None:
+    def dispatch_task(self, executable: 'Executable', group_id: str) -> None:
         """Dispatch task to Redis queue for worker processing."""
-        # Convert coordination TaskSpec to queue TaskSpec format
-        queue_task_spec = self._convert_to_queue_task_spec(task_spec)
+        # Create queue TaskSpec directly from Executable
+        queue_task_spec = QueueTaskSpec(
+            executable=executable,
+            execution_context=executable.get_execution_context(),
+        )
+        queue_task_spec.group_id = group_id  # Set group_id for barrier synchronization
 
         # Use RedisTaskQueue's enqueue method
         self.task_queue.enqueue(queue_task_spec)
 
-    def _convert_to_queue_task_spec(self, task_spec: TaskSpec) -> QueueTaskSpec:
-        """Convert coordination TaskSpec to queue TaskSpec format."""
-        return QueueTaskSpec(
-            task_id=task_spec.task_id,
-            execution_context=task_spec.execution_context,
-        )
 
     def cleanup_barrier(self, barrier_id: str) -> None:
         """Clean up barrier resources."""
@@ -123,6 +124,11 @@ class RedisCoordinator(TaskCoordinator):
             # Clean up Redis keys
             self.redis.delete(barrier_info["key"])
             self.redis.delete(f"{barrier_info['key']}:expected")
+
+            # Clean up task results
+            cleanup_group_results(
+                self.redis, self.task_queue.key_prefix, barrier_id
+            )
 
             # Remove from active barriers
             with self._lock:
@@ -147,3 +153,70 @@ class RedisCoordinator(TaskCoordinator):
     def clear_queue(self, group_id: str) -> None:
         """Clear all tasks from a group's queue."""
         self.task_queue.cleanup()
+
+
+def record_task_completion(redis_client, key_prefix: str, task_id: str, 
+                          group_id: str, success: bool, result=None):
+    """Record task completion to Redis and trigger barrier signaling (independent function).
+    
+    Args:
+        redis_client: Redis client instance
+        key_prefix: Key prefix for Redis keys
+        task_id: Task identifier
+        group_id: Group ID for barrier synchronization
+        success: Whether task succeeded
+        result: Task execution result
+    """
+    # Record task result
+    task_result = {
+        "task_id": task_id,
+        "success": success,
+        "timestamp": time.time(),
+        "result": result
+    }
+    
+    results_key = f"{key_prefix}:task_results:{group_id}"
+    redis_client.hset(results_key, task_id, json.dumps(task_result))
+    
+    # Trigger barrier signaling using existing pub/sub mechanism
+    barrier_key = f"barrier:{group_id}"
+    current_count = redis_client.incr(barrier_key)
+    
+    # Check if barrier is complete
+    expected_key = f"{barrier_key}:expected"
+    expected_count = redis_client.get(expected_key)
+    
+    if expected_count and current_count >= int(expected_count):
+        # All tasks completed - publish barrier completion
+        completion_channel = f"barrier_done:{group_id}"
+        redis_client.publish(completion_channel, "complete")
+
+
+def count_successful_tasks(redis_client, key_prefix: str, group_id: str) -> int:
+    """Count successful tasks in a group (independent function).
+    
+    Args:
+        redis_client: Redis client instance
+        key_prefix: Key prefix for Redis keys
+        group_id: Group ID to count tasks for
+        
+    Returns:
+        Number of successful tasks
+    """
+    results_key = f"{key_prefix}:task_results:{group_id}"
+    task_results = redis_client.hgetall(results_key)
+    
+    return sum(1 for result_json in task_results.values()
+              if json.loads(result_json).get("success", False))
+
+
+def cleanup_group_results(redis_client, key_prefix: str, group_id: str):
+    """Clean up group task results (independent function).
+    
+    Args:
+        redis_client: Redis client instance
+        key_prefix: Key prefix for Redis keys
+        group_id: Group ID to clean up
+    """
+    results_key = f"{key_prefix}:task_results:{group_id}"
+    redis_client.delete(results_key)

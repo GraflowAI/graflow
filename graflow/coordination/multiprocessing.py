@@ -1,10 +1,12 @@
 """Threading-based coordination backend for local parallel execution."""
 
 import concurrent.futures
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from graflow.coordination.coordinator import TaskCoordinator
-from graflow.coordination.task_spec import TaskSpec
+
+if TYPE_CHECKING:
+    from graflow.core.task import Executable
 
 
 class MultiprocessingCoordinator(TaskCoordinator):
@@ -24,7 +26,7 @@ class MultiprocessingCoordinator(TaskCoordinator):
                 thread_name_prefix="MultiprocessingCoordinator"
             )
 
-    def execute_group(self, group_id: str, tasks: List[TaskSpec]) -> None:
+    def execute_group(self, group_id: str, tasks: List['Executable']) -> None:
         """Execute parallel group using threading."""
         self._ensure_executor()
         assert self._executor is not None  # Type checker hint
@@ -36,7 +38,7 @@ class MultiprocessingCoordinator(TaskCoordinator):
         futures = []
         for task in tasks:
             print(f"  - Executing with threading: {task.task_id}")
-            future = self._executor.submit(task.func, *task.args, **task.kwargs)
+            future = self._executor.submit(task.run)
             futures.append(future)
 
         # Wait for all tasks to complete

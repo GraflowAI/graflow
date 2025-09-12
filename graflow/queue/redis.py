@@ -1,7 +1,7 @@
 """Redis distributed task queue implementation."""
 
 import json
-from typing import Optional, cast
+from typing import Any, Optional, cast
 
 try:
     import redis
@@ -63,7 +63,9 @@ class RedisTaskQueue(TaskQueue):
             # Phase 3: Advanced features
             'retry_count': task_spec.retry_count,
             'max_retries': task_spec.max_retries,
-            'last_error': task_spec.last_error
+            'last_error': task_spec.last_error,
+            # Phase 2: group_id support
+            'group_id': getattr(task_spec, 'group_id', None)
         }
         self.redis_client.hset(self.specs_key, task_spec.task_id, json.dumps(spec_data))
         self._task_specs[task_spec.task_id] = task_spec
@@ -126,6 +128,10 @@ class RedisTaskQueue(TaskQueue):
             max_retries=spec_data.get('max_retries', 3),
             last_error=spec_data.get('last_error')
         )
+        # Phase 2: Restore group_id
+        group_id = spec_data.get('group_id')
+        if group_id:
+            task_spec.group_id = group_id
         task_spec.status = TaskStatus.RUNNING
         self._task_specs[task_id] = task_spec
 
@@ -152,6 +158,24 @@ class RedisTaskQueue(TaskQueue):
         """Get list of node IDs in queue order."""
         queue_items = cast(list, self.redis_client.lrange(self.queue_key, 0, -1))
         return [str(item) for item in queue_items]
+
+    def notify_task_completion(self, task_id: str, success: bool, 
+                             group_id: Optional[str] = None,
+                             result: Optional[Any] = None) -> None:
+        """Notify task completion to redis.py functions.
+        
+        Args:
+            task_id: Task identifier
+            success: Whether task succeeded
+            group_id: Group ID for barrier synchronization
+            result: Task execution result
+        """
+        if group_id:
+            from graflow.coordination.redis import record_task_completion
+            record_task_completion(
+                self.redis_client, self.key_prefix, 
+                task_id, group_id, success, result
+            )
 
     def cleanup(self) -> None:
         """Clean up Redis keys when session ends."""

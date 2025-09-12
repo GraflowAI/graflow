@@ -295,6 +295,13 @@ class TaskWorker:
             # Update metrics
             self._update_metrics(success, duration, is_timeout)
 
+            # Notify task completion via TaskQueue
+            group_id = getattr(task_spec, 'group_id', None)
+            if group_id:
+                self.queue.notify_task_completion(
+                    task_id, success, group_id, result.get('result')
+                )
+
             if success:
                 logger.info(f"Task {task_id} completed successfully")
             elif is_timeout:

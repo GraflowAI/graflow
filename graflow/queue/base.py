@@ -31,6 +31,8 @@ class TaskSpec:
     retry_count: int = 0
     max_retries: int = 3
     last_error: Optional[str] = None
+    # Phase 2: Barrier synchronization support
+    group_id: Optional[str] = None
 
     @property
     def task_id(self) -> str:
@@ -172,3 +174,19 @@ class TaskQueue(ABC):
             'retries': 0,
             'failures': 0
         }
+
+    def notify_task_completion(self, task_id: str, success: bool, 
+                             group_id: Optional[str] = None,
+                             result: Optional[Any] = None) -> None:
+        """Notify task completion for barrier synchronization.
+        
+        Default implementation does nothing. Subclasses can override
+        to implement barrier synchronization logic.
+        
+        Args:
+            task_id: Task identifier
+            success: Whether task succeeded
+            group_id: Group ID for barrier synchronization
+            result: Task execution result
+        """
+        pass

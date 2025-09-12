@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, List
+from typing import Any
 
 from graflow.coordination.executor import GroupExecutor
-from graflow.coordination.task_spec import TaskSpec
 from graflow.core.context import ExecutionContext
 from graflow.exceptions import GraflowRuntimeError
 
@@ -135,26 +134,11 @@ class ParallelGroup(Executable):
         context = self.get_execution_context()
         executor = context.group_executor or GroupExecutor()
 
-        task_specs: List[TaskSpec] = []
-
         for task in self.tasks:
             # Set execution context for each task
             task.set_execution_context(context)
 
-            # Create appropriate execution function based on task type
-            if isinstance(task, TaskWrapper) and task.inject_context:
-                def create_context_func(t=task):
-                    def context_func():
-                        with context.executing_task(t) as task_ctx:
-                            return t.func(task_ctx)
-                    return context_func
-                task_func = create_context_func()
-            else:
-                task_func = task.run
-
-            task_specs.append(TaskSpec(task.task_id, context, task_func))
-
-        executor.execute_parallel_group(self.task_id, task_specs, context)
+        executor.execute_parallel_group(self.task_id, self.tasks, context)
 
     def __rshift__(self, other: Executable) -> Executable:
         """Create dependency from all tasks in parallel group to other."""
