@@ -155,10 +155,10 @@ class RedisCoordinator(TaskCoordinator):
         self.task_queue.cleanup()
 
 
-def record_task_completion(redis_client, key_prefix: str, task_id: str, 
+def record_task_completion(redis_client, key_prefix: str, task_id: str,
                           group_id: str, success: bool, result=None):
     """Record task completion to Redis and trigger barrier signaling (independent function).
-    
+
     Args:
         redis_client: Redis client instance
         key_prefix: Key prefix for Redis keys
@@ -174,18 +174,18 @@ def record_task_completion(redis_client, key_prefix: str, task_id: str,
         "timestamp": time.time(),
         "result": result
     }
-    
+
     results_key = f"{key_prefix}:task_results:{group_id}"
     redis_client.hset(results_key, task_id, json.dumps(task_result))
-    
+
     # Trigger barrier signaling using existing pub/sub mechanism
     barrier_key = f"barrier:{group_id}"
     current_count = redis_client.incr(barrier_key)
-    
+
     # Check if barrier is complete
     expected_key = f"{barrier_key}:expected"
     expected_count = redis_client.get(expected_key)
-    
+
     if expected_count and current_count >= int(expected_count):
         # All tasks completed - publish barrier completion
         completion_channel = f"barrier_done:{group_id}"
@@ -194,25 +194,25 @@ def record_task_completion(redis_client, key_prefix: str, task_id: str,
 
 def count_successful_tasks(redis_client, key_prefix: str, group_id: str) -> int:
     """Count successful tasks in a group (independent function).
-    
+
     Args:
         redis_client: Redis client instance
         key_prefix: Key prefix for Redis keys
         group_id: Group ID to count tasks for
-        
+
     Returns:
         Number of successful tasks
     """
     results_key = f"{key_prefix}:task_results:{group_id}"
     task_results = redis_client.hgetall(results_key)
-    
+
     return sum(1 for result_json in task_results.values()
               if json.loads(result_json).get("success", False))
 
 
 def cleanup_group_results(redis_client, key_prefix: str, group_id: str):
     """Clean up group task results (independent function).
-    
+
     Args:
         redis_client: Redis client instance
         key_prefix: Key prefix for Redis keys
