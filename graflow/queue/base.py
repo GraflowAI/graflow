@@ -175,14 +175,15 @@ class TaskQueue(ABC):
             'failures': 0
         }
 
-    def notify_task_completion(self, task_id: str, success: bool, 
+    @abstractmethod
+    def notify_task_completion(self, task_id: str, success: bool,
                              group_id: Optional[str] = None,
                              result: Optional[Any] = None) -> None:
         """Notify task completion for barrier synchronization.
-        
+
         Default implementation does nothing. Subclasses can override
         to implement barrier synchronization logic.
-        
+
         Args:
             task_id: Task identifier
             success: Whether task succeeded
