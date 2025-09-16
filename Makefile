@@ -41,6 +41,12 @@ install:
 install-dev:
 	uv sync --dev
 
+# Install extras (e.g., graphviz)
+install-extras:
+	export CFLAGS="-I $(brew --prefix graphviz)/include"
+	export LDFLAGS="-L $(brew --prefix graphviz)/lib"  
+	uv sync --all-extras
+
 # Run all checks (format, lint, test)
 check-all: format lint test
 
@@ -61,15 +67,16 @@ py:
 # Help
 help:
 	@echo "Available targets:"
-	@echo "  format     - Format code using ruff"
-	@echo "  lint       - Run linting with ruff and mypy"
-	@echo "  check      - Run type checking with mypy"
-	@echo "  test       - Run tests"
-	@echo "  test-cov   - Run tests with coverage"
-	@echo "  clean      - Clean up cache and build artifacts"
-	@echo "  install    - Install dependencies"
-	@echo "  install-dev - Install development dependencies"
-	@echo "  check-all  - Run format, lint, and test"
-	@echo "  fix        - Quick fix for common issues"
-	@echo "  py <file>  - Run Python file with proper environment (e.g., make py examples/simple_test.py)"
-	@echo "  help       - Show this help message"
+	@echo "  format         - Format code using ruff"
+	@echo "  lint           - Run linting with ruff and mypy"
+	@echo "  check          - Run type checking with mypy"
+	@echo "  test           - Run tests"
+	@echo "  test-cov       - Run tests with coverage"
+	@echo "  clean          - Clean up cache and build artifacts"
+	@echo "  install    	- Install dependencies"
+	@echo "  install-dev    - Install development dependencies"
+	@echo "  install-extras - Install extras (e.g., graphviz)"
+	@echo "  check-all      - Run format, lint, and test"
+	@echo "  fix            - Quick fix for common issues"
+	@echo "  py <file>      - Run Python file with proper environment (e.g., make py examples/simple_test.py)"
+	@echo "  help           - Show this help message"
