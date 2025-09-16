@@ -94,15 +94,6 @@ class RedisCoordinator(TaskCoordinator):
 
         return False
 
-    def signal_barrier(self, barrier_id: str) -> None:
-        """Signal barrier completion."""
-        if barrier_id in self.active_barriers:
-            barrier_info = self.active_barriers[barrier_id]
-            current_count = self.redis.incr(barrier_info["key"])
-
-            if current_count >= barrier_info["expected"]:
-                self.redis.publish(barrier_info["channel"], "complete")
-
     def dispatch_task(self, executable: 'Executable', group_id: str) -> None:
         """Dispatch task to Redis queue for worker processing."""
         # Create queue TaskSpec directly from Executable
