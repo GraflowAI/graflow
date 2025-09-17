@@ -125,6 +125,19 @@ class ParallelGroup(Executable):
         """Return the task_id of this parallel group."""
         return self._task_id
 
+    def set_group_name(self, name: str) -> ParallelGroup:
+        """Set the group name (task_id) for this parallel group."""
+        old_task_id = self._task_id
+
+        # Rename the node in the workflow context
+        from .workflow import current_workflow_context
+        current_context = current_workflow_context()
+        current_context.rename_node(old_task_id, name)
+
+        # Update local task_id
+        self._task_id = name
+        return self
+
     def __call__(self, *args, **kwargs) -> Any:
         """Allow direct function call on the parallel group."""
         return self.run()

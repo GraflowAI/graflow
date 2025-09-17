@@ -58,6 +58,15 @@ class WorkflowContext:
         """Add an edge between tasks in this workflow's graph."""
         self.graph.add_edge(from_node, to_node)
 
+    def rename_node(self, old_task_id: str, new_task_id: str) -> None:
+        """Rename a node in this workflow's graph.
+
+        Args:
+            old_task_id: Current task ID to rename
+            new_task_id: New task ID to assign
+        """
+        self.graph.rename_node(old_task_id, new_task_id)
+
     def set_group_executor(self, executor: GroupExecutor) -> None:
         """Set the group executor for parallel execution."""
         self._group_executor = executor

@@ -79,6 +79,26 @@ class TaskGraph:
         """Clear all nodes and edges from the graph."""
         self._graph.clear()
 
+    def rename_node(self, old_task_id: str, new_task_id: str) -> None:
+        """Rename a node in the graph.
+
+        Args:
+            old_task_id: Current task ID to rename
+            new_task_id: New task ID to assign
+
+        Raises:
+            KeyError: If old_task_id doesn't exist
+            ValueError: If new_task_id already exists
+        """
+        if old_task_id not in self._graph.nodes:
+            raise KeyError(f"Task {old_task_id} not found in graph")
+        if new_task_id in self._graph.nodes:
+            raise ValueError(f"Task {new_task_id} already exists in graph")
+
+        # Use NetworkX relabel_nodes to rename the node
+        mapping = {old_task_id: new_task_id}
+        nx.relabel_nodes(self._graph, mapping, copy=False)
+
     def __str__(self) -> str:
         """Return a string representation of the graph."""
         from graflow.utils.graph import draw_ascii
