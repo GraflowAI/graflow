@@ -175,7 +175,6 @@ class TaskQueue(ABC):
             'failures': 0
         }
 
-    @abstractmethod
     def notify_task_completion(self, task_id: str, success: bool,
                              group_id: Optional[str] = None,
                              result: Optional[Any] = None) -> None:
