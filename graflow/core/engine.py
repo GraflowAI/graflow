@@ -53,7 +53,6 @@ class WorkflowEngine:
                 with context.executing_task(task) as _ctx:
                     result = task.run()
                     context.set_result(task_id, result)
-                    context.mark_executed(task_id)
             except Exception as e:
                 context.set_result(task_id, e)
                 raise exceptions.as_runtime_error(e) from e

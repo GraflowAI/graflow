@@ -145,7 +145,6 @@ class ExecutionContext:
         self.max_steps = max_steps
         self.default_max_retries = default_max_retries
         self.steps = steps
-        self.executed = []
 
         # Use single config for both queue and channel
         config = config or {}
@@ -224,11 +223,6 @@ class ExecutionContext:
             execution_context=self
         )
         self.task_queue.enqueue(task_spec)
-
-    def mark_executed(self, task_id: str) -> None:
-        """Mark a node as executed."""
-        if task_id not in self.executed:
-            self.executed.append(task_id)
 
     def is_completed(self) -> bool:
         """Check if execution is completed (complete compatibility)."""
