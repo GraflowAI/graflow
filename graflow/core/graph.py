@@ -45,7 +45,7 @@ class TaskGraph:
     @property
     def nodes(self) -> NodeView:
         """Get all node names in the graph."""
-        return self._graph.nodes()
+        return self._graph.nodes() # type: ignore
 
     @property
     def edges(self) -> EdgeView:
