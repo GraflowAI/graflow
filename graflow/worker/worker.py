@@ -205,7 +205,7 @@ class TaskWorker:
             logger.error("Executor not available for task submission")
             return
 
-        task_id = getattr(task_spec, 'task_id', 'unknown')
+        task_id = task_spec.task_id
 
         # Add to active tasks
         with self._active_tasks_lock:
@@ -229,7 +229,7 @@ class TaskWorker:
             Processing result dictionary
         """
         start_time = time.time()
-        task_id = getattr(task_spec, 'task_id', 'unknown')
+        task_id = task_spec.task_id
 
         try:
             # Resolve task from TaskSpec
@@ -273,14 +273,14 @@ class TaskWorker:
                 "task_id": task_id
             }
 
-    def _task_completed(self, task_spec: Any, future: Future) -> None:
+    def _task_completed(self, task_spec: TaskSpec, future: Future) -> None:
         """Handle task completion callback.
 
         Args:
             task_spec: Original TaskSpec
             future: Completed future
         """
-        task_id = getattr(task_spec, 'task_id', 'unknown')
+        task_id = task_spec.task_id
 
         # Remove from active tasks
         with self._active_tasks_lock:
@@ -295,11 +295,28 @@ class TaskWorker:
             # Update metrics
             self._update_metrics(success, duration, is_timeout)
 
+            # Try to get ExecutionContext from the deserialized task for consistent post-processing
+            try:
+                task = task_spec.get_function()
+                if task and hasattr(task, 'get_execution_context'):
+                    execution_context = task.get_execution_context()
+
+                    # Use same post-processing pattern as engine
+                    if success:
+                        execution_context.set_result(task_id, result.get('result'))
+                    else:
+                        error = Exception(result.get("error", "Unknown error"))
+                        execution_context.set_result(task_id, error)
+
+                    # Don't increment step - that's handled at group level, not individual tasks
+
+            except Exception as ctx_error:
+                logger.debug(f"Could not access ExecutionContext for {task_id}: {ctx_error}")
+
             # Notify task completion via TaskQueue
-            group_id = getattr(task_spec, 'group_id', None)
-            if group_id:
+            if task_spec.group_id:
                 self.queue.notify_task_completion(
-                    task_id, success, group_id, result.get('result')
+                    task_id, success, task_spec.group_id, result.get('result')
                 )
 
             if success:
