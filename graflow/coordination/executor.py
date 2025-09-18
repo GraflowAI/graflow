@@ -47,13 +47,25 @@ class GroupExecutor:
             coordinator = self._create_coordinator(self.backend, self.backend_config, exec_context)
             return coordinator.execute_group(group_id, tasks)
 
-    def direct_execute(self, group_id: str, tasks: List['Executable'], _execution_context: 'ExecutionContext') -> None:
+    def direct_execute(self, group_id: str, tasks: List['Executable'], execution_context: 'ExecutionContext') -> None:
         """Directly execute tasks without coordination."""
         print(f"Running parallel group: {group_id}")
         print(f"  Direct tasks: {[task.task_id for task in tasks]}")
 
         for task in tasks:
             print(f"  - Executing directly: {task.task_id}")
-            task.run()
 
+            # Execute task with proper context management (same as engine)
+            try:
+                with execution_context.executing_task(task) as _ctx:
+                    result = task.run()
+                    execution_context.set_result(task.task_id, result)
+                    # No context.increment_step() here - individual tasks don't increment
+            except Exception as e:
+                execution_context.set_result(task.task_id, e)
+                print(f"    Task {task.task_id} failed: {e}")
+                # Continue with other tasks in the group
+
+        # Only increment step once for the entire parallel group
+        execution_context.increment_step()
         print(f"  Direct group {group_id} completed")
