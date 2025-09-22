@@ -589,7 +589,7 @@ def main():
             # TaskWorkers will be set up after ExecutionContext configures Redis backends
             print("🔄 TaskWorkers will be set up after workflow execution context is ready...")
 
-            # Configure GroupExecutor with Redis backend (now fixed)
+            # Configure GroupExecutor with Redis backend
             group_executor = GroupExecutor(
                 backend=CoordinationBackend.REDIS,
                 backend_config={
@@ -609,11 +609,11 @@ def main():
                 # Define workflow using >> and | operators
                 # Phase 1: Parallel extraction
                 extraction_group = (extract_database_data | extract_api_data |
-                                  extract_files_data | extract_stream_data)
+                                  extract_files_data | extract_stream_data).set_group_name("extraction_phase")
 
                 # Phase 2: Parallel transformation (depends on extraction)
                 transformation_group = (transform_database_data | transform_api_data |
-                                      transform_files_data | transform_stream_data)
+                                      transform_files_data | transform_stream_data).set_group_name("transformation_phase")
 
                 # Create workflow dependencies: extraction >> transformation >> aggregation >> quality_check
                 extraction_group >> transformation_group >> aggregate_all_data >> perform_quality_check # type: ignore
