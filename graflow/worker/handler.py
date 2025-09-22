@@ -81,7 +81,7 @@ class TaskHandler(ABC):
         logger.warning(f"Task {task_id} timed out after {duration:.3f}s")
 
 
-class InProcessTaskExecutor(TaskHandler):
+class DirectTaskExecutor(TaskHandler):
     """Task executor that runs tasks directly in the worker process."""
 
     def _process_task(self, task: Executable) -> bool:

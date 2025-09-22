@@ -12,7 +12,7 @@ from graflow.coordination.redis import RedisCoordinator
 from graflow.core.context import ExecutionContext, TaskExecutionContext
 from graflow.queue.base import TaskSpec, TaskStatus
 from graflow.queue.redis import RedisTaskQueue
-from graflow.worker.handler import InProcessTaskExecutor
+from graflow.worker.handler import DirectTaskExecutor
 from graflow.worker.worker import TaskWorker
 
 
@@ -43,7 +43,7 @@ def redis_coordinator(clean_redis):
     return RedisCoordinator(clean_redis)
 
 
-class ChannelAwareTaskHandler(InProcessTaskExecutor):
+class ChannelAwareTaskHandler(DirectTaskExecutor):
     """Task handler that creates tasks with channel access."""
 
     def __init__(self, redis_client):

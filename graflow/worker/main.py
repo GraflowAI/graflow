@@ -83,12 +83,12 @@ def create_memory_queue() -> TaskQueue:
 def create_task_handler(handler_config: Dict[str, Any]) -> TaskHandler:
     """Create TaskHandler based on configuration."""
     try:
-        from graflow.worker.handler import InProcessTaskExecutor
+        from graflow.worker.handler import DirectTaskExecutor
 
-        handler_type = handler_config.get('type', 'inprocess')
+        handler_type = handler_config.get('type', 'direct')
 
-        if handler_type == 'inprocess':
-            return InProcessTaskExecutor()
+        if handler_type == 'direct':
+            return DirectTaskExecutor()
         else:
             logger.error(f"Unsupported handler type: {handler_type}")
             sys.exit(1)
@@ -159,8 +159,8 @@ def parse_arguments():
     # Handler configuration
     parser.add_argument(
         '--handler-type',
-        choices=['inprocess'],
-        default=os.environ.get('HANDLER_TYPE', 'inprocess'),
+        choices=['direct'],
+        default=os.environ.get('HANDLER_TYPE', 'direct'),
         help='Task handler type'
     )
 

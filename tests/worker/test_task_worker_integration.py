@@ -59,7 +59,7 @@ def test_basic_task_execution():
     print("=== Testing Basic TaskWorker Functionality ===")
 
     try:
-        from graflow.worker.handler import InProcessTaskExecutor
+        from graflow.worker.handler import DirectTaskExecutor
         from graflow.worker.worker import TaskWorker
 
         # Create mock queue and add some tasks
@@ -69,7 +69,7 @@ def test_basic_task_execution():
         queue.enqueue(TaskSpec("task_3", queue.execution_context))
 
         # Create handler and worker with concurrent execution
-        handler = InProcessTaskExecutor()
+        handler = DirectTaskExecutor()
         worker = TaskWorker(
             queue=queue,
             handler=handler,
@@ -122,7 +122,7 @@ def test_concurrent_task_execution():
     print("\n=== Testing Concurrent Task Execution ===")
 
     try:
-        from graflow.worker.handler import InProcessTaskExecutor
+        from graflow.worker.handler import DirectTaskExecutor
         from graflow.worker.worker import TaskWorker
 
         # Create mock queue with more tasks
@@ -131,7 +131,7 @@ def test_concurrent_task_execution():
             queue.enqueue(TaskSpec(f"concurrent_task_{i}", queue.execution_context))
 
         # Create handler and worker with higher concurrency
-        handler = InProcessTaskExecutor()
+        handler = DirectTaskExecutor()
         worker = TaskWorker(
             queue=queue,
             handler=handler,
