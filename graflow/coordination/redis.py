@@ -6,6 +6,7 @@ import time
 from typing import TYPE_CHECKING, Any, Callable, Dict, List
 
 if TYPE_CHECKING:
+    from graflow.core.context import ExecutionContext
     from graflow.core.task import Executable
 
 from graflow.coordination.coordinator import TaskCoordinator
@@ -27,7 +28,7 @@ class RedisCoordinator(TaskCoordinator):
         self.active_barriers: Dict[str, Dict[str, Any]] = {}
         self._lock = threading.Lock()
 
-    def execute_group(self, group_id: str, tasks: List['Executable']) -> None:
+    def execute_group(self, group_id: str, tasks: List['Executable'], execution_context: 'ExecutionContext') -> None:
         """Execute parallel group with barrier synchronization."""
         barrier_id = self.create_barrier(group_id, len(tasks))
         try:

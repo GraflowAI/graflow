@@ -45,27 +45,24 @@ class GroupExecutor:
             return self.direct_execute(group_id, tasks, exec_context)
         else:
             coordinator = self._create_coordinator(self.backend, self.backend_config, exec_context)
-            return coordinator.execute_group(group_id, tasks)
+            return coordinator.execute_group(group_id, tasks, exec_context)
 
     def direct_execute(self, group_id: str, tasks: List['Executable'], execution_context: 'ExecutionContext') -> None:
-        """Directly execute tasks without coordination."""
+        """Execute tasks using unified WorkflowEngine for consistency."""
         print(f"Running parallel group: {group_id}")
         print(f"  Direct tasks: {[task.task_id for task in tasks]}")
 
+        # Use unified WorkflowEngine for each task
+        from graflow.core.engine import WorkflowEngine
+        engine = WorkflowEngine()
+
         for task in tasks:
             print(f"  - Executing directly: {task.task_id}")
-
-            # Execute task with proper context management (same as engine)
             try:
-                with execution_context.executing_task(task) as _ctx:
-                    result = task.run()
-                    execution_context.set_result(task.task_id, result)
-                    # No context.increment_step() here - individual tasks don't increment
+                # Execute single task via unified engine
+                engine.execute(execution_context, start_task_id=task.task_id)
             except Exception as e:
-                execution_context.set_result(task.task_id, e)
                 print(f"    Task {task.task_id} failed: {e}")
                 # Continue with other tasks in the group
 
-        # Only increment step once for the entire parallel group
-        execution_context.increment_step()
         print(f"  Direct group {group_id} completed")

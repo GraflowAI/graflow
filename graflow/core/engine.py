@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from graflow import exceptions
 from graflow.core.graph import TaskGraph
@@ -12,62 +12,66 @@ if TYPE_CHECKING:
 
 
 class WorkflowEngine:
-    """Workflow execution engine with pluggable strategies."""
+    """Workflow execution engine for unified task execution."""
 
-    def __init__(self, strategy: str = "sequential"):
-        """Initialize the workflow engine.
+    def __init__(self) -> None:
+        """Initialize the workflow engine."""
+        pass
 
-        Args:
-            strategy: Execution strategy (currently only "sequential" is supported)
-        """
-        self.strategy = strategy
-
-    def execute(self, context: ExecutionContext) -> None:
-        """Execute workflow using the provided context.
+    def execute(self, context: ExecutionContext, start_task_id: Optional[str] = None) -> None:
+        """Execute workflow or single task using the provided context.
 
         Args:
             context: ExecutionContext containing the execution state and graph
+            start_task_id: Optional task ID to start execution from. If None, uses context.get_next_task()
         Raises:
             exceptions.GraflowRuntimeError: If execution fails due to a runtime error
         """
         assert context.graph is not None, "Graph must be set before execution"
 
-        print(f"Starting execution from: {context.start_node}")
+        print(f"Starting execution from: {start_task_id or context.start_node}")
 
-        while not context.is_completed():
+        # Initialize first task
+        if start_task_id is not None:
+            task_id = start_task_id
+        else:
             task_id = context.get_next_task()
-            if task_id is None:
-                break
+
+        while task_id is not None and not context.is_completed():
+            # Reset goto flag for each task
+            context.reset_goto_flag()
 
             # Check if task exists in graph
             graph = context.graph
             if task_id not in graph.nodes:
-                print(f"Warning: Node {task_id} not found in graph")
-                continue
+                print(f"Error: Node {task_id} not found in graph")
+                break  # Terminate execution
 
             # Execute the task
             task = graph.get_node(task_id)
 
             # Execute task with proper context management
             try:
-                with context.executing_task(task) as _ctx:
+                with context.executing_task(task):
                     result = task.run()
                     context.set_result(task_id, result)
             except Exception as e:
                 context.set_result(task_id, e)
                 raise exceptions.as_runtime_error(e) from e
 
+            # Step increment for all executed tasks
             context.increment_step()
 
-            # Handle task completion and successor scheduling
+            # Handle successor scheduling
             if context.goto_called:
-                # If goto was called, skip successors entirely
                 print(f"🚫 Goto called in {task_id}, skipping successors")
             else:
                 # Add successor nodes to queue
                 for succ in graph.successors(task_id):
                     succ_task = graph.get_node(succ)
                     context.add_to_queue(succ_task)
+
+            task_id = context.get_next_task()
 
         print(f"Execution completed after {context.steps} steps")
 

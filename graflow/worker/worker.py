@@ -237,22 +237,35 @@ class TaskWorker:
             if task is None:
                 raise GraflowRuntimeError(f"Could not resolve task from spec: {task_id}")
 
-            # Execute task using handler
-            success = self.handler.process_task(task)
+            # Get execution context from task spec
+            execution_context = task_spec.execution_context
+
+            # Use unified WorkflowEngine for task execution
+            from graflow.core.engine import WorkflowEngine
+            engine = WorkflowEngine()
+
+            # Execute single task via engine
+            engine.execute(execution_context, start_task_id=task_id)
+
             duration = time.time() - start_time
 
-            if success:
+            # Get result from context (engine handles result setting)
+            result = execution_context.get_result(task_id)
+
+            # Check if result is an exception
+            if isinstance(result, Exception):
                 return {
-                    "success": True,
+                    "success": False,
+                    "error": str(result),
                     "duration": duration,
                     "task_id": task_id
                 }
             else:
                 return {
-                    "success": False,
-                    "error": "Task handler returned False",
+                    "success": True,
                     "duration": duration,
-                    "task_id": task_id
+                    "task_id": task_id,
+                    "result": result
                 }
 
         except FutureTimeoutError:
@@ -295,25 +308,7 @@ class TaskWorker:
             # Update metrics
             self._update_metrics(success, duration, is_timeout)
 
-            # Try to get ExecutionContext from the deserialized task for consistent post-processing
-            try:
-                task = task_spec.get_function()
-                if task and hasattr(task, 'get_execution_context'):
-                    execution_context = task.get_execution_context()
-
-                    # Use same post-processing pattern as engine
-                    if success:
-                        execution_context.set_result(task_id, result.get('result'))
-                    else:
-                        error = Exception(result.get("error", "Unknown error"))
-                        execution_context.set_result(task_id, error)
-
-                    # Don't increment step - that's handled at group level, not individual tasks
-
-            except Exception as ctx_error:
-                logger.debug(f"Could not access ExecutionContext for {task_id}: {ctx_error}")
-
-            # Notify task completion via TaskQueue
+            # Notify task completion via TaskQueue for barrier synchronization
             if task_spec.group_id:
                 self.queue.notify_task_completion(
                     task_id, success, task_spec.group_id, result.get('result')
