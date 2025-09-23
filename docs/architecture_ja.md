@@ -6,72 +6,127 @@ Graflowは分散タスク実行とワークフロー管理のためのPythonフ�
 
 ```mermaid
 graph TB
-    subgraph "Core Components"
-        EC[ExecutionContext]
-        WE[WorkflowEngine]
-        TG[TaskGraph]
+    subgraph "Application Layer"
+        APP[Application]
+        WF[Workflow]
     end
-    
+
+    subgraph "Core Execution Engine"
+        WE[WorkflowEngine]
+        EC[ExecutionContext]
+        TG[TaskGraph]
+        TC[TaskExecutionContext]
+    end
+
     subgraph "Task Management"
         TQ[TaskQueue]
         TS[TaskSpec]
         TH[TaskHandler]
+        DTE[DirectTaskExecutor]
     end
-    
-    subgraph "Communication"
+
+    subgraph "Communication Layer"
         CH[Channel]
         RC[RedisChannel]
         MC[MemoryChannel]
     end
-    
-    subgraph "Worker & Coordination"
-        TW[TaskWorker]
-        RCO[RedisCoordinator]
+
+    subgraph "Coordination & Workers"
         GE[GroupExecutor]
+        TW[TaskWorker]
+        COORD[Coordinators]
     end
-    
+
+    subgraph "Factory Pattern"
+        CF[ChannelFactory]
+        QF[TaskQueueFactory]
+        QB[QueueBackend]
+    end
+
     subgraph "Backend Storage"
         Redis[(Redis)]
-        Memory[(Memory)]
+        Memory[(In-Memory)]
     end
-    
+
+    subgraph "Utilities"
+        FR[FunctionRegistry]
+        CC[CycleController]
+        EXC[Exceptions]
+    end
+
+    APP --> WF
+    WF --> WE
     WE --> EC
-    EC --> TQ
+    EC --> TG
+    EC --> TC
     EC --> CH
     EC --> GE
+
+    TG --> TS
+    TH --> DTE
     TW --> TQ
     TW --> TH
-    RCO --> TQ
-    RCO --> Redis
+
+    GE --> COORD
+    GE --> TQ
+
+    CF --> MC
+    CF --> RC
+    QF --> TQ
+    QB --> QF
+
     RC --> Redis
-    CH --> RC
-    CH --> MC
+    MC --> Memory
     TQ --> Redis
     TQ --> Memory
+
+    EC --> FR
+    EC --> CC
+    WE --> EXC
 ```
 
 ## コンポーネント詳細
 
+### WorkflowEngine
+ワークフロー実行の中心エンジン
+
+- **役割**: 統一されたタスク実行制御
+- **主要機能**:
+  - ExecutionContextを使用したタスク実行ループ
+  - タスクグラフの順序実行
+  - エラーハンドリングとリトライ制御
+  - サイクル実行対応
+
 ### ExecutionContext
-ワークフロー実行の中心的なオーケストレーター
+ワークフロー実行の状態管理とオーケストレーション
 
 - **役割**: タスクの実行状態管理、キューイング、結果保存
 - **主要機能**:
-  - TaskQueueとChannelの管理
-  - タスクの実行コンテキスト管理
-  - サイクル制御とリトライ処理
-  - 動的タスク生成とgoto機能
+  - TaskQueueとChannelの統合管理
+  - TaskExecutionContextによる実行コンテキスト管理
+  - サイクル制御とgoto機能
+  - 動的タスク生成と結果保存
+  - FunctionRegistryとの連携
+
+### TaskExecutionContext
+個別タスク実行時のコンテキスト管理
+
+- **役割**: タスク実行中の状態とリソース管理
+- **主要機能**:
+  - タスクスタックの管理
+  - 実行中タスクのコンテキスト追跡
+  - タスク固有の設定管理
 
 ### TaskQueue
 タスクのキューイング管理の抽象基底クラス
 
-- **実装**: 
+- **実装**:
   - `MemoryTaskQueue`: インメモリ実装
   - `RedisTaskQueue`: Redis分散実装
 - **機能**:
   - TaskSpecの enqueue/dequeue
   - メトリクス収集
-  - リトライ処理
+  - バックエンド切り替え対応
 
 ### Channel
 タスク間通信の抽象基底クラス
@@ -84,22 +139,23 @@ graph TB
   - TTL対応
   - タスク結果の保存・取得
 
-### TaskWorker
-キューからタスクを取得して実行するワーカー
+### DirectTaskExecutor
+タスクの直接実行を担当するハンドラー
 
+- **役割**: TaskHandlerの具体実装
 - **機能**:
-  - 並行タスク処理
-  - メトリクス収集
-  - グレースフルシャットダウン
-  - タイムアウト処理
+  - インプロセスでのタスク実行
+  - エラーハンドリング
+  - 実行結果の管理
 
-### RedisCoordinator
-Redis基盤の分散タスク調整
+### GroupExecutor
+並列グループタスクの実行制御
 
+- **役割**: 複数タスクの協調実行
 - **機能**:
   - 並列グループ実行
   - バリア同期
-  - タスクディスパッチ
+  - 分散調整
 
 ## Redis分散アーキテクチャ
 
@@ -166,58 +222,69 @@ sequenceDiagram
     participant App as Application
     participant WE as WorkflowEngine
     participant EC as ExecutionContext
-    participant TQ as TaskQueue
+    participant TG as TaskGraph
+    participant Task as Task
     participant CH as Channel
-    participant TW as TaskWorker
-    participant TH as TaskHandler
-    participant Redis as Redis Server
-    
-    App->>WE: execute(workflow)
-    WE->>EC: execute()
-    
-    Note over EC: タスクの初期化
-    EC->>TQ: enqueue(TaskSpec)
-    TQ->>Redis: LPUSH task_queue
-    
-    Note over TW: ワーカーループ開始
-    loop Task Processing
-        TW->>TQ: dequeue()
-        TQ->>Redis: BRPOP task_queue
-        Redis-->>TQ: TaskSpec
-        TQ-->>TW: TaskSpec
-        
-        Note over TW: タスク実行開始
-        TW->>TW: _submit_task(TaskSpec)
-        TW->>TH: process_task(task)
-        
+
+    App->>WE: execute(context, start_task_id)
+    WE->>EC: get_next_task()
+
+    Note over WE: 実行ループ開始
+    loop Task Execution Loop
+        WE->>EC: reset_goto_flag()
+        WE->>TG: get_node(task_id)
+        TG-->>WE: task
+
+        Note over WE: タスク実行開始
+        WE->>EC: executing_task(task)
+        activate EC
+
+        Note over EC: タスクコンテキスト作成
+        EC->>EC: create_task_context(task_id)
+        EC->>EC: push_task_context(task_ctx)
+        EC->>Task: set_execution_context(self)
+        EC-->>WE: task_ctx
+
+        Note over WE: タスク処理
+        WE->>Task: run()
+
         alt Task Success
-            TH->>TH: _process_task(task)
-            TH-->>TW: True
-            TW->>CH: set(result_key, result)
-            CH->>Redis: SET result_key
-            TW->>TW: _update_metrics(success=True)
+            Task-->>WE: result
+            WE->>EC: set_result(task_id, result)
+            EC->>CH: set(task_id, result)
         else Task Failure
-            TH->>TH: _process_task(task)
-            TH-->>TW: False/Exception
-            TW->>TW: _update_metrics(success=False)
-            
-            alt Retry Enabled
-                TW->>TQ: enqueue(TaskSpec) [retry]
-                TQ->>Redis: LPUSH task_queue
+            Task-->>WE: Exception
+            WE->>EC: set_result(task_id, Exception)
+            WE->>WE: raise GraflowRuntimeError
+        end
+
+        Note over EC: タスクコンテキスト終了
+        EC->>EC: pop_task_context()
+        deactivate EC
+
+        Note over WE: ステップ更新
+        WE->>EC: increment_step()
+
+        Note over WE: 後続タスク処理
+        alt goto_called
+            Note over WE: goto呼び出し - 後続をスキップ
+        else 通常処理
+            WE->>TG: successors(task_id)
+            TG-->>WE: successor_nodes
+            loop For each successor
+                WE->>EC: add_to_queue(succ_task)
             end
         end
-        
-        Note over TW: タスク完了処理
-        TW->>TW: _task_completed()
+
+        WE->>EC: get_next_task()
+        EC-->>WE: next_task_id
+
+        alt next_task_id is None or is_completed()
+            Note over WE: 実行終了
+        end
     end
-    
-    Note over EC: 結果取得
-    EC->>CH: get(result_key)
-    CH->>Redis: GET result_key
-    Redis-->>CH: result
-    CH-->>EC: result
-    EC-->>WE: execution_result
-    WE-->>App: workflow_result
+
+    WE-->>App: execution completed
 ```
 
 ### 並列グループ実行フロー
