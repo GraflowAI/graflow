@@ -73,11 +73,13 @@ engine.execute(context)  # start_task_id=None → context.start_node使用
 
 ### **パターン2: TaskWorker特定タスク実行**
 ```python
-# 特定タスクから実行開始、successorも自動処理
+# DirectTaskExecutor経由で統一Engine実行
 def _process_task_wrapper(self, task_spec: TaskSpec):
-    engine = WorkflowEngine()
-    engine.execute(task_spec.execution_context, start_task_id=task_spec.task_id)
-    # → task_spec.task_id実行 → その後successorを自動キューイング・実行
+    # TaskWrapper作成 → DirectTaskExecutor → WorkflowEngine
+    task_wrapper = TaskWrapper(task_spec.task_id, task_spec.get_function())
+    task_wrapper.set_execution_context(task_spec.execution_context)
+    success = self.handler.process_task(task_wrapper)
+    # → DirectTaskExecutor._process_task() → engine.execute(context, start_task_id)
 ```
 
 ### **パターン3: GroupExecutor並列グループ実行**
@@ -112,14 +114,16 @@ def execute(self, context: ExecutionContext, start_task_id: Optional[str] = None
 
         context.increment_step()
 
-        # 3. Successor自動処理
-        if start_task_id is not None:
-            break  # 単一タスクモード: 1タスクのみ実行
+        # 3. Successor自動処理（グラフ構造による自然処理）
+        if context.goto_called:
+            # Goto呼び出し時: successorスキップ
+            break
         else:
-            # ワークフローモード: successorを自動キューイング
+            # 通常処理: successorを自動キューイング
             for succ in graph.successors(task_id):
                 context.add_to_queue(graph.get_node(succ))
             task_id = context.get_next_task()
+            # 依存ノードがない場合、自然に処理終了
 ```
 
 ### **Channel基盤状態共有**
@@ -181,15 +185,27 @@ engine.execute(context, start_task_id="task_D")
 
 ## 薄いラッパー実装
 
-### **TaskWorker: Engine委譲**
+### **TaskWorker: DirectTaskExecutor経由Engine委譲**
 ```python
 class TaskWorker:
     def _process_task_wrapper(self, task_spec: TaskSpec) -> Dict[str, Any]:
-        """統一Engine実行への薄いラッパー"""
-        engine = WorkflowEngine()
-        engine.execute(task_spec.execution_context, start_task_id=task_spec.task_id)
-        # Engine内でcontext.set_result()済み、Channel経由で状態共有完了
-        return {"success": True, "task_id": task_spec.task_id}
+        """DirectTaskExecutor経由で統一Engine実行への委譲"""
+        # TaskWrapper作成
+        task_wrapper = TaskWrapper(task_spec.task_id, task_spec.get_function())
+        task_wrapper.set_execution_context(task_spec.execution_context)
+
+        # DirectTaskExecutor経由でEngine実行
+        success = self.handler.process_task(task_wrapper)
+        # → handler._process_task() → engine.execute(context, start_task_id)
+
+        return {"success": success, "task_id": task_spec.task_id}
+
+class DirectTaskExecutor(TaskHandler):
+    def _process_task(self, task: Executable) -> bool:
+        """WorkflowEngine統一実行"""
+        execution_context = task.get_execution_context()
+        self.engine.execute(execution_context, start_task_id=task.task_id)
+        return True
 ```
 
 ### **GroupExecutor: Engine委譲**
@@ -233,17 +249,19 @@ engine.execute(context)  # start_task_id=None
 # → context.start_nodeから開始、全依存関係を自動実行
 ```
 
-### **制御2: 特定タスクのみ実行**
+### **制御2: 特定タスクから実行**
 ```python
-engine.execute(context, start_task_id="task_X")  # 単一タスクモード
-# → task_X実行のみ、successorは実行しない
+engine.execute(context, start_task_id="task_X")
+# → task_X実行 → successorの有無により自動判定:
+#   - successorあり: 依存タスクを継続実行
+#   - successorなし: task_Xのみで自然終了
 ```
 
-### **制御3: 特定タスクから継続実行**
+### **制御3: Goto制御による実行制御**
 ```python
-# context.start_node = "task_X"に設定後
-engine.execute(context)  # start_task_id=None
-# → task_Xから開始、その後successorも自動実行
+# タスク内でgoto呼び出し時
+context.goto("target_task")  # gotoフラグ設定
+# → 現在タスク実行後、successorスキップして指定タスクへジャンプ
 ```
 
 ## 実装ガイドライン
