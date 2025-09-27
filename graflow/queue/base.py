@@ -1,5 +1,6 @@
 """Abstract base classes for task queues."""
 
+import logging
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -9,6 +10,8 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 if TYPE_CHECKING:
     from graflow.core.context import ExecutionContext
     from graflow.core.task import Executable
+
+logger = logging.getLogger(__name__)
 
 
 class TaskStatus(Enum):
@@ -175,7 +178,7 @@ class TaskQueue(ABC):
             'failures': 0
         }
 
-    def notify_task_completion(self, task_id: str, success: bool,  # noqa: B027
+    def notify_task_completion(self, task_id: str, success: bool,
                              group_id: Optional[str] = None) -> None:
         """Notify task completion for barrier synchronization.
 
@@ -187,4 +190,6 @@ class TaskQueue(ABC):
             success: Whether task succeeded
             group_id: Group ID for barrier synchronization
         """
+        # Default implementation does nothing
+        logger.debug(f"Task {task_id} completed with success={success} in group {group_id}")
         pass
