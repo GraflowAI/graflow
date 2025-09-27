@@ -32,22 +32,26 @@ class RedisChannel(Channel):
         if redis is None:
             raise ImportError("redis package is required for RedisChannel")
 
+        # Store connection parameters for serialization
+        self._host = host
+        self._port = port
+        self._db = db
+        self._kwargs = {
+            k: v for k, v in kwargs.items()
+            if k in {
+                'password', 'socket_timeout', 'socket_connect_timeout',
+                'socket_keepalive', 'socket_keepalive_options', 'connection_pool',
+                'unix_socket_path', 'encoding', 'encoding_errors', 'charset',
+                'errors', 'decode_responses', 'retry_on_timeout', 'ssl',
+                'ssl_keyfile', 'ssl_certfile', 'ssl_cert_reqs', 'ssl_ca_certs',
+                'ssl_check_hostname', 'max_connections', 'retry', 'health_check_interval'
+            }
+        }
+
         if redis_client is not None:
             self.redis_client = redis_client
         else:
-            # Filter kwargs to only include Redis-compatible parameters
-            redis_params = {
-                k: v for k, v in kwargs.items()
-                if k in {
-                    'password', 'socket_timeout', 'socket_connect_timeout',
-                    'socket_keepalive', 'socket_keepalive_options', 'connection_pool',
-                    'unix_socket_path', 'encoding', 'encoding_errors', 'charset',
-                    'errors', 'decode_responses', 'retry_on_timeout', 'ssl',
-                    'ssl_keyfile', 'ssl_certfile', 'ssl_cert_reqs', 'ssl_ca_certs',
-                    'ssl_check_hostname', 'max_connections', 'retry', 'health_check_interval'
-                }
-            }
-            self.redis_client: Redis = redis.Redis(host=host, port=port, db=db, decode_responses=True, **redis_params)
+            self.redis_client: Redis = redis.Redis(host=host, port=port, db=db, decode_responses=True, **self._kwargs)
 
         self.key_prefix = f"graflow:channel:{name}:"
 
@@ -133,3 +137,23 @@ class RedisChannel(Channel):
         """Close the Redis connection."""
         if hasattr(self.redis_client, 'close'):
             self.redis_client.close()
+
+    def __getstate__(self):
+        """Support for pickle serialization."""
+        state = self.__dict__.copy()
+        # Remove the unpicklable Redis client
+        del state['redis_client']
+        return state
+
+    def __setstate__(self, state):
+        """Support for pickle deserialization."""
+        self.__dict__.update(state)
+        # Recreate the Redis client
+        assert redis is not None, "redis package is required for RedisChannel"
+        self.redis_client = redis.Redis(
+            host=self._host,
+            port=self._port,
+            db=self._db,
+            decode_responses=True,
+            **self._kwargs
+        )
