@@ -3,7 +3,9 @@
 import logging
 import time
 from abc import ABC, abstractmethod
+from typing import Optional
 
+from graflow.core.engine import WorkflowEngine
 from graflow.core.task import Executable
 from graflow.exceptions import GraflowRuntimeError
 
@@ -85,6 +87,17 @@ class TaskHandler(ABC):
 class DirectTaskExecutor(TaskHandler):
     """Task executor that runs tasks directly in the worker process."""
 
+    def __init__(self):
+        self._engine: Optional[WorkflowEngine] = None
+
+    @property
+    def engine(self) -> 'WorkflowEngine':
+        """Lazily initialize and return the WorkflowEngine instance."""
+        if self._engine is None:
+            from graflow.core.engine import WorkflowEngine
+            self._engine = WorkflowEngine()
+        return self._engine
+
     def _process_task(self, task: Executable) -> bool:
         """Execute task using WorkflowEngine.
 
@@ -99,12 +112,8 @@ class DirectTaskExecutor(TaskHandler):
             execution_context = task.get_execution_context()
             task_id = task.task_id
 
-            # Use unified WorkflowEngine for task execution
-            from graflow.core.engine import WorkflowEngine
-            engine = WorkflowEngine()
-
-            # Execute single task via engine
-            engine.execute(execution_context, start_task_id=task_id)
+            # Execute the task using the engine
+            self.engine.execute(execution_context, start_task_id=task_id)
 
             logger.debug(f"Task {task_id} executed successfully")
             return True
