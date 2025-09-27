@@ -175,9 +175,8 @@ class TaskQueue(ABC):
             'failures': 0
         }
 
-    def notify_task_completion(self, task_id: str, success: bool,
-                             group_id: Optional[str] = None,
-                             result: Optional[Any] = None) -> None:
+    def notify_task_completion(self, task_id: str, success: bool,  # noqa: B027
+                             group_id: Optional[str] = None) -> None:
         """Notify task completion for barrier synchronization.
 
         Default implementation does nothing. Subclasses can override
@@ -187,6 +186,5 @@ class TaskQueue(ABC):
             task_id: Task identifier
             success: Whether task succeeded
             group_id: Group ID for barrier synchronization
-            result: Task execution result
         """
         pass

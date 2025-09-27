@@ -5,6 +5,7 @@ import time
 from abc import ABC, abstractmethod
 
 from graflow.core.task import Executable
+from graflow.exceptions import GraflowRuntimeError
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,7 @@ class DirectTaskExecutor(TaskHandler):
     """Task executor that runs tasks directly in the worker process."""
 
     def _process_task(self, task: Executable) -> bool:
-        """Execute task directly in the current process.
+        """Execute task using WorkflowEngine.
 
         Args:
             task: Task object to execute
@@ -94,10 +95,23 @@ class DirectTaskExecutor(TaskHandler):
             bool: True if task completed successfully, False otherwise
         """
         try:
-            # Execute the task (assumes task is callable)
-            result = task()
-            logger.debug(f"Task executed successfully with result: {result}")
+            # Get execution context and task ID
+            execution_context = task.get_execution_context()
+            task_id = task.task_id
+
+            # Use unified WorkflowEngine for task execution
+            from graflow.core.engine import WorkflowEngine
+            engine = WorkflowEngine()
+
+            # Execute single task via engine
+            engine.execute(execution_context, start_task_id=task_id)
+
+            logger.debug(f"Task {task_id} executed successfully")
             return True
+
+        except GraflowRuntimeError as e:
+            logger.error(f"Task execution failed: {e}")
+            return False
         except Exception as e:
-            logger.error(f"InProcess task execution failed: {e}")
+            logger.error(f"Task execution failed: {e}")
             return False

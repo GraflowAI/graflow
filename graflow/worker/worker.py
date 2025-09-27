@@ -233,39 +233,37 @@ class TaskWorker:
 
         try:
             # Resolve task from TaskSpec
-            task = task_spec.get_function()
-            if task is None:
+            task_func = task_spec.get_function()
+            if task_func is None:
                 raise GraflowRuntimeError(f"Could not resolve task from spec: {task_id}")
 
             # Get execution context from task spec
             execution_context = task_spec.execution_context
 
-            # Use unified WorkflowEngine for task execution
-            from graflow.core.engine import WorkflowEngine
-            engine = WorkflowEngine()
+            # Create TaskWrapper from the function
+            from graflow.core.task import TaskWrapper
+            task_wrapper = TaskWrapper(task_id, task_func, register_to_context=False)
 
-            # Execute single task via engine
-            engine.execute(execution_context, start_task_id=task_id)
+            # Set execution context on the task wrapper
+            task_wrapper.set_execution_context(execution_context)
+
+            # Use the handler to process the task
+            success = self.handler.process_task(task_wrapper)
 
             duration = time.time() - start_time
 
-            # Get result from context (engine handles result setting)
-            result = execution_context.get_result(task_id)
-
-            # Check if result is an exception
-            if isinstance(result, Exception):
+            if success:
                 return {
-                    "success": False,
-                    "error": str(result),
+                    "success": True,
                     "duration": duration,
                     "task_id": task_id
                 }
             else:
                 return {
-                    "success": True,
+                    "success": False,
+                    "error": "Handler returned False",
                     "duration": duration,
-                    "task_id": task_id,
-                    "result": result
+                    "task_id": task_id
                 }
 
         except FutureTimeoutError:
@@ -311,7 +309,7 @@ class TaskWorker:
             # Notify task completion via TaskQueue for barrier synchronization
             if task_spec.group_id:
                 self.queue.notify_task_completion(
-                    task_id, success, task_spec.group_id, result.get('result')
+                    task_id, success, task_spec.group_id
                 )
 
             if success:

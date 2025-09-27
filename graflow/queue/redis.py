@@ -1,7 +1,7 @@
 """Redis distributed task queue implementation."""
 
 import json
-from typing import Any, Optional, cast
+from typing import Optional, cast
 
 try:
     import redis
@@ -160,21 +160,19 @@ class RedisTaskQueue(TaskQueue):
         return [str(item) for item in queue_items]
 
     def notify_task_completion(self, task_id: str, success: bool,
-                             group_id: Optional[str] = None,
-                             result: Optional[Any] = None) -> None:
+                             group_id: Optional[str] = None) -> None:
         """Notify task completion to redis.py functions.
 
         Args:
             task_id: Task identifier
             success: Whether task succeeded
             group_id: Group ID for barrier synchronization
-            result: Task execution result
         """
         if group_id:
             from graflow.coordination.redis import record_task_completion
             record_task_completion(
                 self.redis_client, self.key_prefix,
-                task_id, group_id, success, result
+                task_id, group_id, success
             )
 
     def cleanup(self) -> None:

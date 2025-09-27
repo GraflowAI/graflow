@@ -1,6 +1,5 @@
 """Redis-based coordination backend for distributed parallel execution."""
 
-import json
 import threading
 import time
 from typing import TYPE_CHECKING, Any, Callable, Dict, List
@@ -117,11 +116,6 @@ class RedisCoordinator(TaskCoordinator):
             self.redis.delete(barrier_info["key"])
             self.redis.delete(f"{barrier_info['key']}:expected")
 
-            # Clean up task results
-            cleanup_group_results(
-                self.redis, self.task_queue.key_prefix, barrier_id
-            )
-
             # Remove from active barriers
             with self._lock:
                 del self.active_barriers[barrier_id]
@@ -148,8 +142,11 @@ class RedisCoordinator(TaskCoordinator):
 
 
 def record_task_completion(redis_client, key_prefix: str, task_id: str,
-                          group_id: str, success: bool, result=None):
-    """Record task completion to Redis and trigger barrier signaling (independent function).
+                          group_id: str, success: bool):
+    """Record task completion for barrier signaling only.
+
+    Task results are already stored in Channel by WorkflowEngine.
+    This function only handles barrier synchronization.
 
     Args:
         redis_client: Redis client instance
@@ -157,19 +154,7 @@ def record_task_completion(redis_client, key_prefix: str, task_id: str,
         task_id: Task identifier
         group_id: Group ID for barrier synchronization
         success: Whether task succeeded
-        result: Task execution result
     """
-    # Record task result
-    task_result = {
-        "task_id": task_id,
-        "success": success,
-        "timestamp": time.time(),
-        "result": result
-    }
-
-    results_key = f"{key_prefix}:task_results:{group_id}"
-    redis_client.hset(results_key, task_id, json.dumps(task_result))
-
     # Trigger barrier signaling using existing pub/sub mechanism
     barrier_key = f"barrier:{group_id}"
     current_count = redis_client.incr(barrier_key)
@@ -182,33 +167,3 @@ def record_task_completion(redis_client, key_prefix: str, task_id: str,
         # All tasks completed - publish barrier completion
         completion_channel = f"barrier_done:{group_id}"
         redis_client.publish(completion_channel, "complete")
-
-
-def count_successful_tasks(redis_client, key_prefix: str, group_id: str) -> int:
-    """Count successful tasks in a group (independent function).
-
-    Args:
-        redis_client: Redis client instance
-        key_prefix: Key prefix for Redis keys
-        group_id: Group ID to count tasks for
-
-    Returns:
-        Number of successful tasks
-    """
-    results_key = f"{key_prefix}:task_results:{group_id}"
-    task_results = redis_client.hgetall(results_key)
-
-    return sum(1 for result_json in task_results.values()
-              if json.loads(result_json).get("success", False))
-
-
-def cleanup_group_results(redis_client, key_prefix: str, group_id: str):
-    """Clean up group task results (independent function).
-
-    Args:
-        redis_client: Redis client instance
-        key_prefix: Key prefix for Redis keys
-        group_id: Group ID to clean up
-    """
-    results_key = f"{key_prefix}:task_results:{group_id}"
-    redis_client.delete(results_key)
