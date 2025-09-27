@@ -35,7 +35,19 @@ class RedisChannel(Channel):
         if redis_client is not None:
             self.redis_client = redis_client
         else:
-            self.redis_client: Redis = redis.Redis(host=host, port=port, db=db, decode_responses=True, **kwargs)
+            # Filter kwargs to only include Redis-compatible parameters
+            redis_params = {
+                k: v for k, v in kwargs.items()
+                if k in {
+                    'password', 'socket_timeout', 'socket_connect_timeout',
+                    'socket_keepalive', 'socket_keepalive_options', 'connection_pool',
+                    'unix_socket_path', 'encoding', 'encoding_errors', 'charset',
+                    'errors', 'decode_responses', 'retry_on_timeout', 'ssl',
+                    'ssl_keyfile', 'ssl_certfile', 'ssl_cert_reqs', 'ssl_ca_certs',
+                    'ssl_check_hostname', 'max_connections', 'retry', 'health_check_interval'
+                }
+            }
+            self.redis_client: Redis = redis.Redis(host=host, port=port, db=db, decode_responses=True, **redis_params)
 
         self.key_prefix = f"graflow:channel:{name}:"
 
