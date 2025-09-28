@@ -91,10 +91,9 @@ class DirectTaskExecutor(TaskHandler):
         self._engine: Optional[WorkflowEngine] = None
 
     @property
-    def engine(self) -> 'WorkflowEngine':
+    def engine(self) -> WorkflowEngine:
         """Lazily initialize and return the WorkflowEngine instance."""
         if self._engine is None:
-            from graflow.core.engine import WorkflowEngine
             self._engine = WorkflowEngine()
         return self._engine
 
