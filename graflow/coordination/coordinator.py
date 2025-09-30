@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 class CoordinationBackend(Enum):
     """Types of coordination backends for parallel execution."""
     REDIS = "redis"
-    MULTIPROCESSING = "multiprocessing"
+    THREADING = "threading"
     DIRECT = "direct"
 
 class TaskCoordinator(ABC):

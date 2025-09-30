@@ -3,8 +3,8 @@
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from graflow.coordination.coordinator import CoordinationBackend, TaskCoordinator
-from graflow.coordination.multiprocessing import MultiprocessingCoordinator
 from graflow.coordination.redis import RedisCoordinator
+from graflow.coordination.threading import ThreadingCoordinator
 from graflow.queue.base import TaskQueue
 from graflow.queue.redis import RedisTaskQueue
 
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 class GroupExecutor:
     """Unified executor for parallel task groups supporting multiple backends."""
 
-    def __init__(self, backend: CoordinationBackend = CoordinationBackend.MULTIPROCESSING,
+    def __init__(self, backend: CoordinationBackend = CoordinationBackend.THREADING,
                  backend_config: Optional[Dict[str, Any]] = None):
         self.backend: CoordinationBackend = backend
         self.backend_config: Dict[str, Any] = backend_config or {}
@@ -32,9 +32,9 @@ class GroupExecutor:
             except ImportError as e:
                 raise ImportError("Redis backend requires 'redis' package") from e
 
-        elif backend == CoordinationBackend.MULTIPROCESSING:
-            process_count = config.get("process_count")
-            return MultiprocessingCoordinator(process_count)
+        elif backend == CoordinationBackend.THREADING:
+            thread_count = config.get("thread_count")
+            return ThreadingCoordinator(thread_count)
 
         else:
             raise ValueError(f"Unsupported backend: {backend}")

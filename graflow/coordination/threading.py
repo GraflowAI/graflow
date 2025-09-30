@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from graflow.core.task import Executable
 
 
-class MultiprocessingCoordinator(TaskCoordinator):
+class ThreadingCoordinator(TaskCoordinator):
     """Threading-based task coordination for local parallel execution."""
 
     def __init__(self, thread_count: Optional[int] = None):
@@ -24,7 +24,7 @@ class MultiprocessingCoordinator(TaskCoordinator):
         if self._executor is None:
             self._executor = concurrent.futures.ThreadPoolExecutor(
                 max_workers=self.thread_count,
-                thread_name_prefix="MultiprocessingCoordinator"
+                thread_name_prefix="ThreadingCoordinator"
             )
 
     def execute_group(self, group_id: str, tasks: List['Executable'], execution_context: 'ExecutionContext') -> None:
