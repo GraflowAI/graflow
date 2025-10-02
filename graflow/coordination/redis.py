@@ -29,15 +29,15 @@ class RedisCoordinator(TaskCoordinator):
 
     def execute_group(self, group_id: str, tasks: List['Executable'], execution_context: 'ExecutionContext') -> None:
         """Execute parallel group with barrier synchronization."""
-        barrier_id = self.create_barrier(group_id, len(tasks))
+        self.create_barrier(group_id, len(tasks))
         try:
             for task in tasks:
                 self.dispatch_task(task, group_id)
-            if not self.wait_barrier(barrier_id):
+            if not self.wait_barrier(group_id):
                 raise TimeoutError(f"Barrier wait timeout for group {group_id}")
             print(f"Parallel group {group_id} completed successfully")
         finally:
-            self.cleanup_barrier(barrier_id)
+            self.cleanup_barrier(group_id)
 
     def create_barrier(self, barrier_id: str, participant_count: int) -> str:
         """Create a barrier for parallel task synchronization."""
