@@ -73,16 +73,6 @@ class TaskHandler(ABC):
         error_msg = str(error) if error else "Unknown error"
         logger.error(f"Task {task_id} failed after {duration:.3f}s: {error_msg}")
 
-    def on_task_timeout(self, task: Executable, duration: float) -> None:
-        """Callback for task timeout.
-
-        Args:
-            task: The timed out task
-            duration: Execution duration in seconds
-        """
-        task_id = getattr(task, 'task_id', 'unknown')
-        logger.warning(f"Task {task_id} timed out after {duration:.3f}s")
-
 
 class DirectTaskExecutor(TaskHandler):
     """Task executor that runs tasks directly in the worker process."""
