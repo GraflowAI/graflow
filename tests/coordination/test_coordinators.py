@@ -1,186 +1,142 @@
 """Pytest-style tests for coordination backends."""
 
-import json
+from types import SimpleNamespace
 from unittest.mock import call
 
 import pytest
 
 from graflow.coordination.coordinator import CoordinationBackend
-from graflow.coordination.multiprocessing import MultiprocessingCoordinator
-from graflow.coordination.redis import RedisCoordinator
-from graflow.coordination.task_spec import TaskSpec
+from graflow.coordination.redis import RedisCoordinator, record_task_completion
+from graflow.coordination.threading import ThreadingCoordinator
+from graflow.queue.base import TaskSpec as QueueTaskSpec
+from graflow.queue.redis import RedisTaskQueue
 
 
-class TestMultiprocessingCoordinator:
-    """Test cases for MultiprocessingCoordinator."""
+class TestThreadingCoordinator:
+    """Test cases for ThreadingCoordinator."""
 
     @pytest.fixture
     def coordinator(self):
-        """Create coordinator for tests."""
-        return MultiprocessingCoordinator(thread_count=2)
+        """Create a coordinator with a predictable thread count."""
+        coordinator = ThreadingCoordinator(thread_count=2)
+        yield coordinator
+        coordinator.shutdown()
 
-    @pytest.fixture(autouse=True)
-    def cleanup_coordinator(self, coordinator):
-        """Clean up coordinator after each test."""
-        yield
-        if hasattr(coordinator, 'stop_workers'):
-            coordinator.stop_workers()
+    def test_threading_coordinator_creation(self, coordinator):
+        """Thread count is stored and executor starts lazily."""
+        assert coordinator.thread_count == 2
+        assert coordinator._executor is None
 
-    def test_multiprocessing_coordinator_creation(self, coordinator):
-        """Test MultiprocessingCoordinator creation."""
-        assert coordinator.mp is not None
-        assert coordinator.manager is not None
-        assert coordinator.task_queue is not None
-        assert coordinator.result_queue is not None
+    def test_threading_coordinator_thread_count(self):
+        """Explicit thread count is respected."""
+        coord = ThreadingCoordinator(thread_count=4)
+        try:
+            assert coord.thread_count == 4
+        finally:
+            coord.shutdown()
 
-    def test_multiprocessing_coordinator_process_count(self):
-        """Test process count configuration."""
-        coord = MultiprocessingCoordinator(thread_count=4)
-        assert coord.thread_count == 4
+    def test_threading_coordinator_default_thread_count(self):
+        """Default thread count derives from CPU count."""
+        coord = ThreadingCoordinator()
+        try:
+            assert coord.thread_count > 0
+        finally:
+            coord.shutdown()
 
-    def test_create_barrier(self, coordinator):
-        """Test barrier creation."""
-        barrier_id = coordinator.create_barrier("test_barrier", 3)
+    def test_execute_group_runs_all_tasks(self, coordinator, mocker):
+        """All tasks are executed through the workflow engine."""
+        exec_context = mocker.Mock(name="execution_context")
+        tasks = [SimpleNamespace(task_id="task1"), SimpleNamespace(task_id="task2")]
+        engine_calls: list[tuple[object, str]] = []
 
-        assert barrier_id == "test_barrier"
-        assert "test_barrier" in coordinator.barriers
+        def engine_factory():
+            def execute(context, start_task_id):
+                engine_calls.append((context, start_task_id))
+            return SimpleNamespace(execute=execute)
 
-        barrier = coordinator.barriers["test_barrier"]
-        assert barrier.parties == 3
+        mocker.patch("graflow.core.engine.WorkflowEngine", side_effect=engine_factory)
 
-    def test_create_barrier_error_handling(self, coordinator, mocker):
-        """Test barrier creation error handling."""
-        mocker.patch.object(coordinator.mp, 'Barrier', side_effect=RuntimeError("Test error"))
-        with pytest.raises(RuntimeError):
-            coordinator.create_barrier("error_barrier", 2)
+        coordinator.execute_group("group-a", tasks, exec_context)
 
-    def test_wait_barrier_success(self, coordinator):
-        """Test successful barrier waiting."""
-        barrier_id = coordinator.create_barrier("test_barrier", 1)
+        assert len(engine_calls) == len(tasks)
+        assert {task_id for _, task_id in engine_calls} == {"task1", "task2"}
+        assert all(context is exec_context for context, _ in engine_calls)
 
-        # Should succeed immediately with 1 participant
-        result = coordinator.wait_barrier(barrier_id, timeout=1)
-        assert result is True
+    def test_execute_group_handles_task_failure(self, coordinator, mocker):
+        """Failures from the workflow engine are reported but do not stop execution."""
+        exec_context = mocker.Mock(name="execution_context")
+        tasks = [SimpleNamespace(task_id="task_fail"), SimpleNamespace(task_id="task_ok")]
+        completed = []
 
-    def test_wait_barrier_nonexistent(self, coordinator):
-        """Test waiting on non-existent barrier."""
-        result = coordinator.wait_barrier("nonexistent", timeout=1)
-        assert result is False
+        def engine_factory():
+            def execute(context, start_task_id):
+                if start_task_id == "task_fail":
+                    raise RuntimeError("boom")
+                completed.append(start_task_id)
+            return SimpleNamespace(execute=execute)
 
-    def test_signal_barrier(self, coordinator):
-        """Test barrier signaling (no-op in multiprocessing)."""
-        # This is a no-op in multiprocessing implementation
-        coordinator.signal_barrier("test_barrier")
-        # Should not raise any exceptions
+        mocker.patch("graflow.core.engine.WorkflowEngine", side_effect=engine_factory)
+        mock_print = mocker.patch("builtins.print")
 
-    def test_dispatch_task(self, coordinator, mocker):
-        """Test task dispatching."""
-        # Mock the queue methods directly on the coordinator instance
-        mocker.patch.object(coordinator, 'get_queue_size', return_value=1)
-        mocker.patch.object(coordinator, 'is_queue_empty', return_value=False)
+        coordinator.execute_group("group-b", tasks, exec_context)
 
-        def test_func():
-            return "test_result"
+        assert "task_ok" in completed
+        failure_messages = [" ".join(map(str, call.args)) for call in mock_print.call_args_list]
+        assert any("Task task_fail failed" in message for message in failure_messages)
 
-        task_spec = TaskSpec("test_task", test_func, args=(1, 2), kwargs={"key": "value"})
-
-        coordinator.dispatch_task(task_spec, "test_group")
-
-        # Verify task was queued (using mocked methods)
-        assert not coordinator.is_queue_empty()
-
-    def test_cleanup_barrier(self, coordinator):
-        """Test barrier cleanup."""
-        barrier_id = coordinator.create_barrier("cleanup_barrier", 2)
-        assert barrier_id in coordinator.barriers
-
-        coordinator.cleanup_barrier(barrier_id)
-        assert barrier_id not in coordinator.barriers
-
-    def test_cleanup_nonexistent_barrier(self, coordinator):
-        """Test cleanup of non-existent barrier."""
-        # Should not raise exceptions
-        coordinator.cleanup_barrier("nonexistent")
-
-    def test_start_stop_workers(self, coordinator, mocker):
-        """Test worker lifecycle."""
-        mock_worker = mocker.MagicMock()
-        mock_worker.is_alive.return_value = True
-        _mock_process = mocker.patch('multiprocessing.Process', return_value=mock_worker)
-
-        coordinator.start_workers()
-        assert len(coordinator.workers) == 2
-
-        coordinator.stop_workers()
-        assert len(coordinator.workers) == 0
-
-    def test_worker_execution(self, coordinator, mocker):
-        """Test task execution by workers (mocked)."""
-        # Mock the worker process and queue methods
-        mock_worker = mocker.MagicMock()
-        _mock_process = mocker.patch('multiprocessing.Process', return_value=mock_worker)
-        mocker.patch.object(coordinator, 'get_queue_size', side_effect=[0, 1])
-
-        def test_task(value):
-            return f"result_{value}"
-
-        task_spec = TaskSpec("test_task", test_task, args=("test",))
-
-        # Test task dispatch (queue operations)
-        coordinator.dispatch_task(task_spec, "test_group")
-        # Just verify no exceptions are raised
-
-    def test_worker_error_handling(self, coordinator):
-        """Test worker error handling (simplified)."""
-        def failing_task():
-            raise ValueError("Test error")
-
-        task_data = {
-            "task_id": "failing_task",
-            "func": failing_task,
-            "args": (),
-            "kwargs": {}
-        }
-
-        with pytest.raises(ValueError):
-            coordinator._execute_task(task_data)
+    def test_shutdown(self):
+        """Executor shuts down and clears internal reference."""
+        coord = ThreadingCoordinator(thread_count=2)
+        try:
+            coord._ensure_executor()
+            assert coord._executor is not None
+        finally:
+            coord.shutdown()
+        assert coord._executor is None
 
 
 class TestRedisCoordinator:
     """Test cases for RedisCoordinator."""
 
     @pytest.fixture
-    def mock_redis(self, mocker):
-        """Create mock Redis client."""
-        return mocker.MagicMock()
+    def mock_task_queue(self, mocker):
+        """Provide a RedisTaskQueue mock with a redis client."""
+        queue = mocker.Mock(spec=RedisTaskQueue)
+        queue.redis_client = mocker.Mock()
+        return queue
 
     @pytest.fixture
-    def coordinator(self, mock_redis):
-        """Create Redis coordinator with mock client."""
-        return RedisCoordinator(mock_redis)
+    def coordinator(self, mock_task_queue):
+        """Coordinator under test."""
+        return RedisCoordinator(mock_task_queue)
 
-    def test_redis_coordinator_creation(self, coordinator, mock_redis):
-        """Test RedisCoordinator creation."""
-        assert coordinator.redis == mock_redis
-        assert isinstance(coordinator.active_barriers, dict)
+    @pytest.fixture
+    def mock_redis(self, mock_task_queue):
+        """Shortcut to the mocked redis client."""
+        return mock_task_queue.redis_client
+
+    def test_redis_coordinator_creation(self, coordinator, mock_task_queue, mock_redis):
+        """Coordinator stores queue and redis references."""
+        assert coordinator.task_queue is mock_task_queue
+        assert coordinator.redis is mock_redis
+        assert coordinator.active_barriers == {}
 
     def test_create_barrier(self, coordinator, mock_redis):
-        """Test Redis barrier creation."""
-        barrier_id = coordinator.create_barrier("test_barrier", 3)
+        """Barrier metadata is stored and redis keys are prepared."""
+        barrier_key = coordinator.create_barrier("test_barrier", 3)
 
-        assert barrier_id == "barrier:test_barrier"
+        assert barrier_key == "barrier:test_barrier"
         assert "test_barrier" in coordinator.active_barriers
+        barrier_info = coordinator.active_barriers["test_barrier"]
+        assert barrier_info["expected"] == 3
+        assert barrier_info["current"] == 0
 
-        # Verify Redis calls
         mock_redis.delete.assert_called_with("barrier:test_barrier")
         mock_redis.set.assert_called_with("barrier:test_barrier:expected", 3)
 
     def test_wait_barrier_success(self, coordinator, mock_redis):
-        """Test successful barrier waiting."""
-        # Setup barrier
+        """Last participant publishes completion event."""
         coordinator.create_barrier("test_barrier", 2)
-
-        # Mock Redis to simulate being the last participant
         mock_redis.incr.return_value = 2
 
         result = coordinator.wait_barrier("test_barrier", timeout=1)
@@ -190,17 +146,12 @@ class TestRedisCoordinator:
         mock_redis.publish.assert_called_with("barrier_done:test_barrier", "complete")
 
     def test_wait_barrier_with_pubsub(self, coordinator, mock_redis, mocker):
-        """Test barrier waiting with pub/sub."""
-        # Setup barrier
+        """Participants block on pub/sub until completion message arrives."""
         coordinator.create_barrier("test_barrier", 2)
-
-        # Mock Redis to simulate not being the last participant
         mock_redis.incr.return_value = 1
 
-        # Mock pubsub
         mock_pubsub = mocker.MagicMock()
-        mock_message = {"type": "message", "data": b"complete"}
-        mock_pubsub.listen.return_value = [mock_message]
+        mock_pubsub.listen.return_value = iter([{ "type": "message", "data": b"complete" }])
         mock_redis.pubsub.return_value = mock_pubsub
 
         result = coordinator.wait_barrier("test_barrier", timeout=1)
@@ -210,111 +161,136 @@ class TestRedisCoordinator:
         mock_pubsub.close.assert_called_once()
 
     def test_wait_barrier_timeout(self, coordinator, mock_redis, mocker):
-        """Test barrier timeout."""
-        coordinator.create_barrier("test_barrier", 2)
-
+        """Timeout returns False and closes pubsub."""
+        coordinator.create_barrier("timeout_barrier", 2)
         mock_redis.incr.return_value = 1
 
-        # Mock pubsub with no messages (timeout)
         mock_pubsub = mocker.MagicMock()
-        mock_pubsub.listen.return_value = []
+
+        def listen():
+            while True:
+                yield {"type": "message", "data": b"pending"}
+
+        mock_pubsub.listen.return_value = listen()
         mock_redis.pubsub.return_value = mock_pubsub
 
-        mocker.patch('time.time', side_effect=[0, 0, 2])  # Simulate timeout
-        result = coordinator.wait_barrier("test_barrier", timeout=1)
+        mocker.patch("graflow.coordination.redis.time.time", side_effect=[0, 0.5, 1.5])
+
+        result = coordinator.wait_barrier("timeout_barrier", timeout=1)
 
         assert result is False
+        mock_pubsub.close.assert_called_once()
 
     def test_wait_barrier_nonexistent(self, coordinator):
-        """Test waiting on non-existent barrier."""
-        result = coordinator.wait_barrier("nonexistent", timeout=1)
-        assert result is False
+        """Waiting on a missing barrier returns False."""
+        assert coordinator.wait_barrier("missing", timeout=1) is False
 
-    def test_signal_barrier(self, coordinator, mock_redis):
-        """Test barrier signaling."""
-        coordinator.create_barrier("test_barrier", 2)
-        mock_redis.incr.return_value = 2  # Last participant
+    def test_dispatch_task_enqueues_queue_task_spec(self, coordinator, mock_task_queue, mocker):
+        """Dispatch translates executables into queue TaskSpec entries."""
+        exec_context = mocker.Mock()
+        exec_context.function_manager.serialize_task_function.return_value = {}
+        executable = mocker.Mock()
+        executable.task_id = "task-123"
+        executable.get_execution_context.return_value = exec_context
 
-        coordinator.signal_barrier("test_barrier")
+        coordinator.dispatch_task(executable, "group-1")
 
-        mock_redis.publish.assert_called_with("barrier_done:test_barrier", "complete")
+        mock_task_queue.enqueue.assert_called_once()
+        task_spec = mock_task_queue.enqueue.call_args[0][0]
+        assert isinstance(task_spec, QueueTaskSpec)
+        assert task_spec.group_id == "group-1"
+        assert task_spec.execution_context is exec_context
+        assert task_spec.executable is executable
 
-    def test_dispatch_task(self, coordinator, mock_redis):
-        """Test task dispatching to Redis queue."""
-        def test_func():
-            return "test"
+    def test_execute_group_success_flow(self, coordinator, mocker):
+        """Parallel execution creates barrier, dispatches tasks, waits, and cleans up."""
+        tasks = [SimpleNamespace(task_id="task1"), SimpleNamespace(task_id="task2")]
 
-        task_spec = TaskSpec("test_task", test_func, args=(1, 2), kwargs={"key": "value"})
+        mock_create = mocker.patch.object(coordinator, "create_barrier", return_value="barrier:test_group")
+        mock_dispatch = mocker.patch.object(coordinator, "dispatch_task")
+        mock_wait = mocker.patch.object(coordinator, "wait_barrier", return_value=True)
+        mock_cleanup = mocker.patch.object(coordinator, "cleanup_barrier")
 
-        coordinator.dispatch_task(task_spec, "test_group")
+        coordinator.execute_group("test_group", tasks, mocker.Mock())
 
-        # Verify Redis call
-        mock_redis.lpush.assert_called_once()
-        args, kwargs = mock_redis.lpush.call_args
-        queue_key, task_data_json = args
+        mock_create.assert_called_once_with("test_group", len(tasks))
+        mock_dispatch.assert_has_calls([call(tasks[0], "test_group"), call(tasks[1], "test_group")])
+        mock_wait.assert_called_once_with("test_group")
+        mock_cleanup.assert_called_once_with("test_group")
 
-        assert queue_key == "task_queue:test_group"
+    def test_execute_group_timeout_triggers_cleanup(self, coordinator, mocker):
+        """TimeoutError is raised and barrier cleanup still executes."""
+        tasks = [SimpleNamespace(task_id="task1")]
 
-        task_data = json.loads(task_data_json)
-        assert task_data["task_id"] == "test_task"
-        assert task_data["group_id"] == "test_group"
-        assert task_data["args"] == [1, 2]  # JSON converts tuples to lists
-        assert task_data["kwargs"] == {"key": "value"}
+        mocker.patch.object(coordinator, "create_barrier", return_value="barrier:test_group")
+        mocker.patch.object(coordinator, "dispatch_task")
+        mock_wait = mocker.patch.object(coordinator, "wait_barrier", return_value=False)
+        mock_cleanup = mocker.patch.object(coordinator, "cleanup_barrier")
+
+        with pytest.raises(TimeoutError):
+            coordinator.execute_group("test_group", tasks, mocker.Mock())
+
+        mock_wait.assert_called_once_with("test_group")
+        mock_cleanup.assert_called_once_with("test_group")
 
     def test_cleanup_barrier(self, coordinator, mock_redis):
-        """Test barrier cleanup."""
+        """Cleanup removes redis keys and active barrier entry."""
         coordinator.create_barrier("cleanup_barrier", 2)
+        mock_redis.delete.reset_mock()
 
         coordinator.cleanup_barrier("cleanup_barrier")
 
-        # Verify Redis cleanup calls
         expected_calls = [
             call("barrier:cleanup_barrier"),
             call("barrier:cleanup_barrier:expected")
         ]
         mock_redis.delete.assert_has_calls(expected_calls, any_order=True)
-
-        # Verify barrier removed from active barriers
         assert "cleanup_barrier" not in coordinator.active_barriers
 
     def test_task_function_registry(self, coordinator):
-        """Test task function registration."""
-        def test_func_1():
-            return "result1"
+        """Task registry stores registered functions."""
+        def func_one():
+            return 1
 
-        def test_func_2():
-            return "result2"
+        def func_two():
+            return 2
 
-        # Initially empty
         assert coordinator.get_task_registry() == {}
 
-        # Register functions
-        coordinator.register_task_function("func1", test_func_1)
-        coordinator.register_task_function("func2", test_func_2)
+        coordinator.register_task_function("one", func_one)
+        coordinator.register_task_function("two", func_two)
 
-        # Retrieve registry
         registry = coordinator.get_task_registry()
-        assert len(registry) == 2
-        assert registry["func1"] == test_func_1
-        assert registry["func2"] == test_func_2
+        assert registry["one"] is func_one
+        assert registry["two"] is func_two
 
-    def test_queue_operations(self, coordinator, mock_redis):
-        """Test queue size and clear operations."""
-        mock_redis.llen.return_value = 5
+    def test_queue_operations(self, coordinator, mock_task_queue):
+        """Queue helper methods delegate to task queue."""
+        mock_task_queue.size.return_value = 5
 
-        size = coordinator.get_queue_size("test_group")
-        assert size == 5
-        mock_redis.llen.assert_called_with("task_queue:test_group")
+        assert coordinator.get_queue_size("group-x") == 5
+        mock_task_queue.size.assert_called_once_with()
 
-        coordinator.clear_queue("test_group")
-        mock_redis.delete.assert_called_with("task_queue:test_group")
+        coordinator.clear_queue("group-x")
+        mock_task_queue.cleanup.assert_called_once_with()
+
+    def test_record_task_completion_signals_when_expected_met(self, mocker):
+        """record_task_completion publishes completion when all participants finish."""
+        redis_client = mocker.Mock()
+        redis_client.incr.return_value = 3
+        redis_client.get.return_value = b"3"
+
+        record_task_completion(redis_client, "prefix", "task", "group", True)
+
+        redis_client.incr.assert_called_with("barrier:group")
+        redis_client.publish.assert_called_with("barrier_done:group", "complete")
 
 
 class TestCoordinationBackend:
     """Test cases for CoordinationBackend enum."""
 
     def test_coordination_backend_values(self):
-        """Test CoordinationBackend enum values."""
+        """Enum values remain stable."""
         assert CoordinationBackend.REDIS.value == "redis"
-        assert CoordinationBackend.MULTIPROCESSING.value == "multiprocessing"
+        assert CoordinationBackend.THREADING.value == "threading"
         assert CoordinationBackend.DIRECT.value == "direct"
