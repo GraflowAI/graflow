@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Optional
 
+from graflow.coordination.coordinator import CoordinationBackend
 from graflow.coordination.executor import GroupExecutor
 from graflow.core.context import ExecutionContext
 from graflow.exceptions import GraflowRuntimeError
@@ -115,6 +116,12 @@ class ParallelGroup(Executable):
         self._task_id = self._get_group_name()
         self.tasks = list(tasks)
 
+        # Execution configuration for with_execution()
+        self._execution_config = {
+            "backend": None,  # None = use context.group_executor or default
+            "backend_config": {}
+        }
+
         # Register this parallel group to current workflow context
         self._register_to_context()
         for task in self.tasks:
@@ -138,6 +145,49 @@ class ParallelGroup(Executable):
         self._task_id = name
         return self
 
+    def with_execution(
+        self,
+        backend: Optional[CoordinationBackend] = None,
+        backend_config: Optional[dict] = None
+    ) -> ParallelGroup:
+        """Configure execution backend (coordinator) for this parallel group.
+
+        Args:
+            backend: Coordinator backend (DIRECT, THREADING, REDIS)
+            backend_config: Backend-specific configuration
+                - THREADING: {"thread_count": int}
+                - REDIS: Future extension
+
+        Returns:
+            Self (for method chaining)
+
+        Examples:
+            >>> # Basic usage
+            >>> (task_a | task_b).with_execution(backend=CoordinationBackend.THREADING)
+            >>>
+            >>> # With configuration
+            >>> (task_a | task_b).with_execution(
+            ...     backend=CoordinationBackend.THREADING,
+            ...     backend_config={"thread_count": 4}
+            ... )
+            >>>
+            >>> # Method chaining
+            >>> group = (task_a | task_b | task_c) \\
+            ...     .with_execution(backend=CoordinationBackend.REDIS) \\
+            ...     .set_group_name("training_tasks")
+
+        Note:
+            Handler configuration should be done at task level using @task decorator.
+            with_execution() configures only the coordinator (parallel execution method).
+        """
+        if backend is not None:
+            self._execution_config["backend"] = backend
+
+        if backend_config is not None:
+            self._execution_config["backend_config"].update(backend_config)
+
+        return self
+
     def __call__(self, *args, **kwargs) -> Any:
         """Allow direct function call on the parallel group."""
         return self.run()
@@ -145,13 +195,34 @@ class ParallelGroup(Executable):
     def run(self) -> Any:
         """Execute all tasks in this parallel group."""
         context = self.get_execution_context()
-        executor = context.group_executor or GroupExecutor()
+
+        # Use context.group_executor if backend is None and it exists
+        # Otherwise, use configured executor
+        if self._execution_config["backend"] is None and context.group_executor:
+            executor = context.group_executor
+        else:
+            executor = self._create_configured_executor()
 
         for task in self.tasks:
             # Set execution context for each task
             task.set_execution_context(context)
 
         executor.execute_parallel_group(self.task_id, self.tasks, context)
+
+    def _create_configured_executor(self) -> GroupExecutor:
+        """Create GroupExecutor based on execution configuration.
+
+        Returns:
+            Configured GroupExecutor instance
+        """
+        backend = self._execution_config["backend"]
+        backend_config = self._execution_config["backend_config"]
+
+        # If backend is None, return default GroupExecutor
+        if backend is None:
+            return GroupExecutor()
+        else:
+            return GroupExecutor(backend, backend_config)
 
     def __rshift__(self, other: Executable) -> Executable:
         """Create dependency from all tasks in parallel group to other."""
