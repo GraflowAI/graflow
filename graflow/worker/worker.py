@@ -8,31 +8,30 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from typing import Any, Dict, Optional, Set
 
+from graflow.core.engine import WorkflowEngine
 from graflow.exceptions import GraflowRuntimeError
 from graflow.queue.base import TaskQueue, TaskSpec
-from graflow.worker.handler import TaskHandler
 
 logger = logging.getLogger(__name__)
 
 
 class TaskWorker:
-    """Worker that processes tasks from a queue using a specified handler."""
+    """Worker that processes tasks from a queue using WorkflowEngine."""
 
-    def __init__(self, queue: TaskQueue, handler: TaskHandler, worker_id: str,
+    def __init__(self, queue: TaskQueue, worker_id: str,
                  max_concurrent_tasks: int = 4, poll_interval: float = 0.1,
                  graceful_shutdown_timeout: float = 30.0):
         """Initialize TaskWorker.
 
         Args:
             queue: TaskQueue instance to pull tasks from
-            handler: TaskHandler instance to process tasks
             worker_id: Unique identifier for this worker
             max_concurrent_tasks: Maximum number of concurrent tasks
             poll_interval: Polling interval in seconds
             graceful_shutdown_timeout: Timeout for graceful shutdown
         """
         self.queue = queue
-        self.handler = handler
+        self.engine = WorkflowEngine()
         self.worker_id = worker_id
         self.max_concurrent_tasks = max_concurrent_tasks
         self.poll_interval = poll_interval
@@ -247,24 +246,16 @@ class TaskWorker:
             # Set execution context on the task wrapper
             task_wrapper.set_execution_context(execution_context)
 
-            # Use the handler to process the task
-            success = self.handler.process_task(task_wrapper)
+            # Use WorkflowEngine to execute the task
+            self.engine.execute(execution_context, start_task_id=task_id)
 
             duration = time.time() - start_time
 
-            if success:
-                return {
-                    "success": True,
-                    "duration": duration,
-                    "task_id": task_id
-                }
-            else:
-                return {
-                    "success": False,
-                    "error": "Handler returned False",
-                    "duration": duration,
-                    "task_id": task_id
-                }
+            return {
+                "success": True,
+                "duration": duration,
+                "task_id": task_id
+            }
 
         except FutureTimeoutError:
             duration = time.time() - start_time
@@ -275,8 +266,18 @@ class TaskWorker:
                 "task_id": task_id,
                 "timeout": True
             }
+        except GraflowRuntimeError as e:
+            duration = time.time() - start_time
+            logger.error(f"Task {task_id} failed with GraflowRuntimeError: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "duration": duration,
+                "task_id": task_id
+            }
         except Exception as e:
             duration = time.time() - start_time
+            logger.error(f"Task {task_id} failed with unexpected error: {e}", exc_info=True)
             return {
                 "success": False,
                 "error": str(e),

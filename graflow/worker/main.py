@@ -11,7 +11,6 @@ from typing import Any, Dict
 
 from graflow.queue.base import TaskQueue
 from graflow.queue.factory import QueueBackend, TaskQueueFactory
-from graflow.worker.handler import TaskHandler
 
 # Setup logging
 logging.basicConfig(
@@ -80,24 +79,6 @@ def create_memory_queue() -> TaskQueue:
         sys.exit(1)
 
 
-def create_task_handler(handler_config: Dict[str, Any]) -> TaskHandler:
-    """Create TaskHandler based on configuration."""
-    try:
-        from graflow.worker.handler import DirectTaskExecutor
-
-        handler_type = handler_config.get('type', 'direct')
-
-        if handler_type == 'direct':
-            return DirectTaskExecutor()
-        else:
-            logger.error(f"Unsupported handler type: {handler_type}")
-            sys.exit(1)
-
-    except ImportError as e:
-        logger.error(f"Failed to import TaskHandler: {e}")
-        sys.exit(1)
-
-
 def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
@@ -156,14 +137,6 @@ def parse_arguments():
         help='Session ID for queue'
     )
 
-    # Handler configuration
-    parser.add_argument(
-        '--handler-type',
-        choices=['direct'],
-        default=os.environ.get('HANDLER_TYPE', 'direct'),
-        help='Task handler type'
-    )
-
     # Logging
     parser.add_argument(
         '--log-level',
@@ -197,7 +170,7 @@ def main():
         logging.getLogger().setLevel(getattr(logging, args.log_level))
 
         logger.info(f"Starting TaskWorker: {args.worker_id}")
-        logger.info(f"Configuration: queue={args.queue_type}, handler={args.handler_type}")
+        logger.info(f"Configuration: queue={args.queue_type}")
 
         # Create task queue
         if args.queue_type == 'redis':
@@ -211,16 +184,11 @@ def main():
         else:  # memory
             queue = create_memory_queue()
 
-        # Create task handler
-        handler_config = {'type': args.handler_type}
-        handler = create_task_handler(handler_config)
-
         # Create TaskWorker
         from graflow.worker.worker import TaskWorker
 
         worker = TaskWorker(
             queue=queue,
-            handler=handler,
             worker_id=args.worker_id,
             max_concurrent_tasks=args.max_concurrent_tasks,
             poll_interval=args.poll_interval
