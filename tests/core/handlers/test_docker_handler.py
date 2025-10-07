@@ -1,0 +1,96 @@
+"""Tests for DockerTaskHandler."""
+
+import pytest
+from docker.types import DeviceRequest
+
+from graflow.core.context import ExecutionContext
+from graflow.core.decorators import task
+from graflow.core.graph import TaskGraph
+from graflow.core.handlers.docker import DockerTaskHandler
+
+
+def is_docker_available():
+    """Check if Docker daemon is available."""
+    try:
+        import docker
+
+        client = docker.from_env()
+        client.ping()
+        return True
+    except Exception:
+        return False
+
+
+DOCKER_AVAILABLE = is_docker_available()
+
+
+class TestDockerTaskHandler:
+    """Test DockerTaskHandler."""
+
+    @pytest.mark.skipif(not DOCKER_AVAILABLE, reason="Docker daemon not available")
+    def test_docker_task_handler_simple(self):
+        """Test simple task execution in Docker."""
+
+        @task
+        def simple_task():
+            return "hello from docker"
+
+        graph = TaskGraph()
+        graph.add_node(simple_task, "simple_task")
+        context = ExecutionContext.create(graph, "simple_task")
+        simple_task.set_execution_context(context)
+
+        handler = DockerTaskHandler(image="python:3.11-slim")
+        handler.execute_task(simple_task, context)
+
+        assert context.get_result("simple_task") == "hello from docker"
+
+    @pytest.mark.skipif(not DOCKER_AVAILABLE, reason="Docker daemon not available")
+    def test_docker_task_handler_with_computation(self):
+        """Test task with computation."""
+
+        @task
+        def calc_task():
+            return sum(range(100))
+
+        graph = TaskGraph()
+        graph.add_node(calc_task, "calc_task")
+        context = ExecutionContext.create(graph, "calc_task")
+        calc_task.set_execution_context(context)
+
+        handler = DockerTaskHandler(image="python:3.11-slim")
+        handler.execute_task(calc_task, context)
+
+        assert context.get_result("calc_task") == 4950
+
+    def test_docker_task_handler_custom_image(self):
+        """Test with custom Docker image."""
+        handler = DockerTaskHandler(image="python:3.11-alpine", auto_remove=True)
+        assert handler.image == "python:3.11-alpine"
+        assert handler.auto_remove is True
+
+    def test_docker_task_handler_with_environment(self):
+        """Test with custom environment variables."""
+        handler = DockerTaskHandler(
+            image="python:3.11-slim", environment={"MY_VAR": "test_value"}
+        )
+        assert handler.environment == {"MY_VAR": "test_value"}
+
+    def test_docker_task_handler_initialization(self):
+        """Test DockerTaskHandler initialization with various parameters."""
+        device_req = DeviceRequest(count=1, capabilities=[["gpu"]])
+        handler = DockerTaskHandler(
+            image="python:3.11",
+            auto_remove=False,
+            environment={"KEY": "value"},
+            volumes={"/host/path": {"bind": "/container/path", "mode": "rw"}},
+            device_requests=[device_req],
+        )
+
+        assert handler.image == "python:3.11"
+        assert handler.auto_remove is False
+        assert handler.environment == {"KEY": "value"}
+        assert handler.volumes == {
+            "/host/path": {"bind": "/container/path", "mode": "rw"}
+        }
+        assert handler.device_requests == [device_req]
