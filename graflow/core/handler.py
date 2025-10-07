@@ -1,11 +1,9 @@
 """Task execution handler base class."""
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from graflow.core.context import ExecutionContext
-    from graflow.core.task import Executable
+from graflow.core.context import ExecutionContext
+from graflow.core.task import Executable
 
 
 class TaskHandler(ABC):
@@ -22,7 +20,7 @@ class TaskHandler(ABC):
     """
 
     @abstractmethod
-    def execute_task(self, task: 'Executable', context: 'ExecutionContext') -> None:
+    def execute_task(self, task: Executable, context: ExecutionContext) -> None:
         """Execute task and store result in context.
 
         Args:

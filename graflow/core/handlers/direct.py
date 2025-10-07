@@ -1,13 +1,10 @@
 """Direct task execution handler."""
 
 import logging
-from typing import TYPE_CHECKING
 
+from graflow.core.context import ExecutionContext
 from graflow.core.handler import TaskHandler
-
-if TYPE_CHECKING:
-    from graflow.core.context import ExecutionContext
-    from graflow.core.task import Executable
+from graflow.core.task import Executable
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +21,7 @@ class DirectTaskHandler(TaskHandler):
         >>> handler.execute_task(my_task, context)
     """
 
-    def execute_task(self, task: 'Executable', context: 'ExecutionContext') -> None:
+    def execute_task(self, task: Executable, context: ExecutionContext) -> None:
         """Execute task and store result in context.
 
         Args:
