@@ -17,15 +17,19 @@ def task(id_or_func: F) -> TaskWrapper: ... # type: ignore
 # Usage: @task (without parentheses, directly on function)
 
 @overload
-def task(id_or_func: str, *, inject_context: bool = False) -> Callable[[F], TaskWrapper]: ... # type: ignore
-# Usage: @task("custom_id") or @task("custom_id", inject_context=True)
+def task(id_or_func: str, *, inject_context: bool = False, handler: Optional[str] = None) -> Callable[[F], TaskWrapper]: ... # type: ignore
+# Usage: @task("custom_id") or @task("custom_id", inject_context=True, handler="docker")
 
 @overload
-def task(*, id: Optional[str] = None, inject_context: bool = False) -> Callable[[F], TaskWrapper]: ... # type: ignore
-# Usage: @task() or @task(id="custom_id") or @task(inject_context=True)
+def task(*, id: Optional[str] = None, inject_context: bool = False, handler: Optional[str] = None) -> Callable[[F], TaskWrapper]: ... # type: ignore
+# Usage: @task() or @task(id="custom_id") or @task(inject_context=True) or @task(handler="docker")
 
 def task(
-    id_or_func: Optional[F] | str | None = None, *, id: Optional[str] = None, inject_context: bool = False
+    id_or_func: Optional[F] | str | None = None,
+    *,
+    id: Optional[str] = None,
+    inject_context: bool = False,
+    handler: Optional[str] = None
 ) -> TaskWrapper | Callable[[F], TaskWrapper]:
     """Decorator to convert a function into a Task object.
 
@@ -36,11 +40,14 @@ def task(
     - @task("custom_id", inject_context=True)
     - @task(id="custom_id")
     - @task(inject_context=True)
+    - @task(handler="docker")
+    - @task("custom_id", handler="docker")
 
     Args:
         id_or_func: The function to decorate (when used without parentheses) or task ID string
         id: Optional custom id for the task (keyword argument)
         inject_context: If True, automatically inject ExecutionContext as first parameter
+        handler: Execution handler type ("direct", "docker", or custom)
 
     Returns:
         TaskWrapper instance or decorator function
@@ -49,7 +56,7 @@ def task(
     # Handle @task("task_id") and @task("task_id", inject_context=True) syntax
     if isinstance(id_or_func, str):
         def string_decorator(f: F) -> TaskWrapper:
-            return task(f, id=id_or_func, inject_context=inject_context)  # type: ignore
+            return task(f, id=id_or_func, inject_context=inject_context, handler=handler)  # type: ignore
         return string_decorator
 
     def decorator(f: F) -> TaskWrapper:
@@ -64,7 +71,7 @@ def task(
 
         # Create TaskWrapper instance
         from .task import TaskWrapper  # Import here to avoid circular imports
-        task_obj = TaskWrapper(task_id, wrapper, inject_context=inject_context)
+        task_obj = TaskWrapper(task_id, wrapper, inject_context=inject_context, handler_type=handler)
 
         # Copy original function attributes to ensure compatibility
         try:

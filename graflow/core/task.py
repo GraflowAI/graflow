@@ -14,6 +14,10 @@ from graflow.exceptions import GraflowRuntimeError
 class Executable(ABC):
     """Abstract base class for all executable entities in graflow."""
 
+    def __init__(self) -> None:
+        """Initialize executable with default handler type."""
+        self.handler_type: str = "direct"
+
     @property
     @abstractmethod
     def task_id(self) -> str:
@@ -81,6 +85,7 @@ class Task(Executable):
 
     def __init__(self, task_id: str, register_to_context: bool = True) -> None:
         """Initialize a task."""
+        super().__init__()
         self._task_id = task_id
         # Register to current workflow context
         if register_to_context:
@@ -112,6 +117,7 @@ class ParallelGroup(Executable):
 
     def __init__(self, tasks: list[Executable]) -> None:
         """Initialize a parallel group with a list of tasks."""
+        super().__init__()
         # Get name from current context or use global counter
         self._task_id = self._get_group_name()
         self.tasks = list(tasks)
@@ -284,11 +290,30 @@ class ParallelGroup(Executable):
 class TaskWrapper(Executable):
     """Wrapper class for function-based tasks created with @task decorator."""
 
-    def __init__(self, task_id: str, func, inject_context: bool = False, register_to_context: bool = True) -> None:
-        """Initialize a task wrapper with task_id and function."""
+    def __init__(
+        self,
+        task_id: str,
+        func,
+        inject_context: bool = False,
+        register_to_context: bool = True,
+        handler_type: Optional[str] = None
+    ) -> None:
+        """Initialize a task wrapper with task_id and function.
+
+        Args:
+            task_id: Task identifier
+            func: Function to wrap
+            inject_context: Whether to inject ExecutionContext as first argument
+            register_to_context: Whether to register to workflow context
+            handler_type: Execution handler type ("direct", "docker", or custom)
+        """
+        super().__init__()
         self._task_id = task_id
         self.func = func
         self.inject_context = inject_context
+        # Set handler_type attribute (from Executable base class)
+        if handler_type is not None:
+            self.handler_type = handler_type
         # Register to current workflow context or global graph
         if register_to_context:
             self._register_to_context()
