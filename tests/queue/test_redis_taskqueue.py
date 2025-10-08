@@ -8,7 +8,7 @@ import pytest
 
 from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
-from graflow.core.task import Task
+from graflow.core.task import Executable
 from graflow.queue.base import TaskSpec, TaskStatus
 from graflow.queue.factory import QueueBackend
 from graflow.queue.redis import RedisTaskQueue
@@ -33,6 +33,37 @@ def execution_context():
     """Create ExecutionContext for testing."""
     graph = TaskGraph()
     return ExecutionContext(graph)
+
+
+class DummyExecutable(Executable):
+    """Serializable executable used for TaskSpec tests."""
+
+    def __init__(self, task_id: str):
+        super().__init__()
+        self._task_id = task_id
+        self.__name__ = f"dummy_{task_id}"
+        self.__qualname__ = self.__name__
+        self.__module__ = __name__
+
+    @property
+    def task_id(self) -> str:
+        return self._task_id
+
+    def run(self):
+        return f"result:{self._task_id}"
+
+    def __call__(self):
+        return self.run()
+
+
+def create_registered_task(execution_context: ExecutionContext, task_id: str) -> DummyExecutable:
+    """Create executable registered with the execution context."""
+    task = DummyExecutable(task_id)
+    # Register for function resolution fallback
+    execution_context.function_manager.register_task_function(task_id, task)
+    # Ensure workflow graph knows the task for engine execution
+    execution_context.graph.add_node(task, task_id)
+    return task
 
 
 class TestRedisTaskQueue:
@@ -83,8 +114,9 @@ class TestRedisTaskQueue:
         with patch('graflow.queue.redis.redis'):
             queue = RedisTaskQueue(execution_context, mock_redis)
 
+            task = create_registered_task(execution_context, "test_node")
             task_spec = TaskSpec(
-                executable=Task("test_node", register_to_context=False),
+                executable=task,
                 execution_context=execution_context,
                 status=TaskStatus.READY,
                 created_at=1234567890.0
@@ -95,28 +127,23 @@ class TestRedisTaskQueue:
             assert result is True
             assert queue._task_specs["test_node"] == task_spec
 
-            # Verify Redis calls
-            expected_spec_data = {
-                'task_id': 'test_node',
-                'status': 'ready',
-                'created_at': 1234567890.0,
-                'strategy': 'reference',
-                'function_data': {
-                    'strategy': 'reference',
-                    'module': 'graflow.core.task',
-                    'name': 'run',
-                    'qualname': 'Task.run'
-                },
-                # Phase 3: Advanced features
-                'retry_count': 0,
-                'max_retries': 3,
-                'last_error': None
-            }
-            mock_redis.hset.assert_called_once_with(
-                queue.specs_key,
-                "test_node",
-                json.dumps(expected_spec_data)
-            )
+            # Verify Redis calls and serialized payload
+            mock_redis.hset.assert_called_once()
+            _, _, payload = mock_redis.hset.call_args[0]
+            spec_payload = json.loads(payload)
+
+            assert spec_payload['task_id'] == 'test_node'
+            assert spec_payload['status'] == TaskStatus.READY.value
+            assert spec_payload['created_at'] == 1234567890.0
+            assert spec_payload['strategy'] == 'reference'
+            assert spec_payload['retry_count'] == 0
+            assert spec_payload['max_retries'] == 3
+            assert spec_payload['last_error'] is None
+
+            function_data = spec_payload['function_data']
+            assert function_data['strategy'] == 'reference'
+            assert function_data['name'].startswith('dummy_test_node')
+
             mock_redis.rpush.assert_called_once_with(queue.queue_key, "test_node")
 
     def test_dequeue_empty_queue(self, mock_redis, execution_context):
@@ -157,6 +184,7 @@ class TestRedisTaskQueue:
 
         with patch('graflow.queue.redis.redis'):
             queue = RedisTaskQueue(execution_context, mock_redis)
+            create_registered_task(execution_context, "test_node")
 
             result = queue.dequeue()
 
@@ -241,7 +269,7 @@ class TestRedisTaskQueueIntegration:
                 graph,
                 start_node="start",
                 queue_backend=QueueBackend.REDIS,
-                queue_config={
+                config={
                     'redis_client': mock_redis,
                     'key_prefix': 'test'
                 }
@@ -260,7 +288,7 @@ class TestRedisTaskQueueIntegration:
                 graph,
                 start_node="start",
                 queue_backend="redis",
-                queue_config={'redis_client': mock_redis}
+                config={'redis_client': mock_redis}
             )
 
             assert isinstance(context.task_queue, RedisTaskQueue)
@@ -282,12 +310,12 @@ class TestRedisTaskQueueIntegration:
                 graph,
                 start_node="start",
                 queue_backend=QueueBackend.REDIS,
-                queue_config={'redis_client': mock_redis}
+                config={'redis_client': mock_redis}
             )
 
             # Test compatibility methods - create simple tasks
-            task1 = Task("task1")
-            task2 = Task("task2")
+            task1 = create_registered_task(context, "task1")
+            task2 = create_registered_task(context, "task2")
             context.add_to_queue(task1)
             context.add_to_queue(task2)
 

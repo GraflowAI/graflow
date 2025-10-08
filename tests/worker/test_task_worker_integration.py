@@ -5,25 +5,49 @@ import time
 from typing import Any, Optional
 
 from graflow.core.context import ExecutionContext
+from graflow.core.graph import TaskGraph
+from graflow.core.task import TaskWrapper
 from graflow.queue.base import TaskQueue, TaskSpec
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class MockExecutionContext(ExecutionContext):
-    """Mock ExecutionContext for testing."""
 
-    def __init__(self):
-        self.session_id = "test_session"
+def _create_execution_context() -> ExecutionContext:
+    """Create ExecutionContext with isolated graph."""
+    graph = TaskGraph()
+    return ExecutionContext(graph)
+
+
+def _create_registered_task(execution_context: ExecutionContext, task_id: str) -> TaskWrapper:
+    """Create TaskWrapper registered with the execution context."""
+    def task_fn():
+        return f"result:{task_id}"
+
+    wrapper = TaskWrapper(task_id, task_fn, register_to_context=False)
+    unique_name = f"task_fn_{task_id}"
+    wrapper.__name__ = unique_name
+    wrapper.__qualname__ = unique_name
+    wrapper.__module__ = __name__
+
+    execution_context.graph.add_node(wrapper, task_id)
+    execution_context.function_manager.register_task_function(task_id, wrapper)
+    return wrapper
+
+
+def _create_task_spec(execution_context: ExecutionContext, task_id: str) -> TaskSpec:
+    """Create TaskSpec with registered executable."""
+    executable = _create_registered_task(execution_context, task_id)
+    return TaskSpec(executable=executable, execution_context=execution_context)
 
 
 class MockTaskQueue(TaskQueue):
     """Mock TaskQueue for testing that extends AbstractTaskQueue."""
 
-    def __init__(self):
-        super().__init__(MockExecutionContext())
-        self.tasks = []
+    def __init__(self, execution_context: ExecutionContext):
+        super().__init__(execution_context)
+        self.tasks: list[TaskSpec] = []
         self.dequeue_count = 0
 
     def enqueue(self, task_spec: TaskSpec) -> bool:
@@ -59,20 +83,18 @@ def test_basic_task_execution():
     print("=== Testing Basic TaskWorker Functionality ===")
 
     try:
-        from graflow.worker.handler import DirectTaskExecutor
         from graflow.worker.worker import TaskWorker
 
         # Create mock queue and add some tasks
-        queue = MockTaskQueue()
-        queue.enqueue(TaskSpec("task_1", queue.execution_context))
-        queue.enqueue(TaskSpec("task_2", queue.execution_context))
-        queue.enqueue(TaskSpec("task_3", queue.execution_context))
+        execution_context = _create_execution_context()
+        queue = MockTaskQueue(execution_context)
+        queue.enqueue(_create_task_spec(execution_context, "task_1"))
+        queue.enqueue(_create_task_spec(execution_context, "task_2"))
+        queue.enqueue(_create_task_spec(execution_context, "task_3"))
 
-        # Create handler and worker with concurrent execution
-        handler = DirectTaskExecutor()
+        # Create worker with concurrent execution
         worker = TaskWorker(
             queue=queue,
-            handler=handler,
             worker_id="test_worker",
             max_concurrent_tasks=2,
             poll_interval=0.05
@@ -122,19 +144,17 @@ def test_concurrent_task_execution():
     print("\n=== Testing Concurrent Task Execution ===")
 
     try:
-        from graflow.worker.handler import DirectTaskExecutor
         from graflow.worker.worker import TaskWorker
 
         # Create mock queue with more tasks
-        queue = MockTaskQueue()
+        execution_context = _create_execution_context()
+        queue = MockTaskQueue(execution_context)
         for i in range(10):
-            queue.enqueue(TaskSpec(f"concurrent_task_{i}", queue.execution_context))
+            queue.enqueue(_create_task_spec(execution_context, f"concurrent_task_{i}"))
 
-        # Create handler and worker with higher concurrency
-        handler = DirectTaskExecutor()
+        # Create worker with higher concurrency
         worker = TaskWorker(
             queue=queue,
-            handler=handler,
             worker_id="concurrent_worker",
             max_concurrent_tasks=5,
             poll_interval=0.01

@@ -1,19 +1,22 @@
-"""Integration test for TaskWorker, RedisQueue, InProcessTaskExecutor with Redis channels used inside tasks."""
+"""Integration tests for Redis-backed TaskWorker scenarios."""
 
 import time
-from typing import TypedDict
-from unittest.mock import Mock
+from typing import Any, Callable, Dict, Optional, TypedDict
 
 import pytest
 
 from graflow.channels.redis import RedisChannel
 from graflow.channels.schemas import TaskResultMessage
 from graflow.coordination.redis import RedisCoordinator
-from graflow.core.context import ExecutionContext, TaskExecutionContext
+from graflow.core.context import ExecutionContext
+from graflow.core.graph import TaskGraph
+from graflow.core.task import Executable
 from graflow.queue.base import TaskSpec, TaskStatus
 from graflow.queue.redis import RedisTaskQueue
-from graflow.worker.handler import DirectTaskExecutor
 from graflow.worker.worker import TaskWorker
+
+CHANNEL_NAME = "task_channel"
+_redis_client: Optional[Any] = None
 
 
 class DataMessage(TypedDict):
@@ -23,182 +26,186 @@ class DataMessage(TypedDict):
     timestamp: float
 
 
+class RedisWorkflowTask(Executable):
+    """Executable wrapper for Redis-backed tests."""
+
+    def __init__(self, task_id: str, func: Callable[[], Any]) -> None:
+        super().__init__()
+        self._task_id = task_id
+        self._func = func
+
+    @property
+    def task_id(self) -> str:
+        return self._task_id
+
+    def run(self) -> Any:
+        return self._func()
+
+    def __call__(self) -> Any:
+        return self.run()
+
+
+def _configure_redis_client(redis_client: Any) -> None:
+    """Set the Redis client used by task helpers."""
+    global _redis_client
+    _redis_client = redis_client
+
+
+def _get_channel() -> RedisChannel:
+    """Create a RedisChannel bound to the configured client."""
+    if _redis_client is None:
+        raise RuntimeError("Redis client not configured for integration tasks")
+    return RedisChannel(CHANNEL_NAME, redis_client=_redis_client)
+
+
+def _register_tasks(execution_context: ExecutionContext, tasks: Dict[str, RedisWorkflowTask]) -> None:
+    """Register task executables in the execution context."""
+    for task in tasks.values():
+        if task.task_id not in execution_context.graph.nodes:
+            execution_context.graph.add_node(task, task.task_id)
+        execution_context.function_manager.register_task_function(task.task_id, task)
+
+
+def _make_task_spec(task: RedisWorkflowTask, execution_context: ExecutionContext) -> TaskSpec:
+    """Create TaskSpec using pickle strategy for cloudpickle compatibility."""
+    return TaskSpec(
+        executable=task,
+        execution_context=execution_context,
+        status=TaskStatus.READY,
+        strategy="pickle"
+    )
+
+
+def _create_producer_task(task_id: str, data: list[int]) -> RedisWorkflowTask:
+    """Create a producer task that writes data to the shared Redis channel."""
+
+    def run() -> str:
+        channel = _get_channel()
+        data_msg: DataMessage = {
+            "data": data,
+            "task_id": task_id,
+            "timestamp": time.time()
+        }
+        channel.set(f"data:{task_id}", data_msg)
+
+        counter_raw = channel.get("producer_count", 0)
+        counter = counter_raw if isinstance(counter_raw, int) else 0
+        channel.set("producer_count", counter + 1)
+        return f"produced: {data}"
+
+    return RedisWorkflowTask(task_id, run)
+
+
+def _create_consumer_task(task_id: str) -> RedisWorkflowTask:
+    """Create a consumer task that aggregates producer data."""
+
+    def run() -> str:
+        channel = _get_channel()
+        timeout = time.time() + 5.0
+        while time.time() < timeout:
+            counter_raw = channel.get("producer_count", 0)
+            producer_count = counter_raw if isinstance(counter_raw, int) else 0
+            if producer_count >= 2:
+                break
+            time.sleep(0.1)
+
+        consumed_data: list[int] = []
+        for key in channel.keys():
+            if key.startswith("data:producer"):
+                data_msg = channel.get(key)
+                if isinstance(data_msg, dict):
+                    consumed_data.extend(data_msg.get("data", []))
+
+        result = f"consumed_{task_id}: {consumed_data}"
+        result_msg: TaskResultMessage = {
+            "task_id": task_id,
+            "result": consumed_data,
+            "timestamp": time.time(),
+            "status": "completed"
+        }
+        channel.set(f"consumed:{task_id}", result_msg)
+        return result
+
+    return RedisWorkflowTask(task_id, run)
+
+
+def _create_aggregator_task(task_id: str) -> RedisWorkflowTask:
+    """Create an aggregator task that composes consumer results."""
+
+    def run() -> str:
+        channel = _get_channel()
+        timeout = time.time() + 5.0
+        aggregated_results: list[int] = []
+
+        while time.time() < timeout:
+            consumed_keys = [key for key in channel.keys() if key.startswith("consumed:")]
+            if len(consumed_keys) >= 2:
+                for key in consumed_keys:
+                    result_data = channel.get(key)
+                    if isinstance(result_data, dict):
+                        aggregated_results.extend(result_data.get("result", []))
+                break
+            time.sleep(0.1)
+
+        final_result = f"aggregated: {len(aggregated_results)} items total"
+        final_msg: TaskResultMessage = {
+            "task_id": task_id,
+            "result": final_result,
+            "timestamp": time.time(),
+            "status": "completed"
+        }
+        channel.set("final_result", final_msg)
+        return final_result
+
+    return RedisWorkflowTask(task_id, run)
+
+
+def _create_simple_task(task_id: str) -> RedisWorkflowTask:
+    """Create a task that records its execution in Redis."""
+
+    def run() -> str:
+        channel = _get_channel()
+        channel.set(f"simple:{task_id}", f"executed_{task_id}")
+        return f"completed_{task_id}"
+
+    return RedisWorkflowTask(task_id, run)
+
+
 @pytest.fixture
-def execution_context():
-    """Create a mock execution context."""
-    context = Mock(spec=ExecutionContext)
-    context.session_id = "test_session"
+def execution_context(clean_redis):
+    """Create real ExecutionContext with Redis channel support."""
+    graph = TaskGraph()
+    context = ExecutionContext(
+        graph,
+        channel_backend="redis",
+        config={"redis_client": clean_redis, "key_prefix": "test_graflow"}
+    )
+    _configure_redis_client(clean_redis)
+    # Ensure channel state is clean
+    RedisChannel(CHANNEL_NAME, redis_client=clean_redis).clear()
     return context
 
 
 @pytest.fixture
 def redis_queue(clean_redis, execution_context):
-    """Create RedisTaskQueue with clean Redis."""
-    return RedisTaskQueue(execution_context, clean_redis, "test_graflow")
+    """Create RedisTaskQueue bound to the execution context."""
+    queue = RedisTaskQueue(execution_context, clean_redis, "test_graflow")
+    queue.cleanup()
+    yield queue
+    queue.cleanup()
 
 
 @pytest.fixture
-def redis_coordinator(clean_redis):
-    """Create RedisCoordinator."""
-    return RedisCoordinator(clean_redis)
-
-
-class ChannelAwareTaskHandler(DirectTaskExecutor):
-    """Task handler that creates tasks with channel access."""
-
-    def __init__(self, redis_client):
-        super().__init__()
-        self.redis_client = redis_client
-
-    def _resolve_task(self, task_spec):
-        """Create task with proper TaskExecutionContext and channel access."""
-        task_id = task_spec.node_id
-
-        # Create mock TaskExecutionContext with Redis channel
-        task_context = Mock(spec=TaskExecutionContext)
-        task_context.task_id = task_id
-
-        # Create channel that uses the same Redis instance
-        redis_channel = RedisChannel(
-            name="task_channel",
-            host="localhost",
-            port=6379,
-            db=0  # Use same db as clean_redis
-        )
-        redis_channel.redis_client = self.redis_client
-
-        # Mock get_typed_channel to return our Redis channel
-        def get_typed_channel(message_type):
-            return redis_channel
-
-        task_context.get_typed_channel = get_typed_channel
-        task_context.get_channel = lambda: redis_channel
-
-        class ChannelTask:
-            def __init__(self, task_id: str, ctx: TaskExecutionContext):
-                self.task_id = task_id
-                self.ctx = ctx
-
-            def __call__(self):
-                if self.task_id.startswith("producer"):
-                    return self.produce_data()
-                elif self.task_id.startswith("consumer"):
-                    return self.consume_data()
-                elif self.task_id.startswith("aggregator"):
-                    return self.aggregate_data()
-                else:
-                    return self.simple_task()
-
-            def produce_data(self):
-                """Producer task using typed channels."""
-                # Get typed channel for data exchange
-                data_channel = self.ctx.get_typed_channel(DataMessage)
-
-                # Generate and send data
-                data = [1, 2, 3, 4, 5] if "0" in self.task_id else [6, 7, 8, 9, 10]
-
-                data_msg: DataMessage = {
-                    "data": data,
-                    "task_id": self.task_id,
-                    "timestamp": time.time()
-                }
-
-                data_channel.send(f"data:{self.task_id}", data_msg)
-
-                # Update producer counter
-                counter = data_channel.get("producer_count", 0)
-                data_channel.set("producer_count", counter + 1)
-
-                return f"produced: {data}"
-
-            def consume_data(self):
-                """Consumer task using typed channels."""
-                data_channel = self.ctx.get_typed_channel(DataMessage)
-
-                # Wait for producers to complete
-                timeout = 5.0
-                start_time = time.time()
-                while time.time() - start_time < timeout:
-                    producer_count = data_channel.get("producer_count", 0)
-                    if producer_count >= 2:  # Wait for 2 producers
-                        break
-                    time.sleep(0.1)
-
-                # Consume data from producers
-                consumed_data = []
-                for key in data_channel.keys():
-                    if key.startswith("data:producer"):
-                        data_msg = data_channel.get(key)
-                        if data_msg and isinstance(data_msg, dict):
-                            consumed_data.extend(data_msg["data"])
-
-                result = f"consumed_{self.task_id}: {consumed_data}"
-
-                # Send result using typed channel
-                result_channel = self.ctx.get_typed_channel(TaskResultMessage)
-                result_msg: TaskResultMessage = {
-                    "task_id": self.task_id,
-                    "result": consumed_data,
-                    "timestamp": time.time(),
-                    "status": "completed"
-                }
-                result_channel.set(f"consumed:{self.task_id}", result_msg)
-
-                return result
-
-            def aggregate_data(self):
-                """Aggregator task using typed channels."""
-                result_channel = self.ctx.get_typed_channel(TaskResultMessage)
-
-                # Wait for consumers to complete
-                timeout = 5.0
-                start_time = time.time()
-                aggregated_results = []
-
-                while time.time() - start_time < timeout:
-                    consumed_keys = [k for k in result_channel.keys() if k.startswith("consumed:")]
-                    if len(consumed_keys) >= 2:  # Wait for 2 consumers
-                        for key in consumed_keys:
-                            result_data = result_channel.get(key)
-                            if result_data and isinstance(result_data, dict):
-                                aggregated_results.extend(result_data["result"])
-                        break
-                    time.sleep(0.1)
-
-                # Create final result
-                final_result = f"aggregated: {len(aggregated_results)} items total"
-
-                final_msg: TaskResultMessage = {
-                    "task_id": self.task_id,
-                    "result": final_result,
-                    "timestamp": time.time(),
-                    "status": "completed"
-                }
-                result_channel.send("final_result", final_msg)
-
-                return final_result
-
-            def simple_task(self):
-                """Simple task using channels."""
-                channel = self.ctx.get_channel()
-                channel.set(f"simple:{self.task_id}", f"executed_{self.task_id}")
-                return f"completed_{self.task_id}"
-
-        return ChannelTask(task_id, task_context)
+def redis_coordinator(redis_queue):
+    """Create RedisCoordinator backed by the test RedisTaskQueue."""
+    return RedisCoordinator(redis_queue)
 
 
 @pytest.fixture
-def task_handler(clean_redis):
-    """Create task handler with Redis channel access."""
-    return ChannelAwareTaskHandler(clean_redis)
-
-
-@pytest.fixture
-def task_worker(redis_queue, task_handler):
-    """Create TaskWorker."""
+def task_worker(redis_queue):
+    """Create TaskWorker instance for tests."""
     worker = TaskWorker(
         queue=redis_queue,
-        handler=task_handler,
         worker_id="test_worker",
         max_concurrent_tasks=3,
         poll_interval=0.1
@@ -208,34 +215,28 @@ def task_worker(redis_queue, task_handler):
         worker.stop()
 
 
-def test_producer_consumer_with_typed_channels(redis_queue, task_worker, clean_redis):
+def test_producer_consumer_with_typed_channels(redis_queue, task_worker, clean_redis, execution_context):
     """Test producer-consumer pattern using typed channels inside tasks."""
 
-    # Create producer tasks
-    for i in range(2):
-        task_spec = TaskSpec(
-            task_id=f"producer_task_{i}",
-            execution_context=redis_queue.execution_context,
-            status=TaskStatus.READY
-        )
-        redis_queue.enqueue(task_spec)
+    tasks = {
+        "producer_task_0": _create_producer_task("producer_task_0", [1, 2, 3, 4, 5]),
+        "producer_task_1": _create_producer_task("producer_task_1", [6, 7, 8, 9, 10]),
+        "consumer_task_0": _create_consumer_task("consumer_task_0"),
+        "consumer_task_1": _create_consumer_task("consumer_task_1"),
+        "aggregator_task": _create_aggregator_task("aggregator_task")
+    }
+    _register_tasks(execution_context, tasks)
 
-    # Create consumer tasks
-    for i in range(2):
-        task_spec = TaskSpec(
-            task_id=f"consumer_task_{i}",
-            execution_context=redis_queue.execution_context,
-            status=TaskStatus.READY
-        )
-        redis_queue.enqueue(task_spec)
-
-    # Create aggregator task
-    task_spec = TaskSpec(
-        task_id="aggregator_task",
-        execution_context=redis_queue.execution_context,
-        status=TaskStatus.READY
-    )
-    redis_queue.enqueue(task_spec)
+    # Enqueue tasks in desired execution order
+    enqueue_order = [
+        "producer_task_0",
+        "producer_task_1",
+        "consumer_task_0",
+        "consumer_task_1",
+        "aggregator_task"
+    ]
+    for task_id in enqueue_order:
+        redis_queue.enqueue(_make_task_spec(tasks[task_id], execution_context))
 
     # Start worker
     task_worker.start()
@@ -275,10 +276,8 @@ def test_parallel_coordination_with_redis(redis_queue, clean_redis, redis_coordi
     # Create multiple workers
     workers = []
     for i in range(2):
-        handler = ChannelAwareTaskHandler(clean_redis)
         worker = TaskWorker(
             queue=redis_queue,
-            handler=handler,
             worker_id=f"worker_{i}",
             max_concurrent_tasks=2,
             poll_interval=0.1
@@ -290,14 +289,15 @@ def test_parallel_coordination_with_redis(redis_queue, clean_redis, redis_coordi
         barrier_id = "task_sync"
         redis_coordinator.create_barrier(barrier_id, 4)  # 4 parallel tasks
 
+        tasks = {
+            f"simple_task_{i}": _create_simple_task(f"simple_task_{i}")
+            for i in range(4)
+        }
+        _register_tasks(execution_context, tasks)
+
         # Create tasks
         for i in range(4):
-            task_spec = TaskSpec(
-                task_id=f"simple_task_{i}",
-                execution_context=execution_context,
-                status=TaskStatus.READY
-            )
-            redis_queue.enqueue(task_spec)
+            redis_queue.enqueue(_make_task_spec(tasks[f"simple_task_{i}"], execution_context))
 
         # Start workers
         for worker in workers:
