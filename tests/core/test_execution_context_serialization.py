@@ -13,6 +13,7 @@ state) can survive pickle operations while maintaining data integrity and functi
 """
 
 import os
+import pickle
 import tempfile
 
 import pytest
@@ -413,6 +414,115 @@ class TestExecutionContextSerialization:
             corrupted_path = os.path.join(tmpdir, "corrupted.pkl")
             with open(corrupted_path, "w") as f:
                 f.write("corrupted data")
-
-            with pytest.raises(Exception):  # Could be various pickle-related exceptions  # noqa: B017
+            with pytest.raises((pickle.UnpicklingError, AttributeError, EOFError)):
                 ExecutionContext.load(corrupted_path)
+                ExecutionContext.load(corrupted_path)
+
+    def test_lambda_task_serialization(self):
+        """Test ExecutionContext serialization with lambda tasks using cloudpickle.
+
+        This test verifies that:
+        - Lambda functions can be serialized with cloudpickle
+        - ExecutionContext containing lambda tasks can be pickled
+        - Lambda tasks work correctly after deserialization
+        - cloudpickle properly handles lambda closures
+        """
+        from graflow.core.serialization import dumps, loads
+        from graflow.core.task import TaskWrapper
+
+        graph = TaskGraph()
+
+        # Create lambda task (only possible with cloudpickle)
+        lambda_task = TaskWrapper("lambda_task", lambda x: x * 2)
+        graph.add_node(lambda_task, "lambda_task")
+
+        context = ExecutionContext.create(graph, "start", queue_backend="in_memory")
+
+        # Serialize using cloudpickle
+        pickled = dumps(context)
+        restored = loads(pickled)
+
+        # Verify task is restored
+        assert "lambda_task" in restored.graph.nodes
+        restored_task = restored.graph.get_node("lambda_task")
+
+        # Verify lambda works
+        result = restored_task.func(5)
+        assert result == 10
+
+    def test_closure_task_serialization(self):
+        """Test ExecutionContext serialization with closure tasks using cloudpickle.
+
+        This test verifies that:
+        - Closures referencing outer scope variables can be serialized
+        - ExecutionContext containing closure tasks can be pickled
+        - Closure tasks maintain their captured state after deserialization
+        - cloudpickle properly handles closure environments
+        """
+        from graflow.core.serialization import dumps, loads
+        from graflow.core.task import TaskWrapper
+
+        graph = TaskGraph()
+
+        # Create closure
+        multiplier = 3
+
+        def create_task():
+            def inner_task(x):
+                return x * multiplier  # References outer scope variable
+            return inner_task
+
+        closure_task = TaskWrapper("closure_task", create_task())
+        graph.add_node(closure_task, "closure_task")
+
+        context = ExecutionContext.create(graph, "start", queue_backend="in_memory")
+
+        # Serialize using cloudpickle
+        pickled = dumps(context)
+        restored = loads(pickled)
+
+        # Verify task is restored
+        restored_task = restored.graph.get_node("closure_task")
+
+        # Verify closure works with captured state
+        result = restored_task.func(4)
+        assert result == 12  # 4 * 3
+
+    def test_task_spec_with_lambda_serialization(self):
+        """Test TaskSpec serialization with lambda ExecutionContext using cloudpickle.
+
+        This test verifies that:
+        - TaskSpec containing ExecutionContext with lambda can be serialized
+        - Lambda tasks in TaskSpec work after Redis-style serialization
+        - Worker processes can receive and execute lambda tasks
+        - cloudpickle enables flexible task definition patterns
+        """
+        from graflow.core.serialization import dumps, loads
+        from graflow.core.task import TaskWrapper
+        from graflow.queue.base import TaskSpec
+
+        graph = TaskGraph()
+        context = ExecutionContext.create(graph, "start")
+
+        # Create lambda task (cloudpickle allows this)
+        lambda_task = TaskWrapper("test_task", lambda: 42)
+        lambda_task.set_execution_context(context)
+
+        # Create TaskSpec
+        task_spec = TaskSpec(executable=lambda_task, execution_context=context)
+
+        # Serialize (simulating Redis queue, using cloudpickle)
+        pickled = dumps(task_spec)
+
+        # Deserialize
+        restored_spec = loads(pickled)
+
+        # Verify ExecutionContext is restored
+        assert restored_spec.execution_context is not None
+        assert restored_spec.execution_context.session_id == context.session_id
+        assert restored_spec.task_id == "test_task"
+
+        # Verify lambda task works
+        restored_task = restored_spec.executable
+        result = restored_task.func()
+        assert result == 42

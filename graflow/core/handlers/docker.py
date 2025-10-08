@@ -2,13 +2,13 @@
 
 import base64
 import logging
-import pickle
 from typing import Optional
 
 from docker.types import DeviceRequest
 
 from graflow.core.context import ExecutionContext
 from graflow.core.handler import TaskHandler
+from graflow.core.serialization import dumps, loads
 from graflow.core.task import Executable
 
 logger = logging.getLogger(__name__)
@@ -141,13 +141,16 @@ class DockerTaskHandler(TaskHandler):
         logger.info(f"[DockerTaskHandler] Task {task_id} completed successfully")
 
     def _serialize_task(self, task: Executable) -> str:
-        """Serialize task function for Docker execution.
+        """Serialize task function for Docker execution using cloudpickle.
 
         Args:
             task: Task to serialize
 
         Returns:
-            Base64-encoded pickled task function
+            Base64-encoded cloudpickle'd task function
+
+        Note:
+            Uses cloudpickle for better support of lambdas and closures.
         """
         # Get the task function
         if hasattr(task, "func"):
@@ -155,33 +158,41 @@ class DockerTaskHandler(TaskHandler):
         else:
             raise ValueError(f"Task {task.task_id} does not have a callable function")
 
-        # Pickle and encode
-        pickled = pickle.dumps(task_func)
+        # Serialize using cloudpickle and encode
+        pickled = dumps(task_func)
         encoded = base64.b64encode(pickled).decode("utf-8")
 
         return encoded
 
     def _serialize_context(self, context: ExecutionContext) -> str:
-        """Serialize execution context for Docker execution.
+        """Serialize execution context for Docker execution using cloudpickle.
 
         Args:
             context: Execution context to serialize
 
         Returns:
-            Base64-encoded pickled context
+            Base64-encoded cloudpickle'd context
+
+        Note:
+            Uses cloudpickle for better support of lambdas and closures.
+            ExecutionContext.__getstate__ is automatically called.
         """
-        pickled = pickle.dumps(context)
+        pickled = dumps(context)
         encoded = base64.b64encode(pickled).decode("utf-8")
         return encoded
 
     def _parse_context_from_logs(self, logs: str) -> Optional[ExecutionContext]:
-        """Parse updated context from container logs.
+        """Parse updated context from container logs using cloudpickle.
 
         Args:
             logs: Container logs string
 
         Returns:
             Deserialized ExecutionContext or None
+
+        Note:
+            Uses cloudpickle for deserialization.
+            ExecutionContext.__setstate__ is automatically called.
         """
         # Look for CONTEXT: line in logs
         for line in logs.split("\n"):
@@ -189,7 +200,7 @@ class DockerTaskHandler(TaskHandler):
                 context_str = line[8:]  # Remove "CONTEXT:" prefix
                 try:
                     context_data = base64.b64decode(context_str)
-                    context = pickle.loads(context_data)
+                    context = loads(context_data)
                     return context
                 except Exception as e:
                     logger.error(

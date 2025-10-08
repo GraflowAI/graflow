@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pickle
 import time
 import uuid
 from contextlib import contextmanager
@@ -181,6 +180,11 @@ class ExecutionContext:
 
         # Track if goto (jump to existing task) was called in current task execution
         self._goto_called_in_current_task: bool = False
+
+        # Save backend configuration for serialization
+        self._queue_backend_type = queue_backend.value if isinstance(queue_backend, QueueBackend) else queue_backend
+        self._channel_backend_type = channel_backend
+        self._original_config = config or {}
 
     @classmethod
     def create(cls, graph: TaskGraph, start_node: str, max_steps: int = 10,
@@ -404,16 +408,152 @@ class ExecutionContext:
         engine = WorkflowEngine()
         engine.execute(self)
 
+    def __getstate__(self) -> dict:
+        """Pickle serialization: exclude un-serializable objects.
+
+        Removes Redis clients, Locks, and other un-picklable objects,
+        saving only the configuration needed to reconstruct them.
+
+        Returns:
+            Dictionary of serializable state
+        """
+        state = self.__dict__.copy()
+
+        # Save channel data before removing channel object
+        # For MemoryChannel: save the data dict
+        # For RedisChannel: data persists in Redis, no need to save
+        channel_data = {}
+        channel_backend_type = state.get('_channel_backend_type', 'memory')
+
+        # Only save channel data for memory backend
+        if channel_backend_type == 'memory' and self.channel is not None:
+            try:
+                # Get all keys from channel and save their values
+                for key in self.channel.keys():
+                    channel_data[key] = self.channel.get(key)
+            except Exception:
+                # If getting keys fails, skip channel data preservation
+                pass
+        state['_channel_data'] = channel_data
+
+        # Remove un-serializable objects (will be reconstructed in __setstate__)
+        state.pop('task_queue', None)
+        state.pop('channel', None)
+        state.pop('group_executor', None)
+        state.pop('_function_manager', None)
+
+        # Ensure backend config is saved (should already be set in __init__)
+        if '_queue_backend_type' not in state:
+            state['_queue_backend_type'] = 'memory'
+        if '_channel_backend_type' not in state:
+            state['_channel_backend_type'] = 'memory'
+        if '_original_config' not in state:
+            state['_original_config'] = {}
+
+        # Extract Redis connection parameters if redis_client exists in config
+        # (redis_client itself is not picklable)
+        if 'redis_client' in state.get('_original_config', {}):
+            redis_client = state['_original_config']['redis_client']
+            try:
+                # Extract connection parameters from redis_client
+                redis_config = {
+                    'host': redis_client.connection_pool.connection_kwargs.get('host', 'localhost'),
+                    'port': redis_client.connection_pool.connection_kwargs.get('port', 6379),
+                    'db': redis_client.connection_pool.connection_kwargs.get('db', 0),
+                }
+                # Replace redis_client with connection parameters
+                config_copy = state['_original_config'].copy()
+                config_copy.pop('redis_client')
+                config_copy.update(redis_config)
+                state['_original_config'] = config_copy
+            except Exception:
+                # If extraction fails, just remove redis_client
+                config_copy = state['_original_config'].copy()
+                config_copy.pop('redis_client', None)
+                state['_original_config'] = config_copy
+
+        return state
+
+    def __setstate__(self, state: dict) -> None:
+        """Pickle deserialization: reconstruct excluded objects.
+
+        Reconstructs TaskQueue, Channel, etc. from saved configuration.
+
+        Args:
+            state: Serialized state dictionary
+        """
+        self.__dict__.update(state)
+
+        # Get backend configuration
+        queue_backend_type = state.get('_queue_backend_type', 'memory')
+        channel_backend_type = state.get('_channel_backend_type', 'memory')
+        config = state.get('_original_config', {})
+
+        # Add start_node to config for queue
+        if self.start_node:
+            config = {**config, 'start_node': self.start_node}
+
+        # Reconstruct TaskQueue
+        from graflow.channels.factory import ChannelFactory
+        from graflow.core.function_registry import TaskFunctionManager
+        from graflow.queue.factory import QueueBackend, TaskQueueFactory
+
+        if isinstance(queue_backend_type, str):
+            queue_backend = QueueBackend(queue_backend_type)
+        else:
+            queue_backend = queue_backend_type
+
+        self.task_queue = TaskQueueFactory.create(
+            queue_backend, self, **config
+        )
+
+        # Reconstruct Channel
+        self.channel = ChannelFactory.create_channel(
+            backend=channel_backend_type,
+            name=self.session_id,
+            **config
+        )
+
+        # Restore channel data (for MemoryChannel)
+        # For RedisChannel, data already exists in Redis
+        channel_data = state.get('_channel_data', {})
+        if channel_data:
+            for key, value in channel_data.items():
+                self.channel.set(key, value)
+
+        # Reconstruct FunctionManager
+        self._function_manager = TaskFunctionManager()
+
+        # GroupExecutor is left as None (can be reset if needed)
+        if not hasattr(self, 'group_executor'):
+            self.group_executor = None
+
     def save(self, path: str = "execution_context.pkl") -> None:
-        """Save execution context to a pickle file."""
+        """Save execution context to a pickle file using cloudpickle.
+
+        Args:
+            path: Path to save the context
+
+        Note:
+            Uses cloudpickle for better support of lambdas and closures.
+        """
+        from graflow.core.serialization import dump
         with open(path, "wb") as f:
-            pickle.dump(self, f)
+            dump(self, f)
 
     @classmethod
     def load(cls, path: str = "execution_context.pkl") -> ExecutionContext:
-        """Load execution context from a pickle file."""
+        """Load execution context from a pickle file using cloudpickle.
+
+        Args:
+            path: Path to load the context from
+
+        Returns:
+            Loaded ExecutionContext instance
+        """
+        from graflow.core.serialization import load
         with open(path, "rb") as f:
-            return pickle.load(f)
+            return load(f)
 
 def create_execution_context(start_node: str = "ROOT", max_steps: int = 10) -> ExecutionContext:
     """Create an initial execution context with a single root node."""
