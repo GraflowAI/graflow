@@ -89,7 +89,10 @@ class WorkflowEngine:
         else:
             task_id = context.get_next_task()
 
-        while task_id is not None and not context.is_completed():
+        # Execute tasks while we have tasks and haven't exceeded max steps
+        # Note: Don't check is_completed() here as it would return True immediately
+        # after dequeuing the first task (queue becomes empty)
+        while task_id is not None and context.steps < context.max_steps:
             # Reset goto flag for each task
             context.reset_goto_flag()
 
