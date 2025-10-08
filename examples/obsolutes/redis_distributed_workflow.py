@@ -24,13 +24,11 @@ from graflow.channels.schemas import DataTransferMessage
 from graflow.channels.typed import TypedChannel
 from graflow.coordination.coordinator import CoordinationBackend
 from graflow.coordination.executor import GroupExecutor
-from graflow.core.context import ExecutionContext, TaskExecutionContext
+from graflow.core.context import TaskExecutionContext
 from graflow.core.decorators import task
-from graflow.core.task import Executable
 from graflow.core.workflow import workflow
 from graflow.queue.factory import QueueBackend
 from graflow.queue.redis import RedisTaskQueue
-from graflow.worker.handler import TaskHandler
 from graflow.worker.worker import TaskWorker
 
 try:
@@ -527,55 +525,6 @@ def perform_quality_check(ctx: TaskExecutionContext) -> QualityCheckResult:
     return result
 
 
-class WorkflowTaskHandler(TaskHandler):
-    """Custom task handler that can execute workflow tasks."""
-
-    def __init__(self, execution_context: ExecutionContext):
-        """Initialize with task registry and execution context.
-
-        Args:
-            task_registry: Mapping of task_id to task functions
-            execution_context: ExecutionContext for task execution
-        """
-        self.execution_context = execution_context
-
-    def _process_task(self, task: Executable) -> bool:
-        """Execute task from TaskSpec using registered functions.
-
-        Args:
-            task: TaskSpec object from RedisTaskQueue
-
-        Returns:
-            bool: True if task completed successfully, False otherwise
-        """
-        task_id = task.task_id
-
-        try:
-            # Create task execution context
-            task_ctx = self.execution_context.create_task_context(task_id)
-            self.execution_context.push_task_context(task_ctx)
-
-            try:
-                # Execute task with context injection if needed
-                if hasattr(task_func, 'inject_context') and task_func.inject_context:
-                    result = task_func(task_ctx)
-                else:
-                    result = task_func()
-
-                # Store result in execution context
-                self.execution_context.set_result(task_id, result)
-                return True
-
-            finally:
-                self.execution_context.pop_task_context()
-
-        except Exception as e:
-            print(f"Task {task_id} failed: {e}")
-            import traceback
-            traceback.print_exc()
-            return False
-
-
 def main():
     """Main workflow execution with TaskWorker."""
     if not DEPENDENCIES_AVAILABLE:
@@ -658,12 +607,10 @@ def main():
 
                 # Now start TaskWorker processes with the proper queue
                 print("\n🔄 Starting TaskWorker processes...")
-                task_handler = WorkflowTaskHandler(exec_context)
 
                 for i in range(3):  # Start 3 workers
                     worker = TaskWorker(
                         queue=redis_task_queue,
-                        handler=task_handler,
                         worker_id=f"worker-{i+1}",
                         max_concurrent_tasks=2,
                         poll_interval=0.5
