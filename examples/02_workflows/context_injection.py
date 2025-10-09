@@ -125,7 +125,7 @@ def main():
             return "report_complete"
 
         # Define workflow: setup -> process -> report
-        setup >> process >> report
+        setup >> process >> report # type: ignore
 
         # Execute the workflow
         ctx.execute("setup")

@@ -66,7 +66,7 @@ def example_1_sequential():
 
         # Sequential: step_1 then step_2 then step_3
         # Each step waits for the previous one to complete
-        step_1 >> step_2 >> step_3
+        step_1 >> step_2 >> step_3 # type: ignore
 
         ctx.execute("step_1")
 

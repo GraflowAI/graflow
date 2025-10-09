@@ -75,7 +75,7 @@ def main():
 
         # Define the workflow execution order
         # >> operator means "then" (sequential execution)
-        extract_data >> transform_data >> load_data
+        extract_data >> transform_data >> load_data # type: ignore
 
         # Execute the workflow starting from the first task
         # The workflow engine will execute tasks in dependency order:
