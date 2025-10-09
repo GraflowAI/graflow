@@ -8,6 +8,7 @@ These examples showcase practical applications of Graflow for common data engine
 - **Data Pipeline** - Complete ETL workflow with validation and transformation
 - **ML Training** - End-to-end machine learning pipeline
 - **Batch Processing** - Scalable batch processing for large datasets
+- **Sales Analysis** - Data analysis workflow with anomaly detection and reporting
 
 ## Examples
 
@@ -189,19 +190,76 @@ Throughput: 1862 items/sec
 
 ---
 
+### 4. sales_analysis.py
+**Difficulty**: Intermediate
+**Time**: 25 minutes
+**Use Case**: Data Analysis and Reporting
+
+Complete sales data analysis workflow with anomaly detection, reporting, and approval process.
+
+**Key Concepts**:
+- Data analysis with pandas/numpy
+- Statistical anomaly detection
+- Multi-stage reporting workflow
+- Approval workflow pattern
+- Channel-based data sharing
+
+**What You'll Learn**:
+- Building data analysis pipelines
+- Implementing anomaly detection
+- Creating structured reports
+- Approval workflows
+- Working with pandas DataFrames in Graflow
+
+**Run**:
+```bash
+python examples/07_real_world/sales_analysis.py
+```
+
+**Expected Output**:
+```
+=== Sales Analysis Workflow ===
+
+📊 Loading sales data...
+✅ Loaded 1000 sales records
+Date range: 2024-10-09 to 2025-10-09
+
+🔍 Detecting anomalies...
+✅ Analysis complete:
+  - Outliers detected: 13
+  - Suspicious days: 16
+
+📋 Generating detailed report...
+⚠️  Found 13 outlier transactions
+⚠️  Found 16 suspicious days
+
+✅ Executive summary generated
+🎉 Sales analysis workflow completed successfully!
+```
+
+**Real-World Applications**:
+- Sales data analysis
+- Fraud detection
+- Business intelligence reporting
+- Automated data quality checks
+
+---
+
 ## Learning Path
 
 **Recommended Order**:
 1. Start with `data_pipeline.py` for ETL patterns
 2. Move to `ml_training.py` for ML workflows
-3. Finish with `batch_processing.py` for scalability
+3. Try `batch_processing.py` for scalability
+4. Finish with `sales_analysis.py` for data analysis
 
 **Prerequisites**:
 - Complete examples from 01-04
 - Understanding of workflow patterns from 02
 - Familiarity with channels from 03
+- Basic pandas/numpy knowledge (for sales_analysis)
 
-**Total Time**: ~55 minutes
+**Total Time**: ~80 minutes (~1.5 hours)
 
 ---
 

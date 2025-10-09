@@ -5,10 +5,14 @@ This directory contains advanced Graflow examples demonstrating sophisticated pa
 ## Overview
 
 These examples showcase advanced capabilities of Graflow including:
-- **Dynamic Task Generation** - Creating tasks at runtime based on configuration
 - **Lambda and Closure Tasks** - Using functional programming patterns
 - **Custom Serialization** - Understanding cloudpickle for distributed execution
 - **Nested Workflows** - Hierarchical workflow composition and organization
+- **Context Management** - Global and explicit context handling
+
+**Note**: For dynamic task generation and workflow composition examples, see:
+- **Dynamic Tasks** → `../07_dynamic_tasks/`
+- **Workflow Composition** → `../08_workflow_composition/`
 
 ## Examples
 
@@ -54,51 +58,15 @@ Step 3: Executing workflow
 ✅ multiply_by_10 executed -> 840
 ```
 
----
-
-### 2. dynamic_tasks.py
-**Difficulty**: Advanced
-**Time**: 20 minutes
-
-Shows how to dynamically generate and configure tasks at runtime.
-
-**Key Concepts**:
-- Runtime task creation
-- Task factory patterns
-- Conditional workflow composition
-- Configuration-driven pipelines
-
-**What You'll Learn**:
-- Creating tasks in loops
-- Building workflows from configuration
-- Factory functions for tasks
-- Dynamic DAG construction
-
-**Run**:
-```bash
-python examples/06_advanced/dynamic_tasks.py
-```
-
-**Expected Output**:
-```
-=== Dynamic Task Generation ===
-
-Scenario 1: Batch Processing
-Creating 5 processing tasks dynamically...
-✅ Task process_item_0 created
-✅ Task process_item_1 created
-...
-
-Scenario 2: Conditional Pipeline
-Configuration: enable_validation=True, enable_transform=True
-Building conditional pipeline...
-✅ Extract task added
-✅ Validation task added (conditional)
-```
+**Real-World Applications**:
+- Quick prototyping of workflows
+- Functional data transformations
+- Factory-based task generation
+- Distributed processing with simple functions
 
 ---
 
-### 3. custom_serialization.py
+### 2. custom_serialization.py
 **Difficulty**: Advanced
 **Time**: 15 minutes
 
@@ -136,9 +104,15 @@ Test 2: Serializing Closures
    Result: 50
 ```
 
+**Real-World Applications**:
+- Distributed task execution
+- Saving workflow state
+- Task migration across workers
+- Understanding serialization limits
+
 ---
 
-### 4. nested_workflow.py
+### 3. nested_workflow.py
 **Difficulty**: Advanced
 **Time**: 20 minutes
 
@@ -181,44 +155,75 @@ Scenario 1: Basic Nested Workflows
 ✅ Outer workflow completed
 ```
 
+**Real-World Applications**:
+- Modular data pipelines
+- Reusable workflow components
+- Complex multi-stage processing
+- Hierarchical workflow organization
+
+---
+
+### 4. global_context.py
+**Difficulty**: Advanced
+**Time**: 20 minutes
+
+Explores global workflow context behavior and fallback mechanisms.
+
+**Key Concepts**:
+- Global context auto-creation
+- Explicit vs implicit contexts
+- Context isolation
+- current_workflow_context() usage
+
+**What You'll Learn**:
+- How global context works
+- When to use explicit contexts
+- Context isolation patterns
+- Best practices for context management
+
+**Run**:
+```bash
+python examples/06_advanced/global_context.py
+```
+
+**Expected Output**:
+```
+=== Global Workflow Context ===
+
+Creating tasks without explicit context...
+✅ Global tasks created
+
+Global workflow context:
+...
+✅ Global context automatically created
+```
+
+**Real-World Applications**:
+- Quick prototyping
+- Simple scripts without explicit contexts
+- Understanding context behavior
+- Debugging workflow issues
+
 ---
 
 ## Learning Path
 
 **Recommended Order**:
 1. Start with `lambda_tasks.py` to understand functional patterns
-2. Move to `dynamic_tasks.py` for runtime task creation
+2. Learn `custom_serialization.py` for deep understanding
 3. Explore `nested_workflow.py` for hierarchical organization
-4. Finish with `custom_serialization.py` for deep understanding
+4. Understand `global_context.py` for context management
 
 **Prerequisites**:
 - Complete examples from 01-04
 - Understanding of Python closures
 - Familiarity with functional programming concepts
 
-**Total Time**: ~70 minutes
+**Total Time**: ~70 minutes (~1 hour)
 
 ---
 
 ## Key Concepts
-
-### Dynamic Task Creation
-
-Create tasks at runtime based on configuration:
-
-```python
-@task
-def create_processor(config):
-    def processor():
-        # Use config
-        return process_with_config(data, config)
-    return processor
-
-# Create tasks dynamically
-for config in configs:
-    task = create_processor(config)
-    tasks.append(task)
-```
 
 ### Lambda Tasks
 
@@ -266,57 +271,7 @@ Understanding what can be serialized:
 
 ## Common Patterns
 
-### 1. Configuration-Driven Workflows
-
-Build workflows from configuration files:
-
-```python
-config = load_config("workflow.yaml")
-
-with workflow("dynamic") as ctx:
-    tasks = []
-    for step_config in config["steps"]:
-        if step_config["enabled"]:
-            task = create_task_from_config(step_config)
-            tasks.append(task)
-
-    # Chain tasks
-    for i in range(len(tasks) - 1):
-        tasks[i] >> tasks[i + 1]
-```
-
-### 2. Batch Processing with Dynamic Tasks
-
-Process variable numbers of items:
-
-```python
-num_items = len(data)
-batch_size = 100
-num_batches = (num_items + batch_size - 1) // batch_size
-
-with workflow("batch") as ctx:
-    batch_tasks = []
-    for i in range(num_batches):
-        @task(id=f"batch_{i}")
-        def process_batch():
-            start = i * batch_size
-            end = min(start + batch_size, num_items)
-            return process_items(data[start:end])
-
-        batch_tasks.append(process_batch)
-
-    # Aggregate results
-    @task
-    def aggregate():
-        results = [ctx.get_result(f"batch_{i}")
-                  for i in range(num_batches)]
-        return combine(results)
-
-    for batch_task in batch_tasks:
-        batch_task >> aggregate
-```
-
-### 3. Task Factory Pattern
+### Task Factory Pattern
 
 Reusable task generators:
 
@@ -334,40 +289,54 @@ get_users = create_api_caller("/api/users")
 get_posts = create_api_caller("/api/posts")
 ```
 
+### Nested Workflow Organization
+
+Organize complex workflows hierarchically:
+
+```python
+with workflow("outer") as outer_ctx:
+    @task
+    def run_validation():
+        with workflow("validation") as val_ctx:
+            # Inner workflow tasks
+            validate_schema()
+            validate_values()
+            val_ctx.execute("validate_schema")
+
+    @task
+    def run_transformation():
+        with workflow("transformation") as trans_ctx:
+            # Inner workflow tasks
+            normalize()
+            enrich()
+            trans_ctx.execute("normalize")
+
+    run_validation >> run_transformation
+```
+
 ---
 
 ## Best Practices
 
 ### ✅ DO:
 
-- Use unique task IDs for dynamically created tasks
 - Keep closures lightweight
 - Test serialization before distributing
-- Document dynamic behavior
+- Document captured variables
 - Use factory functions for reusable patterns
+- Prefer explicit contexts for clarity
 
 ### ❌ DON'T:
 
 - Capture large objects in closures
 - Capture non-serializable objects (file handles, connections)
-- Create tasks with duplicate IDs
-- Over-complicate with dynamic creation when static works
-- Forget to clean up resources in dynamic tasks
+- Over-complicate with lambdas when named functions are clearer
+- Forget to clean up resources in closures
+- Rely on global context in production code
 
 ---
 
 ## Troubleshooting
-
-### DuplicateTaskError
-
-**Problem**: Multiple tasks with the same ID
-
-**Solution**: Use unique IDs for dynamic tasks:
-```python
-@task(id=f"task_{i}")  # Include loop variable
-def my_task():
-    pass
-```
 
 ### PickleError / SerializationError
 
@@ -407,58 +376,88 @@ def create_task(data_path):
     return task
 ```
 
+### Context Confusion
+
+**Problem**: Task registered in wrong context
+
+**Solution**: Use explicit contexts:
+```python
+# Bad - uses global context
+@task
+def my_task():
+    pass
+
+# Good - explicit context
+with workflow("my_workflow") as ctx:
+    @task
+    def my_task():
+        pass
+```
+
 ---
 
 ## Real-World Use Cases
 
-### 1. A/B Testing Workflows
+### 1. Functional Data Transformations
 
-Create different pipeline variants:
+Quick transformations with lambdas:
 
 ```python
-variants = ["variant_a", "variant_b", "variant_c"]
+# Create transformation pipeline
+transform1 = TaskWrapper("normalize", lambda x: x / max_value)
+transform2 = TaskWrapper("scale", lambda x: x * 100)
+transform3 = TaskWrapper("round", lambda x: round(x, 2))
 
-for variant in variants:
-    @task(id=f"test_{variant}")
-    def run_variant():
-        config = load_variant_config(variant)
-        return execute_experiment(config)
+# Chain transformations
+transform1 >> transform2 >> transform3
 ```
 
-### 2. Multi-Tenant Processing
+### 2. Parameterized Processing
 
-Process data for multiple tenants:
+Factory pattern for configurable tasks:
 
 ```python
-tenants = get_active_tenants()
+def create_processor(config):
+    """Create processor task from configuration."""
+    @task(id=f"process_{config['id']}")
+    def process():
+        data = load_data(config['source'])
+        result = apply_rules(data, config['rules'])
+        save_result(result, config['destination'])
+        return result
+    return process
 
-for tenant_id in tenants:
-    @task(id=f"process_{tenant_id}")
-    def process_tenant():
-        data = fetch_tenant_data(tenant_id)
-        return process_data(data)
+# Create multiple processors
+processors = [create_processor(cfg) for cfg in configs]
 ```
 
-### 3. Feature Flag Driven Pipelines
+### 3. Modular Pipeline Components
 
-Enable/disable features dynamically:
+Reusable workflow modules:
 
 ```python
-features = load_feature_flags()
+def create_validation_module(name):
+    """Reusable validation workflow component."""
+    with workflow(name) as ctx:
+        @task
+        def validate_schema():
+            # Schema validation logic
+            pass
 
-with workflow("conditional") as ctx:
-    extract_task = extract_data()
-    last_task = extract_task
+        @task
+        def validate_business_rules():
+            # Business rule validation
+            pass
 
-    if features["enable_validation"]:
-        validate = validate_data()
-        last_task >> validate
-        last_task = validate
+        validate_schema >> validate_business_rules
+        return ctx
 
-    if features["enable_enrichment"]:
-        enrich = enrich_data()
-        last_task >> enrich
-        last_task = enrich
+# Use in larger pipeline
+with workflow("main") as main_ctx:
+    @task
+    def run_validation():
+        val_ctx = create_validation_module("validation")
+        val_ctx.execute("validate_schema")
 ```
 
 ---
@@ -467,17 +466,15 @@ with workflow("conditional") as ctx:
 
 ### Task Creation Overhead
 
-Dynamic task creation has minimal overhead:
-- Task object creation: ~1-5ms
-- Registration in graph: ~1-2ms
-- Total per task: ~2-7ms
-
-For 1000 dynamic tasks: ~2-7 seconds overhead
+Lambda and closure task creation:
+- Lambda task: ~1-2ms
+- Closure with small state: ~2-5ms
+- Complex nested closure: ~5-15ms
 
 ### Serialization Performance
 
 Cloudpickle serialization times:
-- Simple function: <1ms
+- Simple lambda: <1ms
 - Closure with small state: 1-5ms
 - Complex nested closure: 5-20ms
 - Class instance: 10-50ms
@@ -485,73 +482,9 @@ Cloudpickle serialization times:
 ### Memory Usage
 
 Each task object uses approximately:
-- Base task: ~1KB
-- With captured state: +size of captured objects
-- 1000 tasks with minimal state: ~1-5MB
-
----
-
-## Advanced Topics
-
-### Recursive Task Generation
-
-Create tasks recursively:
-
-```python
-def create_recursive_tasks(depth, max_depth=5):
-    @task(id=f"level_{depth}")
-    def task_at_depth():
-        result = process_level(depth)
-        if depth < max_depth:
-            # Trigger next level
-            return result
-        return result
-
-    if depth < max_depth:
-        next_task = create_recursive_tasks(depth + 1, max_depth)
-        task_at_depth >> next_task
-
-    return task_at_depth
-```
-
-### Parameterized Task Classes
-
-Use classes for complex task state:
-
-```python
-class ConfigurableTask:
-    def __init__(self, config):
-        self.config = config
-
-    @task
-    def execute(self):
-        return self.process(self.config)
-
-    def process(self, config):
-        # Implementation
-        pass
-
-# Create tasks from class
-tasks = [ConfigurableTask(cfg).execute() for cfg in configs]
-```
-
-### Memoization with Closures
-
-Cache results in closure:
-
-```python
-def create_memoized_task(expensive_function):
-    cache = {}
-
-    @task
-    def memoized(*args):
-        key = str(args)
-        if key not in cache:
-            cache[key] = expensive_function(*args)
-        return cache[key]
-
-    return memoized
-```
+- Lambda task: ~0.5-1KB
+- Closure task: ~1-2KB + captured state size
+- Nested workflow: ~2-5KB per level
 
 ---
 
@@ -560,24 +493,20 @@ def create_memoized_task(expensive_function):
 These patterns work seamlessly with Redis-based distribution:
 
 ```python
-# Dynamic tasks are serialized and distributed
-with workflow("distributed_dynamic") as ctx:
-    # Create 100 tasks dynamically
-    tasks = []
-    for i in range(100):
-        @task(id=f"worker_task_{i}")
-        def process():
-            return heavy_computation(i)
-        tasks.append(process)
+# Lambda tasks are serialized and distributed
+with workflow("distributed") as ctx:
+    # Create task with closure
+    factor = 10
+    multiply_task = TaskWrapper("multiply", lambda x: x * factor)
 
     # Execute with Redis backend
     ctx.execute(
-        start_node="worker_task_0",
+        start_node="multiply",
         queue_backend=QueueBackend.REDIS
     )
 ```
 
-All tasks will be:
+The task will be:
 1. Serialized with cloudpickle
 2. Sent to Redis queue
 3. Picked up by workers
@@ -590,17 +519,19 @@ All tasks will be:
 
 After mastering these advanced patterns, explore:
 
-1. **Distributed Execution** (`../05_distributed/`)
-   - Scale dynamic workflows across workers
-   - Use Redis for task distribution
+1. **Dynamic Tasks** (`../07_dynamic_tasks/`)
+   - Compile-time and runtime task generation
+   - Iterative processing patterns
+   - State machines
 
-2. **Real-World Examples** (`../07_real_world/`)
+2. **Workflow Composition** (`../08_workflow_composition/`)
+   - Concurrent workflow execution
+   - Workflow factory patterns
+   - Reusable templates
+
+3. **Real-World Examples** (`../09_real_world/`)
    - Apply patterns to production use cases
    - See complete implementations
-
-3. **Custom Development**
-   - Build your own task factories
-   - Create domain-specific workflow generators
 
 ---
 
@@ -612,4 +543,4 @@ After mastering these advanced patterns, explore:
 
 ---
 
-**Ready to apply these patterns?** Check out the real-world examples in `07_real_world/`!
+**Ready for more advanced patterns?** Check out dynamic tasks in `07_dynamic_tasks/` and workflow composition in `08_workflow_composition/`!

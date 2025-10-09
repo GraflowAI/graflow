@@ -4,7 +4,7 @@ Welcome to the Graflow examples! This directory contains progressive examples to
 
 ## 🎉 What's Available
 
-**23 comprehensive, production-ready examples** covering:
+**29 comprehensive, production-ready examples** covering:
 - ✅ **Task Basics** - Define and execute tasks with parameters
 - ✅ **Workflow Orchestration** - Sequential and parallel task composition
 - ✅ **Data Flow** - Channels, typed communication, and result storage
@@ -12,6 +12,7 @@ Welcome to the Graflow examples! This directory contains progressive examples to
 - ✅ **Distributed Execution** - Redis-based task distribution across workers
 - ✅ **Advanced Patterns** - Dynamic tasks, lambdas, and custom serialization
 - ✅ **Real-World Use Cases** - Production-ready ETL, ML, and batch processing
+- ✅ **Workflow Visualization** - ASCII, Mermaid, and PNG graph visualizations
 
 All examples include detailed documentation, real-world use cases, and hands-on experiments!
 
@@ -84,22 +85,59 @@ Scale workflows across multiple workers using Redis:
 **Status**: Complete | **Difficulty**: Expert
 
 Advanced workflow patterns:
-- Dynamic task generation at runtime
 - Lambda and closure tasks
-- Nested workflow composition
 - Custom serialization with cloudpickle
+- Nested workflow composition
+- Global context management
 
 [View advanced examples →](06_advanced/)
 
-### ✅ 07_real_world - Real-World Use Cases
+### ✅ 07_dynamic_tasks - Dynamic Task Generation
+**Status**: Complete | **Difficulty**: Advanced
+
+Dynamic task generation patterns:
+- Compile-time dynamic task creation
+- Runtime task generation with next_task() and next_iteration()
+- Iterative processing and convergence patterns
+- State machines and conditional branching
+
+[View dynamic task examples →](07_dynamic_tasks/)
+
+### ✅ 08_workflow_composition - Workflow Composition
+**Status**: Complete | **Difficulty**: Advanced
+
+Workflow composition and reusability patterns:
+- Concurrent workflow execution with threading
+- Workflow factory patterns
+- Reusable workflow templates
+- Parameterized workflow creation
+
+[View workflow composition examples →](08_workflow_composition/)
+
+### ✅ 09_real_world - Real-World Use Cases
 **Status**: Complete | **Difficulty**: Intermediate to Advanced
 
 Complete production-ready examples:
 - ETL data pipeline with validation
 - Machine learning training workflow
 - Batch processing for large datasets
+- Sales data analysis with anomaly detection
 
-[View real-world examples →](07_real_world/)
+[View real-world examples →](09_real_world/)
+
+### ✅ 10_visualization - Workflow Visualization
+**Status**: Complete | **Difficulty**: Intermediate
+
+Visualize workflows and graphs in multiple formats:
+- Workflow graph extraction from TaskGraph
+- ASCII visualization for terminal output
+- Mermaid diagram generation for documentation
+- PNG generation for presentations and reports
+- Graph analysis and dependency visualization
+
+[View visualization examples →](10_visualization/)
+
+**Note**: Some features require optional dependencies (grandalf, pygraphviz). See directory README for details.
 
 ## Learning Path
 
@@ -145,18 +183,37 @@ Complete production-ready examples:
 
 **06_advanced/** - Expert-level techniques
 1. `lambda_tasks.py` - Functional programming patterns (15 min)
-2. `dynamic_tasks.py` - Runtime task generation (20 min)
+2. `custom_serialization.py` - Understanding cloudpickle (15 min)
 3. `nested_workflow.py` - Hierarchical workflow organization (20 min)
-4. `custom_serialization.py` - Understanding cloudpickle (15 min)
+4. `global_context.py` - Context management patterns (20 min)
 
-### Level 7: Production Use Cases 💼
+### Level 7: Dynamic Task Generation 🎯
 
-**07_real_world/** - Complete real-world applications
+**07_dynamic_tasks/** - Dynamic task creation patterns
+1. `dynamic_tasks.py` - Compile-time task generation (20 min)
+2. `runtime_dynamic_tasks.py` - Runtime task creation with next_task() (30 min)
+
+### Level 8: Workflow Composition 🏗️
+
+**08_workflow_composition/** - Composing and reusing workflows
+1. `concurrent_workflows.py` - Parallel workflow execution (25 min)
+2. `workflow_factory.py` - Reusable workflow templates (25 min)
+
+### Level 9: Production Use Cases 💼
+
+**09_real_world/** - Complete real-world applications
 1. `data_pipeline.py` - ETL workflow (20 min)
 2. `ml_training.py` - ML training pipeline (20 min)
 3. `batch_processing.py` - Large-scale batch processing (15 min)
+4. `sales_analysis.py` - Data analysis with anomaly detection (25 min)
 
-**Total Learning Time**: ~6.1 hours to complete all examples
+### Level 10: Workflow Visualization 📊
+
+**10_visualization/** - Visualize workflows and graphs
+1. `workflow_visualization.py` - Visualizing Graflow workflows (20 min)
+2. `graph_utilities.py` - Graph visualization utilities (25 min)
+
+**Total Learning Time**: ~8.75 hours to complete all examples
 
 ### Quick Start Path (30 minutes)
 
@@ -177,7 +234,7 @@ Some examples require additional packages:
 
 - **Redis examples**: `pip install redis`
 - **Docker examples**: `pip install docker`
-- **Visualization**: `pip install matplotlib networkx`
+- **Visualization**: `pip install grandalf pygraphviz requests`
 
 ## Running Examples
 
@@ -227,21 +284,38 @@ examples/
 ├── 06_advanced/         # Advanced patterns
 │   ├── README.md       # Category documentation
 │   ├── lambda_tasks.py
-│   ├── dynamic_tasks.py
-│   └── custom_serialization.py
+│   ├── custom_serialization.py
+│   ├── nested_workflow.py
+│   └── global_context.py
 │
-├── 07_real_world/       # Real-world use cases
+├── 07_dynamic_tasks/    # Dynamic task generation
+│   ├── README.md       # Category documentation
+│   ├── dynamic_tasks.py
+│   └── runtime_dynamic_tasks.py
+│
+├── 08_workflow_composition/ # Workflow composition
+│   ├── README.md       # Category documentation
+│   ├── concurrent_workflows.py
+│   └── workflow_factory.py
+│
+├── 09_real_world/       # Real-world use cases
 │   ├── README.md       # Category documentation
 │   ├── data_pipeline.py
 │   ├── ml_training.py
-│   └── batch_processing.py
+│   ├── batch_processing.py
+│   └── sales_analysis.py
+│
+├── 10_visualization/    # Workflow visualization
+│   ├── README.md       # Category documentation
+│   ├── workflow_visualization.py
+│   └── graph_utilities.py
 │
 └── README.md           # This file
 ```
 
 ## Development Status
 
-✅ **Completed** (23 examples): Fully functional and tested with comprehensive documentation
+✅ **Completed** (29 examples): Fully functional and tested with comprehensive documentation
 
 ### Progress Overview
 
@@ -253,9 +327,12 @@ examples/
 | 04_execution | ✅ Complete | 3/3 | Custom execution handlers |
 | 05_distributed | ✅ Complete | 3/3 | Redis-based distribution |
 | 06_advanced | ✅ Complete | 4/4 | Advanced patterns |
-| 07_real_world | ✅ Complete | 3/3 | Production use cases |
+| 07_dynamic_tasks | ✅ Complete | 2/2 | Dynamic task generation |
+| 08_workflow_composition | ✅ Complete | 2/2 | Workflow composition |
+| 09_real_world | ✅ Complete | 4/4 | Production use cases |
+| 10_visualization | ✅ Complete | 2/2 | Workflow visualization |
 
-**Total Progress**: 23/23 examples (100% complete) 🎉
+**Total Progress**: 29/29 examples (100% complete) 🎉
 
 ## Troubleshooting
 
@@ -319,17 +396,21 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md) for details.
 
 All planned examples are now complete! 🎉
 
-The **23 examples** provide comprehensive coverage from basic concepts to production-ready applications. You can now:
+The **29 examples** provide comprehensive coverage from basic concepts to production-ready applications. You can now:
 
-1. **Build Production Workflows** - Use patterns from 07_real_world
+1. **Build Production Workflows** - Use patterns from 09_real_world
 2. **Scale with Redis** - Deploy distributed workflows from 05_distributed
 3. **Apply Advanced Patterns** - Leverage techniques from 06_advanced
+4. **Implement Runtime Dynamics** - Use next_task() and next_iteration() from 07_dynamic_tasks
+5. **Compose Workflows** - Create reusable templates from 08_workflow_composition
+6. **Analyze Data** - Build data analysis pipelines with anomaly detection
+7. **Visualize Workflows** - Document and debug with ASCII, Mermaid, and PNG from 10_visualization
 
 Additional examples may be added based on community feedback and emerging use cases.
 
 ## API Notes
 
-**Important**: The examples in this directory use stable, tested API patterns. All 23 examples are fully functional and production-ready. See [docs/examples_api_issues.md](../docs/examples_api_issues.md) for historical notes on API evolution.
+**Important**: The examples in this directory use stable, tested API patterns. All 29 examples are fully functional and production-ready. See [docs/examples_api_issues.md](../docs/examples_api_issues.md) for historical notes on API evolution.
 
 ## Getting Help
 
