@@ -349,6 +349,13 @@ class ExecutionContext:
         if not task_id:
             raise ValueError("No current task available for iteration")
 
+        # Extract base task ID (strip _cycle_* suffix if present)
+        # This handles nested iterations where task_id might be "task_cycle_1_abc_cycle_2_def"
+        import re
+        base_task_id = re.sub(r'(_cycle_\d+_[0-9a-f]+)+$', '', task_id)
+        if base_task_id and base_task_id in self.graph.nodes:
+            task_id = base_task_id
+
         if task_id not in self.graph.nodes:
             raise ValueError(f"Task {task_id} not found in graph")
 
@@ -376,7 +383,16 @@ class ExecutionContext:
 
         # Create iteration function with data
         def iteration_func():
-            if data is not None:
+            # Check if current_task has inject_context
+            inject_context = bool(getattr(current_task, 'inject_context', False))
+            if inject_context:
+                # Don't pass task_ctx, only pass data (TaskWrapper will inject context)
+                if data is not None:
+                    return current_task(data)
+                else:
+                    return current_task()
+            # Pass task_ctx for tasks without inject_context
+            elif data is not None:
                 return current_task(task_ctx, data)
             else:
                 return current_task(task_ctx)
