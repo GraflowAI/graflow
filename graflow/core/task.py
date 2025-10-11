@@ -231,15 +231,22 @@ class ParallelGroup(Executable):
             return GroupExecutor(backend, backend_config)
 
     def __rshift__(self, other: Executable) -> Executable:
-        """Create dependency from all tasks in parallel group to other."""
-        for task in self.tasks:
-            self._add_dependency_edge(task.task_id, other.task_id)
+        """Create dependency from parallel group to other.
+
+        Note: Creates edge from the GROUP itself, not from individual tasks.
+        This ensures successors are handled at the group level after all
+        parallel tasks complete, preventing premature or duplicate execution.
+        """
+        self._add_dependency_edge(self.task_id, other.task_id)
         return other
 
     def __lshift__(self, other: Executable) -> Executable:
-        """Create dependency from other to all tasks in parallel group."""
-        for task in self.tasks:
-            self._add_dependency_edge(other.task_id, task.task_id)
+        """Create dependency from other to parallel group.
+
+        Note: Creates edge to the GROUP itself, not to individual tasks.
+        This ensures the predecessor relationship is at the group level.
+        """
+        self._add_dependency_edge(other.task_id, self.task_id)
         return other
 
     def __or__(self, other: Executable) -> ParallelGroup:
