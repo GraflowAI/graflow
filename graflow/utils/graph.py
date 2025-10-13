@@ -130,6 +130,7 @@ class AsciiCanvas:
 
         self.cols = cols
         self.lines = lines
+        self.width = cols  # Alias for compatibility
         self.canvas: list[list[str]] = [[" "] * cols for line in range(lines)]
 
     def draw(self) -> str:
@@ -244,6 +245,242 @@ def _build_sugiyama_layout(vertices: dict[str, str], edges: list[tuple[str, str]
     return sug
 
 
+def _is_parallel_group(node_id: str, graph: nx.DiGraph) -> bool:
+    """Check if a node is a ParallelGroup.
+
+    Args:
+        node_id: Node identifier
+        graph: NetworkX graph containing the node
+
+    Returns:
+        True if the node is a ParallelGroup, False otherwise
+    """
+    # Get node data to check the actual task type
+    node_data = graph.nodes.get(node_id)
+    if node_data:
+        task = node_data.get("task")
+        if task is not None:
+            # Import here to avoid circular dependency
+            from graflow.core.task import ParallelGroup
+            return isinstance(task, ParallelGroup)
+    return False
+
+
+def _draw_double_box(canvas: AsciiCanvas, x0: int, y0: int, width: int, height: int) -> None:
+    """Draw a double-line box for ParallelGroup nodes.
+
+    Args:
+        canvas: ASCII canvas to draw on
+        x0: X coordinate of top-left corner
+        y0: Y coordinate of top-left corner
+        width: Box width
+        height: Box height
+    """
+    if width <= 1 or height <= 1:
+        msg = "Box dimensions should be > 1"
+        raise ValueError(msg)
+
+    width -= 1
+    height -= 1
+
+    # Top and bottom lines with double-line style
+    for x in range(x0, x0 + width):
+        canvas.point(x, y0, "═")
+        canvas.point(x, y0 + height, "═")
+
+    # Left and right lines
+    for y in range(y0, y0 + height):
+        canvas.point(x0, y, "║")
+        canvas.point(x0 + width, y, "║")
+
+    # Corners
+    canvas.point(x0, y0, "╔")
+    canvas.point(x0 + width, y0, "╗")
+    canvas.point(x0, y0 + height, "╚")
+    canvas.point(x0 + width, y0 + height, "╝")
+
+
+def _classify_parallel_group_edges(
+    group_node_id: str,
+    graph: nx.DiGraph
+) -> tuple[list[str], list[str]]:
+    """Classify edges from a ParallelGroup into internal and external.
+
+    Args:
+        group_node_id: Node ID of the ParallelGroup
+        graph: NetworkX graph containing the node
+
+    Returns:
+        Tuple of (internal_tasks, external_tasks)
+        - internal_tasks: Tasks that are executed in parallel (in group.tasks)
+        - external_tasks: Tasks that are executed after the group completes
+    """
+    from graflow.core.task import ParallelGroup
+
+    node_data = graph.nodes.get(group_node_id)
+    if not node_data:
+        return [], []
+
+    task = node_data.get("task")
+    if not isinstance(task, ParallelGroup):
+        return [], []
+
+    # Get the list of parallel tasks from the ParallelGroup
+    parallel_task_ids = {t.task_id for t in task.tasks}
+
+    # Get all successors of this ParallelGroup
+    successors = list(graph.successors(group_node_id))
+
+    # Classify edges
+    internal_tasks = [s for s in successors if s in parallel_task_ids]
+    external_tasks = [s for s in successors if s not in parallel_task_ids]
+
+    return internal_tasks, external_tasks
+
+
+def _collect_parallel_group_internal_tasks(
+    group_node_id: str,
+    graph: nx.DiGraph
+) -> set[str]:
+    """Collect all tasks that should be inside the ParallelGroup container.
+
+    This includes:
+    1. Direct child tasks of the ParallelGroup (group.tasks)
+    2. All tasks reachable from child tasks, up to (but not including) external successors
+
+    Args:
+        group_node_id: Node ID of the ParallelGroup
+        graph: NetworkX graph containing the node
+
+    Returns:
+        Set of task IDs that should be inside the container
+    """
+    from graflow.core.task import ParallelGroup
+
+    node_data = graph.nodes.get(group_node_id)
+    if not node_data:
+        return set()
+
+    task = node_data.get("task")
+    if not isinstance(task, ParallelGroup):
+        return set()
+
+    # Get the list of parallel tasks from the ParallelGroup
+    parallel_task_ids = {t.task_id for t in task.tasks}
+
+    # Get external successors (tasks that execute after the group completes)
+    _, external_tasks = _classify_parallel_group_edges(group_node_id, graph)
+    external_task_set = set(external_tasks)
+
+    # Collect all tasks reachable from parallel tasks, excluding external tasks
+    internal_tasks = set()
+    visited = set()
+
+    def dfs(task_id: str) -> None:
+        """Depth-first search to collect internal tasks."""
+        if task_id in visited:
+            return
+        if task_id in external_task_set:
+            # Stop at external successors (don't include them)
+            return
+        if task_id not in graph.nodes():
+            return
+
+        visited.add(task_id)
+        internal_tasks.add(task_id)
+
+        # Recursively visit successors
+        for successor in graph.successors(task_id):
+            dfs(successor)
+
+    # Start DFS from each parallel task
+    for task_id in parallel_task_ids:
+        if task_id in graph.nodes():
+            dfs(task_id)
+
+    return internal_tasks
+
+def _transform_graph_with_start_end_nodes(graph: nx.DiGraph) -> tuple[nx.DiGraph, set[str]]:
+    """Transform graph to replace ParallelGroup nodes with start and end nodes.
+
+    For each ParallelGroup:
+    - Remove the ParallelGroup node
+    - Create a "ParallelGroup_X" node (reusing the original name)
+    - Create a "↣ ParallelGroup_X" node (merge/join point)
+    - Add edges: predecessors -> start node (ParallelGroup_X)
+    - Add edges: start node -> parallel tasks
+    - Add edges: parallel tasks -> end node (↣ ParallelGroup_X)
+    - Add edges: end node -> external successors
+
+    Args:
+        graph: Original graph with ParallelGroup nodes
+
+    Returns:
+        Tuple of (transformed graph, set of ParallelGroup node names for double-box rendering)
+    """
+    from graflow.core.task import ParallelGroup
+
+    transformed = graph.copy()
+    parallel_group_nodes: set[str] = set()
+
+    for node in list(graph.nodes()):
+        if not _is_parallel_group(str(node), graph):
+            continue
+
+        node_data = graph.nodes.get(node)
+        if not node_data:
+            continue
+
+        task = node_data.get("task")
+        if not isinstance(task, ParallelGroup):
+            continue
+
+        # Get parallel tasks and external tasks
+        parallel_task_ids = {t.task_id for t in task.tasks}
+        predecessors = list(graph.predecessors(node))
+        successors = list(graph.successors(node))
+
+        # Classify successors
+        internal_tasks = [s for s in successors if s in parallel_task_ids]
+        external_tasks = [s for s in successors if s not in parallel_task_ids]
+
+        # Create start and end node names
+        start_node_name = str(node)  # Use the original ParallelGroup name
+        end_node_name = f"↣ {node}"  # ↣ indicates merge/join point
+
+        # Track these nodes for double-box rendering
+        parallel_group_nodes.add(start_node_name)
+        parallel_group_nodes.add(end_node_name)
+
+        # Remove ParallelGroup node
+        transformed.remove_node(node)
+
+        # Add start node (reusing ParallelGroup name) and end node (merge/join point)
+        transformed.add_node(start_node_name)
+        transformed.add_node(end_node_name)
+
+        # Add edges: predecessors -> start node
+        for pred in predecessors:
+            transformed.add_edge(pred, start_node_name)
+
+        # Add edges: start node -> parallel tasks
+        for task_id in internal_tasks:
+            if task_id in transformed.nodes():
+                transformed.add_edge(start_node_name, task_id)
+
+        # Add edges: parallel tasks -> end node
+        for task_id in internal_tasks:
+            if task_id in transformed.nodes():
+                transformed.add_edge(task_id, end_node_name)
+
+        # Add edges: end node -> external successors
+        for succ in external_tasks:
+            if succ in transformed.nodes():
+                transformed.add_edge(end_node_name, succ)
+
+    return transformed, parallel_group_nodes
+
+
 def draw_ascii(graph: nx.DiGraph) -> str:
     """Draw a NetworkX DiGraph in ASCII format.
 
@@ -271,6 +508,9 @@ def draw_ascii(graph: nx.DiGraph) -> str:
             node_boxes.append(f"|{' ' * left_pad}{node_str}{' ' * right_pad}|")
 
         return separator + f"\n{separator}".join(node_boxes) + f"\n{separator}"
+
+    # Transform graph to use start/end nodes for ParallelGroups
+    graph, parallel_group_nodes = _transform_graph_with_start_end_nodes(graph)
 
     # Convert NetworkX graph to format expected by _build_sugiyama_layout
     vertices = {str(node): str(node) for node in graph.nodes()}
@@ -310,11 +550,16 @@ def draw_ascii(graph: nx.DiGraph) -> str:
 
     canvas = AsciiCanvas(canvas_cols, canvas_lines)
 
-    # NOTE: first draw edges so that node boxes could overwrite them
+    # FIRST: Draw edges
+    # NOTE: Draw edges first so that node boxes can overwrite them
     for edge in sug.g.sE:
         if len(edge.view.pts) <= 1:
             msg = "Not enough points to draw an edge"
             raise ValueError(msg)
+
+        # Use '*' for all edges uniformly
+        edge_char = "*"
+
         for index in range(1, len(edge.view.pts)):
             start = edge.view.pts[index - 1]
             end = edge.view.pts[index]
@@ -334,23 +579,102 @@ def draw_ascii(graph: nx.DiGraph) -> str:
                 )
                 raise ValueError(msg)
 
-            canvas.line(start_x, start_y, end_x, end_y, "*")
+            canvas.line(start_x, start_y, end_x, end_y, edge_char)
 
+    # SECOND: Draw task boxes (which will overwrite edges)
     for vertex in sug.g.sV:
         # NOTE: moving boxes w/2 to the left
         x = vertex.view.xy[0] - vertex.view.w / 2.0
         y = vertex.view.xy[1]
 
-        canvas.box(
-            round(x - minx),
-            round(y - miny),
-            vertex.view.w,
-            vertex.view.h,
-        )
+        # Get node ID from vertex data (strip spaces added by _build_sugiyama_layout)
+        node_id = vertex.data.strip()
+
+        # Use double-line box for ParallelGroup start/end nodes
+        if node_id in parallel_group_nodes:
+            _draw_double_box(
+                canvas,
+                round(x - minx),
+                round(y - miny),
+                vertex.view.w,
+                vertex.view.h,
+            )
+        else:
+            canvas.box(
+                round(x - minx),
+                round(y - miny),
+                vertex.view.w,
+                vertex.view.h,
+            )
 
         canvas.text(round(x - minx) + 1, round(y - miny) + 1, vertex.data)
 
     return canvas.draw()
+
+
+def _transform_graph_for_container_view(graph: nx.DiGraph) -> tuple[nx.DiGraph, dict[str, dict[str, Any]]]:
+    """Transform graph to support container-based ParallelGroup view.
+
+    Keeps ParallelGroup nodes and maintains edges at the group level (not individual tasks).
+
+    Args:
+        graph: Original graph with ParallelGroup nodes
+
+    Returns:
+        - Transformed graph with group-level edges
+        - Metadata dict mapping group_id -> {tasks, predecessors, successors, label}
+    """
+    transformed_graph = graph.copy()
+    parallel_groups: dict[str, dict[str, Any]] = {}
+
+    for node in list(graph.nodes()):
+        if _is_parallel_group(str(node), graph):
+            # Extract group metadata
+            node_data = graph.nodes[node]
+            task = node_data.get("task")
+            if task is None:
+                continue
+
+            from graflow.core.task import ParallelGroup
+            if not isinstance(task, ParallelGroup):
+                continue
+
+            # Get predecessors and successors of the ParallelGroup
+            predecessors = list(graph.predecessors(node))
+
+            # Classify successors
+            internal_tasks, external_tasks = _classify_parallel_group_edges(str(node), graph)
+
+            # Collect all tasks that should be inside the container
+            # This includes direct child tasks and all reachable internal tasks
+            tasks_in_container = _collect_parallel_group_internal_tasks(str(node), graph)
+
+            # Store metadata
+            parallel_groups[str(node)] = {
+                "tasks": list(tasks_in_container),
+                "predecessors": predecessors,
+                "successors": external_tasks,
+                "label": str(node),
+            }
+
+            # Remove edges to internal tasks from external nodes (including ParallelGroup)
+            # But keep edges between internal tasks (e.g., transform_a -> subtask_a)
+            for ptask in tasks_in_container:
+                for pred in list(transformed_graph.predecessors(ptask)):
+                    # Keep edges from other internal tasks
+                    if pred not in tasks_in_container:
+                        transformed_graph.remove_edge(pred, ptask)
+
+            # Remove edges from internal tasks ONLY to the ParallelGroup's external successors
+            # (these edges should come from the ParallelGroup instead)
+            # But keep edges to other downstream tasks (e.g., transform_a -> subtask_a)
+            for ptask in tasks_in_container:
+                for succ in list(transformed_graph.successors(ptask)):
+                    # Only remove if successor is a direct external successor of ParallelGroup
+                    if succ in external_tasks:
+                        transformed_graph.remove_edge(ptask, succ)
+
+    return transformed_graph, parallel_groups
 
 
 def draw_mermaid(
@@ -413,6 +737,9 @@ def draw_mermaid(
     if not graph.nodes():
         return "graph TD;\n    EmptyGraph[Empty Graph];\n"
 
+    # Transform graph for container view
+    display_graph, parallel_groups = _transform_graph_for_container_view(graph)
+
     # Initialize Mermaid graph
     if with_styles:
         mermaid = "---\nconfig:\n  flowchart:\n    curve: linear\n---\n"
@@ -430,23 +757,62 @@ def draw_mermaid(
     last_node = None
 
     # Try to identify first and last nodes based on graph structure
-    nodes_list = list(graph.nodes())
+    nodes_list = list(display_graph.nodes())
     if nodes_list:
         # Find nodes with no predecessors (potential start nodes)
-        start_candidates = [n for n in nodes_list if graph.in_degree(n) == 0]
+        start_candidates = [n for n in nodes_list if display_graph.in_degree(n) == 0]
         if start_candidates:
             first_node = start_candidates[0]
 
         # Find nodes with no successors (potential end nodes)
-        end_candidates = [n for n in nodes_list if graph.out_degree(n) == 0]
+        end_candidates = [n for n in nodes_list if display_graph.out_degree(n) == 0]
         if end_candidates:
-            last_node = end_candidates[0]
+            last_node = end_candidates[-1]  # select last node
 
-    for node in graph.nodes():
-        node_id = _escape_node_label(str(node))
-        node_label = str(node).replace('"', '\\"')  # Escape quotes
+    # Track which nodes are in parallel groups
+    nodes_in_groups: set[str] = set()
+    for group_info in parallel_groups.values():
+        nodes_in_groups.update(str(task_id) for task_id in group_info["tasks"])
 
-        # Handle special formatting for first/last nodes
+    # Track parallel group IDs
+    parallel_group_ids = set(parallel_groups.keys())
+
+    # Add parallel group subgraphs
+    for group_id, group_info in parallel_groups.items():
+        group_id_escaped = _escape_node_label(group_id)
+
+        mermaid += f"    subgraph {group_id_escaped}[\" {group_info['label']} \"]\n"
+        mermaid += "        direction TB\n"
+
+        # Add tasks within the subgraph
+        for task_id in group_info["tasks"]:
+            task_str = str(task_id)
+            if task_str not in display_graph.nodes():
+                continue
+            task_node_id = _escape_node_label(task_str)
+            task_label = task_str.replace('"', '\\"')
+
+            mermaid += f"        {task_node_id}[{task_label}];\n"
+
+        mermaid += "    end\n"
+        # Apply parallel group styling to subgraph
+        mermaid += f"    class {group_id_escaped} parallelGroup;\n"
+
+    # Add regular nodes (not in parallel groups and not ParallelGroup nodes themselves)
+    for node in display_graph.nodes():
+        node_str = str(node)
+
+        if node_str in nodes_in_groups:
+            continue  # Already added in subgraph
+
+        # Skip ParallelGroup nodes - they are represented as subgraphs, not individual nodes
+        if node_str in parallel_group_ids:
+            continue
+
+        node_id = _escape_node_label(node_str)
+        node_label = node_str.replace('"', '\\"')  # Escape quotes
+
+        # Handle special formatting for different node types
         if node == first_node:
             mermaid += f"    {node_id}([{node_label}]):::first;\n"
         elif node == last_node:
@@ -455,31 +821,74 @@ def draw_mermaid(
             mermaid += f"    {node_id}[{node_label}];\n"
 
     # Add edges
-    for u, v in graph.edges():
-        u_id = _escape_node_label(str(u))
-        v_id = _escape_node_label(str(v))
+    # Handle edges involving ParallelGroup nodes specially - connect directly to subgraph
+    for u, v in display_graph.edges():
+        u_str = str(u)
+        v_str = str(v)
 
-        # Check if edge has data/label
-        edge_data = graph.get_edge_data(u, v)
-        if edge_data and edge_data.get('label'):
-            label = str(edge_data['label'])
-            # Wrap long labels
-            if len(label.split()) > wrap_label_n_words:
-                words = label.split()
-                wrapped_label = "<br>".join(
-                    " ".join(words[i:i + wrap_label_n_words])
-                    for i in range(0, len(words), wrap_label_n_words)
-                )
-                mermaid += f"    {u_id} -- {wrapped_label} --> {v_id};\n"
-            else:
+        # Case 1: external_node -> ParallelGroup
+        # Draw as: external_node -> subgraph (direct edge to subgraph)
+        if v_str in parallel_group_ids and u_str not in parallel_group_ids:
+            u_id = _escape_node_label(u_str)
+            v_id = _escape_node_label(v_str)
+            edge_data = display_graph.get_edge_data(u, v)
+
+            # Connect directly to the subgraph
+            if edge_data and edge_data.get('label'):
+                label = str(edge_data['label'])
                 mermaid += f"    {u_id} -- {label} --> {v_id};\n"
-        else:
-            mermaid += f"    {u_id} --> {v_id};\n"
+            else:
+                mermaid += f"    {u_id} --> {v_id};\n"
+            continue
+
+        # Case 2: ParallelGroup -> external_node
+        # Draw as: subgraph -> external_node (direct edge from subgraph)
+        if u_str in parallel_group_ids and v_str not in parallel_group_ids and v_str not in nodes_in_groups:
+            u_id = _escape_node_label(u_str)
+            v_id = _escape_node_label(v_str)
+            edge_data = display_graph.get_edge_data(u, v)
+
+            # Connect directly from the subgraph
+            if edge_data and edge_data.get('label'):
+                label = str(edge_data['label'])
+                mermaid += f"    {u_id} -- {label} --> {v_id};\n"
+            else:
+                mermaid += f"    {u_id} --> {v_id};\n"
+            continue
+
+        # Case 3: ParallelGroup -> internal_task
+        # Skip these edges - internal structure handled by subgraph
+        if u_str in parallel_group_ids and v_str in nodes_in_groups:
+            continue
+
+        # Case 4: Regular edges (not involving ParallelGroup nodes)
+        if u_str not in parallel_group_ids and v_str not in parallel_group_ids:
+            u_id = _escape_node_label(u_str)
+            v_id = _escape_node_label(v_str)
+
+            # Check if edge has data/label
+            edge_data = display_graph.get_edge_data(u, v)
+            if edge_data and edge_data.get('label'):
+                label = str(edge_data['label'])
+                # Wrap long labels
+                if len(label.split()) > wrap_label_n_words:
+                    words = label.split()
+                    wrapped_label = "<br>".join(
+                        " ".join(words[i:i + wrap_label_n_words])
+                        for i in range(0, len(words), wrap_label_n_words)
+                    )
+                    mermaid += f"    {u_id} -- {wrapped_label} --> {v_id};\n"
+                else:
+                    mermaid += f"    {u_id} -- {label} --> {v_id};\n"
+            else:
+                # Normal edge
+                mermaid += f"    {u_id} --> {v_id};\n"
 
     # Add custom styles
     if with_styles:
         mermaid += "    classDef first fill:#e1f5fe,stroke:#01579b,stroke-width:2px;\n"
         mermaid += "    classDef last fill:#fff3e0,stroke:#e65100,stroke-width:2px;\n"
+        mermaid += "    classDef parallelGroup fill:#f3e5f5,stroke:#4a148c,stroke-width:3px;\n"
         mermaid += "    classDef default fill:#f9f9f9,stroke:#333,stroke-width:1px;\n"
 
         # Add custom node colors if provided
@@ -491,6 +900,172 @@ def draw_mermaid(
 
     return mermaid
 
+
+
+def create_agraph(
+    graph: nx.DiGraph,
+    node_labels: Optional[dict[Any, str]] = None,
+    node_colors: Optional[dict[Any, str]] = None,
+) -> Any:
+    """Create a pygraphviz AGraph object from a NetworkX DiGraph.
+
+    Args:
+        graph: NetworkX directed graph to draw
+        node_labels: Custom labels for nodes (optional)
+        node_colors: Custom colors for nodes (optional)
+
+    Returns:
+        pygraphviz AGraph object
+
+    Raises:
+        ImportError: If pygraphviz is not installed
+    """
+    try:
+        import pygraphviz as pgv
+    except ImportError as exc:
+        msg = "Install pygraphviz to draw graphs: `pip install pygraphviz`."
+        raise ImportError(msg) from exc
+
+    if not graph.nodes():
+        # Create a simple "empty graph" visualization
+        viz = pgv.AGraph(directed=True)
+        viz.add_node("Empty", label="Empty Graph", style="filled", fillcolor="lightgray")
+        return viz
+
+    # Transform graph for container view
+    display_graph, parallel_groups = _transform_graph_for_container_view(graph)
+
+    # Create pygraphviz graph with compound=true to support edges to/from clusters
+    viz = pgv.AGraph(directed=True, nodesep=0.5, ranksep=1.2, compound=True)
+
+    # Track which nodes are in parallel groups
+    nodes_in_groups: set[str] = set()
+    for group_info in parallel_groups.values():
+        nodes_in_groups.update(group_info["tasks"])
+
+    # Track parallel group IDs and map them to cluster names
+    parallel_group_ids = set(parallel_groups.keys())
+    group_to_cluster: dict[str, str] = {}
+
+    # Add parallel group clusters
+    for idx, (group_id, group_info) in enumerate(parallel_groups.items()):
+        cluster_name = f"cluster_{idx}"
+        group_to_cluster[group_id] = cluster_name
+
+        viz.add_subgraph(
+            name=cluster_name,
+            label=group_info["label"],
+            style="filled",
+            fillcolor="#f3e5f5",
+            color="#4a148c",
+            penwidth=2.5,
+            labeljust="l",  # Left-justify label
+            labelloc="t",   # Place label at top
+        )
+
+        # Add tasks to the cluster
+        cluster = viz.get_subgraph(cluster_name)
+        assert cluster is not None
+        for task_id in group_info["tasks"]:
+            if task_id not in display_graph.nodes():
+                continue
+
+            label = node_labels.get(task_id, str(task_id)) if node_labels else str(task_id)
+            color = node_colors.get(task_id, "lightblue") if node_colors else "lightblue"
+
+            cluster.add_node(
+                str(task_id),
+                label=f"<<B>{label}</B>>",
+                style="filled",
+                fillcolor=color,
+                fontsize=12,
+                fontname="arial",
+            )
+
+    # Add regular nodes (not in parallel groups and not ParallelGroup nodes themselves)
+    for node in display_graph.nodes():
+        node_str = str(node)
+
+        if node_str in nodes_in_groups:
+            continue  # Already added in cluster
+
+        # Skip ParallelGroup nodes - they are represented as clusters, not individual nodes
+        if node_str in parallel_group_ids:
+            continue
+
+        label = node_labels.get(node, node_str) if node_labels else node_str
+        color = node_colors.get(node, "lightblue") if node_colors else "lightblue"
+
+        viz.add_node(
+            node_str,
+            label=f"<<B>{label}</B>>",
+            style="filled",
+            fillcolor=color,
+            fontsize=12,
+            fontname="arial",
+        )
+
+    # Add edges with special handling for ParallelGroup nodes
+    for u, v in display_graph.edges():
+        u_str = str(u)
+        v_str = str(v)
+
+        # Determine source and target for the edge
+        # If source/target is a ParallelGroup, use lhead/ltail to connect to cluster
+        edge_attrs = {"fontsize": "10", "fontname": "arial"}
+
+        # Case 1: external_node -> ParallelGroup
+        if v_str in parallel_group_ids and u_str not in parallel_group_ids:
+            cluster_name = group_to_cluster[v_str]
+            # Find a representative node in the cluster to use as the target
+            tasks = parallel_groups[v_str]["tasks"]
+            if tasks:
+                representative = tasks[0]
+                edge_attrs["lhead"] = cluster_name
+                viz.add_edge(u_str, representative, **edge_attrs)
+            continue
+
+        # Case 2: ParallelGroup -> external_node
+        if u_str in parallel_group_ids and v_str not in parallel_group_ids:
+            cluster_name = group_to_cluster[u_str]
+            # Find a representative node in the cluster to use as the source
+            tasks = parallel_groups[u_str]["tasks"]
+            if tasks:
+                representative = tasks[0]
+                edge_attrs["ltail"] = cluster_name
+                viz.add_edge(representative, v_str, **edge_attrs)
+            continue
+
+        # Case 3: Regular edges (not involving ParallelGroup nodes)
+        if u_str not in parallel_group_ids and v_str not in parallel_group_ids:
+            viz.add_edge(u_str, v_str, **edge_attrs)
+
+    return viz
+
+
+def draw_dot(
+    graph: nx.DiGraph,
+    node_labels: Optional[dict[Any, str]] = None,
+    node_colors: Optional[dict[Any, str]] = None,
+) -> str:
+    """Generate DOT format string from a NetworkX DiGraph.
+
+    Args:
+        graph: NetworkX directed graph to draw
+        node_labels: Custom labels for nodes (optional)
+        node_colors: Custom colors for nodes (optional)
+
+    Returns:
+        DOT format string
+
+    Raises:
+        ImportError: If pygraphviz is not installed
+    """
+    viz = create_agraph(graph, node_labels=node_labels, node_colors=node_colors)
+    try:
+        return viz.string()
+    finally:
+        viz.close()
 
 def draw_png(graph: nx.DiGraph, output_path: Optional[str] = None,
              node_labels: Optional[dict[Any, str]] = None,
@@ -506,42 +1081,7 @@ def draw_png(graph: nx.DiGraph, output_path: Optional[str] = None,
     Returns:
         PNG bytes if output_path is None, otherwise None
     """
-    try:
-        import pygraphviz as pgv
-    except ImportError as exc:
-        msg = "Install pygraphviz to draw PNG graphs: `pip install pygraphviz`."
-        raise ImportError(msg) from exc
-
-    if not graph.nodes():
-        # Create a simple "empty graph" visualization
-        viz = pgv.AGraph(directed=True)
-        viz.add_node("Empty", label="Empty Graph", style="filled", fillcolor="lightgray")
-        try:
-            return viz.draw(output_path, format="png", prog="dot")
-        finally:
-            viz.close()
-
-    # Create pygraphviz graph
-    viz = pgv.AGraph(directed=True, nodesep=0.9, ranksep=1.0)
-
-    # Add nodes
-    for node in graph.nodes():
-        label = node_labels.get(node, str(node)) if node_labels else str(node)
-        color = node_colors.get(node, "lightblue") if node_colors else "lightblue"
-
-        viz.add_node(
-            str(node),
-            label=f"<<B>{label}</B>>",
-            style="filled",
-            fillcolor=color,
-            fontsize=12,
-            fontname="arial",
-        )
-
-    # Add edges
-    for u, v in graph.edges():
-        viz.add_edge(str(u), str(v), fontsize=10, fontname="arial")
-
+    viz = create_agraph(graph, node_labels=node_labels, node_colors=node_colors)
     try:
         return viz.draw(output_path, format="png", prog="dot")
     finally:
