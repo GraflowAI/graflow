@@ -1,7 +1,7 @@
 """Tests for core graflow functionality."""
 
 from graflow.core.decorators import task
-from graflow.core.task import ParallelGroup, Task, TaskWrapper
+from graflow.core.task import ParallelGroup, SequentialTask, Task, TaskWrapper
 from graflow.core.workflow import workflow
 
 
@@ -14,8 +14,9 @@ def test_task_creation():
 
 def test_task_run():
     """Test Task execution."""
-    task_obj = Task("A")
-    task_obj.run()  # Should print "Running task: A"
+    with workflow("test_run"):
+        task_obj = Task("A")
+        task_obj.run()  # Should print "Running task: A"
 
 
 def test_decorator():
@@ -40,32 +41,37 @@ def test_decorator_with_name():
 
 def test_parallel_group_creation():
     """Test ParallelGroup creation and functionality."""
-    task_a = Task("A")
-    task_b = Task("B")
-    group = ParallelGroup([task_a, task_b])
+    with workflow("test_parallel_group"):
+        task_a = Task("A")
+        task_b = Task("B")
+        group = ParallelGroup([task_a, task_b])
 
-    assert group.task_id.startswith("ParallelGroup_")
-    assert len(group.tasks) == 2
+        assert group.task_id.startswith("ParallelGroup_")
+        assert len(group.tasks) == 2
 
 
 def test_sequential_operator():
     """Test >> operator for sequential composition."""
-    task_a = Task("A")
-    task_b = Task("B")
-    result = task_a >> task_b
+    with workflow("test_sequential"):
+        task_a = Task("A")
+        task_b = Task("B")
+        result = task_a >> task_b
 
-    # The >> operator returns the right operand
-    assert result == task_b
+        # The >> operator returns SequentialTask
+        assert isinstance(result, SequentialTask)
+        assert result.leftmost == task_a
+        assert result.rightmost == task_b
 
 
 def test_parallel_operator():
     """Test | operator for parallel composition."""
-    task_a = Task("A")
-    task_b = Task("B")
-    group = task_a | task_b
+    with workflow("test_parallel"):
+        task_a = Task("A")
+        task_b = Task("B")
+        group = task_a | task_b
 
-    assert isinstance(group, ParallelGroup)
-    assert len(group.tasks) == 2
+        assert isinstance(group, ParallelGroup)
+        assert len(group.tasks) == 2
 
 
 def test_decorator_chaining():
@@ -79,7 +85,9 @@ def test_decorator_chaining():
         return "result2"
 
     result = func1 >> func2
-    assert result == func2
+    assert isinstance(result, SequentialTask)
+    assert result.leftmost == func1
+    assert result.rightmost == func2
 
 
 def test_workflow_context():

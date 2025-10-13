@@ -39,6 +39,8 @@ def test_parallel_diamond_runs_store_once_after_parallel_transforms():
         # Build diamond: fetch -> (transform_a | transform_b) -> store
         fetch >> (transform_a | transform_b) >> store  # type: ignore[arg-type]
 
+        print(f"Graph:\n {ctx.graph}", flush=True)
+
         ctx.execute("fetch")
 
     store_indices = [idx for idx, label in enumerate(execution_log) if label == "store"]
