@@ -617,6 +617,64 @@ class TestSequentialTaskEngineExecution:
             # Verify all tasks executed
             assert set(execution_order) == {"start", "branch_a", "branch_b", "merge"}
 
+    def test_nested_parallel_execution(self):
+        """Test execution of fetch >> ((transform_a >> subtask_a) | transform_b) >> store."""
+        execution_order: list[str] = []
+
+        with WorkflowContext("test") as ctx:
+            @task
+            def fetch():
+                execution_order.append("fetch")
+                return "fetched"
+
+            @task
+            def transform_a():
+                execution_order.append("transform_a")
+                return "transformed_a"
+
+            @task
+            def subtask_a():
+                execution_order.append("subtask_a")
+                return "subtask_a_done"
+
+            @task
+            def transform_b():
+                execution_order.append("transform_b")
+                return "transformed_b"
+
+            @task
+            def store():
+                execution_order.append("store")
+                return "stored"
+
+            # Build nested parallel workflow
+            fetch >> ((transform_a >> subtask_a) | transform_b) >> store  # type: ignore
+
+            print(f"Graph: \n{ctx.graph}")
+
+            exec_context = ExecutionContext.create(ctx.graph, "fetch", max_steps=20)
+
+            engine = WorkflowEngine()
+            engine.execute(exec_context)
+
+        print(f"Execution order: {execution_order}")
+
+        assert len(execution_order) == 5
+        assert execution_order[0] == "fetch"
+        assert execution_order[-1] == "store"
+        assert execution_order.count("transform_a") == 1
+        assert execution_order.count("transform_b") == 1
+        assert execution_order.count("subtask_a") == 1
+        assert execution_order.count("store") == 1
+
+        assert execution_order.index("transform_a") < execution_order.index("subtask_a")
+
+        assert set(execution_order) == {"fetch", "transform_a", "transform_b", "subtask_a", "store"}
+
+        for task_id in ("fetch", "transform_a", "transform_b", "subtask_a", "store"):
+            result = exec_context.get_result(task_id)
+            assert result is not None
+
     def test_nested_sequential_chains(self):
         """Test execution of nested sequential chains: (a >> b) >> (c >> d)."""
         execution_order = []

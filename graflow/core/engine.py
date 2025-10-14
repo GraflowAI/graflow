@@ -123,7 +123,15 @@ class WorkflowEngine:
                 print(f"🚫 Goto called in {task_id}, skipping successors")
             else:
                 # Add successor nodes to queue
-                for succ in graph.successors(task_id):
+                successors = list(graph.successors(task_id))
+
+                # Prevent re-queuing internal members of a ParallelGroup
+                from graflow.core.task import ParallelGroup  # Local import to avoid cycle
+                if isinstance(task, ParallelGroup):
+                    member_ids = {member.task_id for member in task.tasks}
+                    successors = [succ for succ in successors if succ not in member_ids]
+
+                for succ in successors:
                     succ_task = graph.get_node(succ)
                     context.add_to_queue(succ_task)
 
