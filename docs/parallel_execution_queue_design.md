@@ -229,8 +229,8 @@ class ThreadingCoordinator:
 
                 print(f"  - Executing in session '{branch_context.session_id}': {task_id}")
 
-                # Execute single task without loop continuation
-                engine.execute_single(branch_context, task_id)
+                # Execute branch using the standard engine loop scoped to the branch queue
+                engine.execute(branch_context, start_task_id=task_id)
 
                 return task_id, True, "Success"
             except Exception as e:
@@ -291,7 +291,7 @@ class ThreadingCoordinator:
    ```python
    # graflow/coordination/threading.py
    def execute_task(task: Executable) -> tuple[str, bool, str]:
-       sub_ctx = execution_context.clone_for_task(task.task_id)
+       sub_ctx = execution_context.create_branch_context(branch_id=task.task_id)
        try:
            WorkflowEngine().execute(sub_ctx, start_task_id=task.task_id)
            execution_context.merge_results(sub_ctx)
@@ -301,11 +301,11 @@ class ThreadingCoordinator:
            return task.task_id, False, str(exc)
    ```
 
-2. **ExecutionContext clone helper**
+2. **ExecutionContext branch helper**
 
    ```python
    # graflow/core/context.py
-   def clone_for_task(self, branch_id: str) -> ExecutionContext:
+   def create_branch_context(self, branch_id: str) -> ExecutionContext:
        branch_session_id = f"{self.session_id}_{branch_id}"
        return ExecutionContext(
            graph=self.graph,
@@ -334,44 +334,9 @@ class ThreadingCoordinator:
    `mark_branch_completed` can update barrier state or log progress; it is a no-op for the in-memory coordinator but keeps the API explicit.
 
 
-### 2.6 WorkflowEngine with Single-Task Execution
+### 2.6 WorkflowEngine Branch Execution
 
-```python
-# graflow/core/engine.py
-
-class WorkflowEngine:
-    def execute_single(
-        self,
-        context: ExecutionContext,
-        task_id: str
-    ) -> None:
-        """Execute a single task without loop continuation.
-
-        This method executes exactly one task and returns, preventing
-        threads from consuming the global queue.
-
-        Args:
-            context: ExecutionContext (may be a branch context)
-            task_id: Task ID to execute
-        """
-        print(f"Executing single task: {task_id} in session: {context.session_id}")
-
-        task = context.graph.get_node(task_id)
-
-        # Execute task with proper context management
-        try:
-            with context.executing_task(task):
-                self._execute_task(task, context)
-        except Exception as e:
-            raise exceptions.as_runtime_error(e) from e
-
-        # Increment step counter
-        context.increment_step()
-
-        # DO NOT enqueue successors here – the parent context resumes after the group
-        # completes and schedules external successors using the main queue.
-        print(f"  Completed single task: {task_id}")
-```
+Branch queues reuse the standard `WorkflowEngine.execute()` loop. Passing `start_task_id=task.task_id` ensures the branch context drains its own queue without touching the parent session, so no dedicated `execute_single()` helper is needed.
 
 > **Successor scheduling**  
 > When all branch futures complete, control returns to the caller of `execute_group`. The original workflow loop (running in the parent `ExecutionContext`) then iterates again, picks up the `ParallelGroup` node, and—thanks to the Phase 0 engine filter—queues only external successors (e.g., `store`). No additional helper is required in the coordinator.
@@ -682,8 +647,8 @@ for successor_id in unique_successors:
    - Share channel/function_manager if `parent_context` exists
 
 2. **graflow/core/engine.py**
-   - Implement `execute_single()` method
-   - Execute one task without loop continuation
+   - Drive branch execution with `execute()` and `start_task_id`
+   - Rely on successor filtering to avoid re-queuing group members
 
 **No changes needed**:
 - ✅ `graflow/queue/base.py` - Already uses `execution_context.session_id`
