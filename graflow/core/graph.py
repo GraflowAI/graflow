@@ -68,6 +68,26 @@ class TaskGraph:
         """Get predecessor nodes of the given node."""
         return list(self._graph.predecessors(node))
 
+    def get_parallel_group_members(self, group_id: str) -> List[str]:
+        """Return task IDs for members of the given ParallelGroup."""
+        node_data = self._graph.nodes.get(group_id)
+        if not node_data:
+            return []
+
+        task = node_data.get("task")
+        if task is None:
+            return []
+
+        try:
+            from graflow.core.task import ParallelGroup  # Local import to avoid cycles
+        except ModuleNotFoundError:  # pragma: no cover - defensive
+            return []
+
+        if isinstance(task, ParallelGroup):
+            return [member.task_id for member in task.tasks]
+
+        return []
+
     def detect_cycles(self) -> List[List[str]]:
         """Detect cycles in the graph."""
         try:
