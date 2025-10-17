@@ -78,11 +78,7 @@ class TaskGraph:
         if task is None:
             return []
 
-        try:
-            from graflow.core.task import ParallelGroup  # Local import to avoid cycles
-        except ModuleNotFoundError:  # pragma: no cover - defensive
-            return []
-
+        from graflow.core.task import ParallelGroup  # Local import to avoid cycles
         if isinstance(task, ParallelGroup):
             return [member.task_id for member in task.tasks]
 

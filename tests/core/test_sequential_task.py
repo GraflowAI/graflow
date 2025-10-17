@@ -238,13 +238,13 @@ class TestSequentialTaskGraphStructure:
             assert len(parallel_groups) == 1
             group_id = parallel_groups[0]
 
-            # Verify edges
-            # - ParallelGroup -> task_a
-            # - ParallelGroup -> task_c
-            # - task_a -> task_b
+            # Verify membership via TaskGraph API
+            members = ctx.graph.get_parallel_group_members(group_id)
+            assert set(members) == {"task_a", "task_c"}
+
+            # Verify group does not directly connect to members in execution graph
             group_successors = list(graph.successors(group_id))
-            assert "task_a" in group_successors
-            assert "task_c" in group_successors
+            assert group_successors == []
 
             task_a_successors = list(graph.successors("task_a"))
             assert "task_b" in task_a_successors
@@ -273,14 +273,14 @@ class TestSequentialTaskGraphStructure:
             assert group_id in fetch_successors, \
                 f"fetch should connect to ParallelGroup, got: {fetch_successors}"
 
-            # Verify: ParallelGroup -> transform_a, transform_b (not subtask_a)
+            # Verify: ParallelGroup membership via API
+            members = ctx.graph.get_parallel_group_members(group_id)
+            assert set(members) == {"transform_a", "transform_b"}, \
+                f"ParallelGroup members should be transform_a/transform_b, got: {members}"
+
             group_successors = list(graph.successors(group_id))
-            assert "transform_a" in group_successors, \
-                f"ParallelGroup should connect to transform_a, got: {group_successors}"
-            assert "transform_b" in group_successors, \
-                f"ParallelGroup should connect to transform_b, got: {group_successors}"
-            assert "subtask_a" not in group_successors, \
-                f"ParallelGroup should NOT connect to subtask_a, got: {group_successors}"
+            assert group_successors == ["store"], \
+                f"ParallelGroup should have only store as external successor, got: {group_successors}"
 
             # Verify: transform_a -> subtask_a
             transform_a_successors = list(graph.successors("transform_a"))
@@ -335,10 +335,11 @@ class TestSequentialTaskGraphStructure:
             assert len(parallel_groups) == 1
             group_id = parallel_groups[0]
 
-            # Verify: ParallelGroup -> task_a, task_c
+            members = ctx.graph.get_parallel_group_members(group_id)
+            assert set(members) == {"task_a", "task_c"}
+
             group_successors = list(graph.successors(group_id))
-            assert "task_a" in group_successors
-            assert "task_c" in group_successors
+            assert group_successors == ["task_e"]
 
             # Verify: task_a -> task_b, task_c -> task_d
             assert ("task_a", "task_b") in graph.edges()
@@ -776,17 +777,16 @@ class TestSequentialTaskEngineExecution:
             graph = ctx.graph._graph
 
             # Verify graph structure
-            # group1 -> [task1, task2, group2]
+            members_group1 = ctx.graph.get_parallel_group_members("group1")
+            assert set(members_group1) == {"task1", "task2"}
             group1_successors = list(graph.successors("group1"))
-            assert "task1" in group1_successors
-            assert "task2" in group1_successors
-            assert "group2" in group1_successors
+            assert group1_successors == ["group2"], group1_successors
 
-            # group2 -> [task3, task4, task5]
+            # group2 membership and successor
+            members_group2 = ctx.graph.get_parallel_group_members("group2")
+            assert set(members_group2) == {"task3", "task4"}
             group2_successors = list(graph.successors("group2"))
-            assert "task3" in group2_successors
-            assert "task4" in group2_successors
-            assert "task5" in group2_successors
+            assert group2_successors == ["task5"], group2_successors
 
             # Verify no direct edges from group1 to task5
             assert "task5" not in group1_successors
@@ -820,21 +820,21 @@ class TestSequentialTaskEngineExecution:
             start_successors = list(graph.successors("start"))
             assert "group1" in start_successors
 
-            # group1 -> [task1, task2, middle]
+            # group1 membership and successor to middle
+            members_group1 = ctx.graph.get_parallel_group_members("group1")
+            assert set(members_group1) == {"task1", "task2"}
             group1_successors = list(graph.successors("group1"))
-            assert "task1" in group1_successors
-            assert "task2" in group1_successors
-            assert "middle" in group1_successors
+            assert group1_successors == ["middle"], group1_successors
 
             # middle -> group2
             middle_successors = list(graph.successors("middle"))
             assert "group2" in middle_successors
 
-            # group2 -> [task3, task4, end]
+            # group2 membership and successor to end
+            members_group2 = ctx.graph.get_parallel_group_members("group2")
+            assert set(members_group2) == {"task3", "task4"}
             group2_successors = list(graph.successors("group2"))
-            assert "task3" in group2_successors
-            assert "task4" in group2_successors
-            assert "end" in group2_successors
+            assert group2_successors == ["end"], group2_successors
 
             # Verify no shortcuts (e.g., start -> middle)
             assert "middle" not in start_successors

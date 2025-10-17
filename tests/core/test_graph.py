@@ -4,7 +4,7 @@ import networkx as nx
 import pytest
 
 from graflow.core.task import ParallelGroup, Task
-from graflow.core.workflow import clear_workflow_context
+from graflow.core.workflow import clear_workflow_context, current_workflow_context
 from graflow.exceptions import DuplicateTaskError
 from graflow.utils.graph import build_graph
 
@@ -32,8 +32,9 @@ def test_graph_is_directed():
     flow = task_a >> task_b
     graph = build_graph(flow)
 
-    assert isinstance(graph, nx.DiGraph)
-    assert graph.is_directed()
+    nx_graph = graph.nx_graph()
+    assert isinstance(nx_graph, nx.DiGraph)
+    assert nx_graph.is_directed()
 
 
 def test_parallel_group_graph():
@@ -48,6 +49,10 @@ def test_parallel_group_graph():
     assert set(graph.nodes) == {group.task_id, "A", "B"}
     expected_edges = {(group.task_id, "A"), (group.task_id, "B")}
     assert set(graph.edges) == expected_edges
+
+    ctx = current_workflow_context()
+    members = ctx.graph.get_parallel_group_members(group.task_id)
+    assert set(members) == {"A", "B"}
 
 def test_cycle_detection():
     """Test cycle detection in a graph."""
@@ -108,10 +113,13 @@ def test_complex_graph1():
         ("A", "ParallelGroup_1"),
         ("ParallelGroup_1", "B"),
         ("ParallelGroup_1", "C"),
-        ("B", "D"),
-        ("C", "D")
+        ("ParallelGroup_1", "D")
     }
     assert set(graph.edges) == expected_edges
+
+    ctx = current_workflow_context()
+    members = ctx.graph.get_parallel_group_members("ParallelGroup_1")
+    assert set(members) == {"B", "C"}
 
 def test_merge_parallel_groups():
     """Test merging two parallel groups."""
@@ -184,7 +192,13 @@ def test_complex_graph2():
     expected_edges = {
         ("A", group1.task_id),
         (group1.task_id, "B"), (group1.task_id, "C"),
-        ("B", group2.task_id), ("C", group2.task_id),
+        (group1.task_id, group2.task_id),
         (group2.task_id, "D"), (group2.task_id, "E"), (group2.task_id, "F"),
         }
     assert set(graph.edges) == expected_edges
+
+    ctx = current_workflow_context()
+    members_group1 = ctx.graph.get_parallel_group_members(group1.task_id)
+    assert set(members_group1) == {"B", "C"}
+    members_group2 = ctx.graph.get_parallel_group_members(group2.task_id)
+    assert set(members_group2) == {"D", "E", "F"}

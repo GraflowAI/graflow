@@ -190,7 +190,7 @@ class TestParallelGroup:
         This verifies the correct graph topology for preventing race conditions.
         Expected structure:
         - fetch -> ParallelGroup
-        - ParallelGroup -> task_a, task_b
+        - ParallelGroup members tracked via TaskGraph.get_parallel_group_members
         - ParallelGroup -> store (NOT task_a/task_b -> store)
         """
         with WorkflowContext("test") as ctx:
@@ -215,16 +215,19 @@ class TestParallelGroup:
             assert group_id in fetch_successors, \
                 f"fetch should connect to ParallelGroup, got: {fetch_successors}"
 
-            # Verify: ParallelGroup -> task_a, task_b
-            group_successors = list(graph.successors(group_id))
-            assert "task_a" in group_successors, \
-                f"ParallelGroup should connect to task_a, got: {group_successors}"
-            assert "task_b" in group_successors, \
-                f"ParallelGroup should connect to task_b, got: {group_successors}"
+            # Verify: ParallelGroup membership via TaskGraph API
+            members = ctx.graph.get_parallel_group_members(group_id)
+            assert set(members) == {"task_a", "task_b"}, \
+                f"ParallelGroup members should be task_a/task_b, got: {members}"
 
-            # Verify: ParallelGroup -> store (KEY FIX)
+            # Verify: ParallelGroup only connects to external successors (store)
+            group_successors = list(graph.successors(group_id))
             assert "store" in group_successors, \
                 f"ParallelGroup should connect to store, got: {group_successors}"
+            assert "task_a" not in group_successors, \
+                f"ParallelGroup should not connect directly to task_a, got: {group_successors}"
+            assert "task_b" not in group_successors, \
+                f"ParallelGroup should not connect directly to task_b, got: {group_successors}"
 
             # Verify: task_a/task_b do NOT have successors (KEY FIX)
             task_a_successors = list(graph.successors("task_a"))
@@ -310,9 +313,11 @@ class TestParallelGroup:
             assert "group1" in graph.nodes()
             assert "group2" in graph.nodes()
 
-            # Verify group1 still has task3 as successor
+            # Verify group1 membership and external successor
+            group1_members = ctx.graph.get_parallel_group_members("group1")
+            assert set(group1_members) == {"task1", "task2"}
             group1_successors = list(graph.successors("group1"))
-            assert "task3" in group1_successors
+            assert group1_successors == ["task3"]
 
     def test_parallel_group_has_successors(self):
         """Test _has_successors() method correctly identifies dependencies."""
@@ -370,17 +375,23 @@ class TestParallelGroup:
             group3_id = parallel_groups[0]
 
             # Verify structure
-            # group1 -> [task1, task2, task3]
+            # group1 members + external successor task3
+            group1_members = ctx.graph.get_parallel_group_members("group1")
+            assert set(group1_members) == {"task1", "task2"}
             group1_successors = list(graph.successors("group1"))
-            assert set(group1_successors) == {"task1", "task2", "task3"}
+            assert group1_successors == ["task3"]
 
-            # group2 -> [task4, task5]
+            # group2 membership and successors
+            group2_members = ctx.graph.get_parallel_group_members("group2")
+            assert set(group2_members) == {"task4", "task5"}
             group2_successors = list(graph.successors("group2"))
-            assert set(group2_successors) == {"task4", "task5"}
+            assert group2_successors == []
 
-            # ParallelGroup_3 -> [group1, group2, task6]
+            # ParallelGroup_3 membership and successor
+            group3_members = ctx.graph.get_parallel_group_members(group3_id)
+            assert set(group3_members) == {"group1", "group2"}
             group3_successors = list(graph.successors(group3_id))
-            assert set(group3_successors) == {"group1", "group2", "task6"}
+            assert group3_successors == ["task6"]
 
     def test_complex_merge_pattern2(self):
         """Test complex merge: group1 >> task3 in same expression.
@@ -426,19 +437,17 @@ class TestParallelGroup:
             graph = ctx.graph._graph
 
             # Verify group1 (ParallelGroup) structure
-            # group1 -> [task1, task2, task3]
+            group1_members = ctx.graph.get_parallel_group_members("group1")
+            assert set(group1_members) == {"task1", "task2"}
             group1_successors = list(graph.successors("group1"))
-            assert "task1" in group1_successors
-            assert "task2" in group1_successors
-            assert "task3" in group1_successors
+            assert group1_successors == ["task3"]
 
-            # group2 should now contain [group1, task4, task5]
-            # and have edges to all of them plus task6
+            # group2 should now include group1.leftmost alongside task4/task5
+            group2_members = ctx.graph.get_parallel_group_members("group2")
+            expected_members = {group1.leftmost.task_id, "task4", "task5"}
+            assert set(group2_members) == expected_members
             group2_successors = list(graph.successors("group2"))
-            assert "group1" in group2_successors
-            assert "task4" in group2_successors
-            assert "task5" in group2_successors
-            assert "task6" in group2_successors
+            assert group2_successors == ["task6"]
 
 
 class TestParallelGroupIntegration:

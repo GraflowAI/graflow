@@ -270,7 +270,6 @@ class SequentialTask(Executable):
         elif isinstance(other, ParallelGroup):
             # (a >> b) | existing_group → add a to group
             other.tasks.insert(0, self.leftmost)
-            other._add_dependency_edge(other.task_id, self.leftmost.task_id)
             return other
         else:
             raise TypeError(
@@ -345,8 +344,6 @@ class ParallelGroup(Executable):
 
         # Register this parallel group to current workflow context
         self._register_to_context()
-        for task in self.tasks:
-            self._add_dependency_edge(self._task_id, task.task_id)
 
     @property
     def task_id(self) -> str:
@@ -514,13 +511,10 @@ class ParallelGroup(Executable):
         if isinstance(other, SequentialTask):
             # group | (a >> b) → add a (leftmost) to group
             self.tasks.append(other.leftmost)
-            self._add_dependency_edge(self.task_id, other.leftmost.task_id)
             return self
         elif isinstance(other, Task | TaskWrapper):
             # Add the new task to current group instead of creating a new one
             self.tasks.append(other)
-            # Add edge from this group to the new task
-            self._add_dependency_edge(self.task_id, other.task_id)
             return self
         elif isinstance(other, ParallelGroup):
             # Check if either group has external dependencies (successors)
@@ -533,9 +527,6 @@ class ParallelGroup(Executable):
             else:
                 # No external dependencies - safe to merge
                 self.tasks.extend(other.tasks)
-                # Add edges from this group to all tasks in the other group
-                for task in other.tasks:
-                    self._add_dependency_edge(self.task_id, task.task_id)
                 # Remove the other group from the workflow graph
                 other._remove_from_context()
                 return self
@@ -558,15 +549,11 @@ class ParallelGroup(Executable):
         from .workflow import current_workflow_context
         try:
             current_context = current_workflow_context()
-            graph = current_context.graph._graph
-            if graph.has_node(self.task_id):
-                # Get successors, excluding the tasks that are members of this group
-                member_ids = {task.task_id for task in self.tasks}
-                successors = list(graph.successors(self.task_id))
-                # Filter out group members - only external successors count
-                external_successors = [s for s in successors if s not in member_ids]
-                return len(external_successors) > 0
-            return False
+            graph = current_context.graph
+            successors = graph.successors(self.task_id)
+            member_ids = set(graph.get_parallel_group_members(self.task_id))
+            external_successors = [s for s in successors if s not in member_ids]
+            return len(external_successors) > 0
         except Exception:
             # If we can't access the graph, assume no successors
             return False
