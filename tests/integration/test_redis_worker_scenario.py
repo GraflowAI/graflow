@@ -63,7 +63,7 @@ def _register_tasks(execution_context: ExecutionContext, tasks: Dict[str, RedisW
     for task in tasks.values():
         if task.task_id not in execution_context.graph.nodes:
             execution_context.graph.add_node(task, task.task_id)
-        execution_context.function_manager.register_task_function(task.task_id, task)
+        execution_context.task_resolver.register_task(task.task_id, task)
 
 
 def _make_task_spec(task: RedisWorkflowTask, execution_context: ExecutionContext) -> TaskSpec:

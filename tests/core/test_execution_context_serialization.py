@@ -358,8 +358,8 @@ class TestExecutionContextSerialization:
         )
 
         # Register some functions using global functions
-        context.function_manager.register_task_function("test_func", global_test_func)
-        context.function_manager.register_task_function("math_func", global_math_func)
+        context.task_resolver.register_task("test_func", global_test_func)
+        context.task_resolver.register_task("math_func", global_math_func)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             context_path = os.path.join(tmpdir, "context.pkl")
@@ -368,18 +368,18 @@ class TestExecutionContextSerialization:
             context.save(context_path)
             loaded_context = ExecutionContext.load(context_path)
 
-            # Verify function manager
-            assert loaded_context.function_manager is not None
+            # Verify task resolver
+            assert loaded_context.task_resolver is not None
 
             # Verify registered functions are available
-            registered_functions = loaded_context.function_manager.get_registered_functions()
-            assert "test_func" in registered_functions
-            assert "math_func" in registered_functions
+            registered_tasks = loaded_context.task_resolver.get_registered_tasks()
+            assert "test_func" in registered_tasks
+            assert "math_func" in registered_tasks
 
-            test_func = registered_functions["test_func"]
+            test_func = registered_tasks["test_func"]
             assert test_func() == "test"
 
-            math_func = registered_functions["math_func"]
+            math_func = registered_tasks["math_func"]
             assert math_func(3, 4) == 7
 
     def test_serialization_error_handling(self):

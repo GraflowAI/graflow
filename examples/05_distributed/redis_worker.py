@@ -174,7 +174,7 @@ def demonstrate_programmatic_worker(redis_client):
 
     # Register tasks for function resolution (reference + pickle fallback)
     for task in registered_tasks:
-        context.function_manager.register_task_function(task.task_id, task)
+        context.task_resolver.register_task(task.task_id, task)
 
     # Create worker using the Redis-backed queue
     worker = TaskWorker(

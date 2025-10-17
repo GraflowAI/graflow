@@ -13,8 +13,8 @@ from graflow.channels.typed import TypedChannel
 from graflow.coordination.executor import GroupExecutor
 from graflow.core.cycle import CycleController
 from graflow.core.engine import WorkflowEngine
-from graflow.core.function_registry import TaskFunctionManager
 from graflow.core.graph import TaskGraph
+from graflow.core.task_registry import TaskResolver
 from graflow.exceptions import CycleLimitExceededError
 from graflow.queue.base import TaskQueue, TaskSpec
 from graflow.queue.factory import QueueBackend, TaskQueueFactory
@@ -90,9 +90,9 @@ class TaskExecutionContext:
         return TypedChannel(channel, message_type)
 
     @property
-    def function_manager(self) -> TaskFunctionManager:
-        """Get the function manager instance from execution context."""
-        return self.execution_context.function_manager
+    def task_resolver(self) -> TaskResolver:
+        """Get the task resolver instance from execution context."""
+        return self.execution_context.task_resolver
 
     def get_result(self, node: str, default: Any = None) -> Any:
         """Get execution result for a node from channel."""
@@ -176,9 +176,9 @@ class ExecutionContext:
                 self.channel.set(key, parent_context.channel.get(key))
 
         if parent_context is not None:
-            self._function_manager = parent_context._function_manager
+            self._task_resolver = parent_context._task_resolver
         else:
-            self._function_manager = TaskFunctionManager()
+            self._task_resolver = TaskResolver()
 
         # Task execution context management
         self._task_execution_stack: list[TaskExecutionContext] = []
@@ -256,9 +256,9 @@ class ExecutionContext:
         return self.task_queue
 
     @property
-    def function_manager(self) -> TaskFunctionManager:
-        """Get the function manager instance."""
-        return self._function_manager
+    def task_resolver(self) -> TaskResolver:
+        """Get the task resolver instance."""
+        return self._task_resolver
 
     def add_to_queue(self, executable: Executable) -> None:
         """Add executable to execution queue."""
@@ -496,7 +496,7 @@ class ExecutionContext:
         state.pop('task_queue', None)
         state.pop('channel', None)
         state.pop('group_executor', None)
-        state.pop('_function_manager', None)
+        state.pop('_task_resolver', None)
 
         # Ensure backend config is saved (should already be set in __init__)
         if '_queue_backend_type' not in state:
@@ -551,7 +551,7 @@ class ExecutionContext:
 
         # Reconstruct TaskQueue
         from graflow.channels.factory import ChannelFactory
-        from graflow.core.function_registry import TaskFunctionManager
+        from graflow.core.task_registry import TaskResolver
         from graflow.queue.factory import QueueBackend, TaskQueueFactory
 
         if isinstance(queue_backend_type, str):
@@ -577,8 +577,8 @@ class ExecutionContext:
             for key, value in channel_data.items():
                 self.channel.set(key, value)
 
-        # Reconstruct FunctionManager
-        self._function_manager = TaskFunctionManager()
+        # Reconstruct TaskResolver
+        self._task_resolver = TaskResolver()
 
         # GroupExecutor is left as None (can be reset if needed)
         if not hasattr(self, 'group_executor'):

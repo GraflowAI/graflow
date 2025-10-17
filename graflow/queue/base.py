@@ -45,7 +45,7 @@ class TaskSpec:
     @property
     def function_data(self) -> Dict[str, Any]:
         """Get function_data by serializing executable's function."""
-        return self.execution_context.function_manager.serialize_task_function(self.executable, self.strategy)
+        return self.execution_context.function_manager.serialize_task(self.executable, self.strategy)
 
     def __lt__(self, other: 'TaskSpec') -> bool:
         """For queue sorting (FIFO: older first)."""
@@ -68,11 +68,11 @@ class TaskSpec:
             Function object or None if no function data available
 
         Raises:
-            FunctionResolutionError: If function cannot be resolved
+            TaskResolutionError: If task cannot be resolved
         """
         try:
             function_data = self.function_data
-            return self.execution_context.function_manager.resolve_task_function(function_data)
+            return self.execution_context.function_manager.resolve_task(function_data)
         except ValueError:
             return None
         except Exception:

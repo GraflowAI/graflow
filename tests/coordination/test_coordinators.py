@@ -258,23 +258,6 @@ class TestRedisCoordinator:
         mock_redis.delete.assert_has_calls(expected_calls, any_order=True)
         assert "cleanup_barrier" not in coordinator.active_barriers
 
-    def test_task_function_registry(self, coordinator):
-        """Task registry stores registered functions."""
-        def func_one():
-            return 1
-
-        def func_two():
-            return 2
-
-        assert coordinator.get_task_registry() == {}
-
-        coordinator.register_task_function("one", func_one)
-        coordinator.register_task_function("two", func_two)
-
-        registry = coordinator.get_task_registry()
-        assert registry["one"] is func_one
-        assert registry["two"] is func_two
-
     def test_queue_operations(self, coordinator, mock_task_queue):
         """Queue helper methods delegate to task queue."""
         mock_task_queue.size.return_value = 5

@@ -32,7 +32,7 @@ def _create_registered_task(execution_context: ExecutionContext, task_id: str) -
     wrapper.__module__ = __name__
 
     execution_context.graph.add_node(wrapper, task_id)
-    execution_context.function_manager.register_task_function(task_id, wrapper)
+    execution_context.task_resolver.register_task(task_id, wrapper)
     return wrapper
 
 

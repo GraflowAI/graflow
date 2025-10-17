@@ -2,7 +2,7 @@
 
 import threading
 import time
-from typing import TYPE_CHECKING, Any, Callable, Dict, List
+from typing import TYPE_CHECKING, Any, Dict, List
 
 if TYPE_CHECKING:
     from graflow.core.context import ExecutionContext
@@ -119,18 +119,6 @@ class RedisCoordinator(TaskCoordinator):
             # Remove from active barriers
             with self._lock:
                 del self.active_barriers[barrier_id]
-
-    def get_task_registry(self) -> Dict[str, Callable]:
-        """Get registry of available task functions for Redis workers."""
-        # This would be populated with registered task functions
-        # In a real implementation, this would be managed by the workflow engine
-        return getattr(self, '_task_registry', {})
-
-    def register_task_function(self, name: str, func: Callable) -> None:
-        """Register a task function for Redis workers."""
-        if not hasattr(self, '_task_registry'):
-            self._task_registry = {}
-        self._task_registry[name] = func
 
     def get_queue_size(self, group_id: str) -> int:
         """Get current queue size for a group."""

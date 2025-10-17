@@ -60,7 +60,7 @@ def create_registered_task(execution_context: ExecutionContext, task_id: str) ->
     """Create executable registered with the execution context."""
     task = DummyExecutable(task_id)
     # Register for function resolution fallback
-    execution_context.function_manager.register_task_function(task_id, task)
+    execution_context.task_resolver.register_task(task_id, task)
     # Ensure workflow graph knows the task for engine execution
     execution_context.graph.add_node(task, task_id)
     return task

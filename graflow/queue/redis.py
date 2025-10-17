@@ -102,7 +102,7 @@ class RedisTaskQueue(TaskQueue):
         if function_data:
             # Deserialize the function and create a proper executable
             try:
-                func = self.execution_context.function_manager.resolve_task_function(function_data)
+                func = self.execution_context.function_manager.resolve_task(function_data)
 
                 # Create a TaskWrapper with the resolved function
                 from graflow.core.task import TaskWrapper

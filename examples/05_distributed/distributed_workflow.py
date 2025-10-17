@@ -156,7 +156,7 @@ def main():
 
         # Register tasks so workers can resolve them
         for task in [extract_source_1, extract_source_2, extract_source_3, aggregate_results]:
-            exec_context.function_manager.register_task_function(task.task_id, task)
+            exec_context.task_resolver.register_task(task.task_id, task)
 
         # Enqueue all extraction tasks (they can run in parallel)
         for task_id in ["extract_source_1", "extract_source_2", "extract_source_3"]:
