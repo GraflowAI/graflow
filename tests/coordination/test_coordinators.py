@@ -46,6 +46,15 @@ class TestThreadingCoordinator:
     def test_execute_group_runs_all_tasks(self, coordinator, mocker):
         """All tasks are executed through the workflow engine."""
         exec_context = mocker.Mock(name="execution_context")
+        created_branch_contexts: dict[str, object] = {}
+
+        def fake_create_branch_context(*, branch_id: str):
+            branch_context = mocker.Mock(name=f"branch_context_{branch_id}")
+            branch_context.session_id = f"session-{branch_id}"
+            created_branch_contexts[branch_id] = branch_context
+            return branch_context
+
+        exec_context.create_branch_context.side_effect = fake_create_branch_context
         tasks = [SimpleNamespace(task_id="task1"), SimpleNamespace(task_id="task2")]
         engine_calls: list[tuple[object, str]] = []
 
@@ -58,9 +67,11 @@ class TestThreadingCoordinator:
 
         coordinator.execute_group("group-a", tasks, exec_context)
 
+        assert exec_context.create_branch_context.call_count == len(tasks)
         assert len(engine_calls) == len(tasks)
         assert {task_id for _, task_id in engine_calls} == {"task1", "task2"}
-        assert all(context is exec_context for context, _ in engine_calls)
+        branch_contexts_used = {context for context, _ in engine_calls}
+        assert branch_contexts_used == set(created_branch_contexts.values())
 
     def test_execute_group_handles_task_failure(self, coordinator, mocker):
         """Failures from the workflow engine are reported but do not stop execution."""
