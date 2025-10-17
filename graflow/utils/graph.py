@@ -40,10 +40,22 @@ def build_graph(start_node: Executable, context: Optional[WorkflowContext] = Non
 
         new_graph.add_node(node.task_id, task=node)
 
+        from graflow.core.task import ParallelGroup  # local import to avoid cycles
+
         for successor in cur_graph.successors(node.task_id):
             successor_task = cur_graph.nodes[successor]["task"]
             new_graph.add_edge(node.task_id, successor)
             _build_graph_recursive(successor_task)
+
+        if isinstance(node, ParallelGroup):
+            member_ids = [member.task_id for member in node.tasks]
+            for member_id in member_ids:
+                if member_id not in cur_graph.nodes:
+                    continue
+                member_task = cur_graph.nodes[member_id]["task"]
+                new_graph.add_node(member_id, task=member_task)
+                new_graph.add_edge(node.task_id, member_id)
+                _build_graph_recursive(member_task)
 
         for predecessor in cur_graph.predecessors(node.task_id):
             predecessor_task = cur_graph.nodes[predecessor]["task"]
@@ -326,14 +338,14 @@ def _classify_parallel_group_edges(
         return [], []
 
     # Get the list of parallel tasks from the ParallelGroup
-    parallel_task_ids = {t.task_id for t in task.tasks}
+    parallel_task_ids = [t.task_id for t in task.tasks]
 
-    # Get all successors of this ParallelGroup
+    # Get external successors of this ParallelGroup
     successors = list(graph.successors(group_node_id))
-
-    # Classify edges
-    internal_tasks = [s for s in successors if s in parallel_task_ids]
     external_tasks = [s for s in successors if s not in parallel_task_ids]
+
+    # All members are considered internal tasks regardless of explicit edges
+    internal_tasks = parallel_task_ids
 
     return internal_tasks, external_tasks
 
@@ -436,13 +448,13 @@ def _transform_graph_with_start_end_nodes(graph: nx.DiGraph) -> tuple[nx.DiGraph
             continue
 
         # Get parallel tasks and external tasks
-        parallel_task_ids = {t.task_id for t in task.tasks}
+        parallel_task_ids = [t.task_id for t in task.tasks]
         predecessors = list(graph.predecessors(node))
         successors = list(graph.successors(node))
 
-        # Classify successors
-        internal_tasks = [s for s in successors if s in parallel_task_ids]
+        # External successors exclude parallel members (tracked separately)
         external_tasks = [s for s in successors if s not in parallel_task_ids]
+        internal_tasks = parallel_task_ids
 
         # Create start and end node names
         start_node_name = str(node)  # Use the original ParallelGroup name
