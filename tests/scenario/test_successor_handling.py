@@ -42,10 +42,10 @@ def test_dynamic_task_with_successors():
     # Execute workflow
     context.execute()
 
-    # Verify execution
-    assert "main_task" in context.executed, "main_task should be executed"
-    assert "dynamic_processor" in context.executed, "dynamic_processor should be created and executed"
-    assert "final_task" in context.executed, "final_task should be executed as successor of main_task"
+    # Verify execution via stored results in the context channel
+    assert context.get_result("main_task") == "main_complete"
+    assert context.get_result("dynamic_processor") == "processed_data"
+    assert context.get_result("final_task") == "final_complete"
 
 
 def test_dynamic_task_with_manual_successors():
@@ -87,8 +87,8 @@ def test_dynamic_task_with_manual_successors():
     # Execute workflow
     context.execute()
 
-    # Verify execution
-    assert "controller" in context.executed, "controller should be executed"
-    assert "data_processor" in context.executed, "data_processor should be created and executed"
-    assert "cleanup_task2" in context.executed, "cleanup_task2 should be executed as successor of data_processor"
-    assert "final_task2" in context.executed, "final_task2 should be executed as successor of controller"
+    # Verify execution via stored results in the context channel
+    assert context.get_result("controller") == "controller_complete"
+    assert context.get_result("data_processor") == "data_processed"
+    assert context.get_result("cleanup_task2") == "cleanup_complete"
+    assert context.get_result("final_task2") == "final_complete"
