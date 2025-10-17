@@ -8,6 +8,7 @@ import pytest
 from graflow.channels.memory import MemoryChannel
 from graflow.channels.schemas import TaskProgressMessage, TaskResultMessage
 from graflow.channels.typed import ChannelTypeRegistry, TypedChannel, _is_typed_dict, _validate_typed_dict
+from graflow.exceptions import ConfigError
 
 
 class TestMessage(TypedDict):
@@ -165,7 +166,7 @@ class TestChannelTypeRegistry:
         """Test error when creating channel with nonexistent type."""
         memory_channel = MemoryChannel("test")
 
-        with pytest.raises(ValueError, match="Message type 'nonexistent' not registered"):
+        with pytest.raises(ConfigError, match="Message type 'nonexistent' not registered"):
             ChannelTypeRegistry.create_channel(memory_channel, "nonexistent")
 
 
