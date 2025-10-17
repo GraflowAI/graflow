@@ -18,12 +18,13 @@ def setup_workflow_context():
     context_var = ContextVar('test_workflow_context')
     workflow_context = WorkflowContext("test_workflow")
     context_var.set(workflow_context)
+    original_context_var = workflow_module._current_context
     workflow_module._current_context = context_var
 
     yield
 
     # Cleanup
-    workflow_module._current_context = None
+    workflow_module._current_context = original_context_var
 
 
 def test_task_decorator_without_parentheses():
