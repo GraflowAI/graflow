@@ -134,30 +134,31 @@ class ExecutionContext:
         # Backend configuration
         queue_backend: Union[QueueBackend, str] = QueueBackend.IN_MEMORY,
         channel_backend: str = "memory",
-        config: Optional[Dict[str, Any]] = None
+        config: Optional[Dict[str, Any]] = None,
+        parent_context: Optional[ExecutionContext] = None,
+        session_id: Optional[str] = None
     ):
         """Initialize ExecutionContext with configurable queue backend."""
-        session_id = str(uuid.uuid4().int)
-        self.session_id = session_id
+        self.parent_context = parent_context
+        self.session_id = session_id or str(uuid.uuid4().int)
         self.graph = graph
         self.start_node = start_node
         self.max_steps = max_steps
         self.default_max_retries = default_max_retries
         self.steps = steps
 
-        # Use single config for both queue and channel
-        config = config or {}
-
-        # Add start_node to config for queue
+        # Preserve original config (without runtime additions)
+        base_config: Dict[str, Any] = dict(config) if config else {}
+        queue_config: Dict[str, Any] = dict(base_config)
         if start_node:
-            config = {**config, 'start_node': start_node}
+            queue_config['start_node'] = start_node
 
         # Phase 1: Abstract TaskQueue implementation
         if isinstance(queue_backend, str):
             queue_backend = QueueBackend(queue_backend)
 
         self.task_queue: TaskQueue = TaskQueueFactory.create(
-            queue_backend, self, **config
+            queue_backend, self, **queue_config
         )
 
         self.cycle_controller = CycleController(default_max_cycles)
@@ -165,18 +166,26 @@ class ExecutionContext:
         # Create channel using factory with same config
         self.channel = ChannelFactory.create_channel(
             backend=channel_backend,
-            name=session_id,
-            **config
+            name=self.session_id,
+            **base_config
         )
 
-        self._function_manager = TaskFunctionManager()
+        if parent_context is not None:
+            # Prefill branch context channel with parent state
+            for key in parent_context.channel.keys():
+                self.channel.set(key, parent_context.channel.get(key))
+
+        if parent_context is not None:
+            self._function_manager = parent_context._function_manager
+        else:
+            self._function_manager = TaskFunctionManager()
 
         # Task execution context management
         self._task_execution_stack: list[TaskExecutionContext] = []
         self._task_contexts: dict[str, TaskExecutionContext] = {}
 
         # Group execution
-        self.group_executor: Optional[GroupExecutor] = None
+        self.group_executor: Optional[GroupExecutor] = parent_context.group_executor if parent_context else None
 
         # Track if goto (jump to existing task) was called in current task execution
         self._goto_called_in_current_task: bool = False
@@ -184,7 +193,38 @@ class ExecutionContext:
         # Save backend configuration for serialization
         self._queue_backend_type = queue_backend.value if isinstance(queue_backend, QueueBackend) else queue_backend
         self._channel_backend_type = channel_backend
-        self._original_config = config or {}
+        self._original_config = base_config
+
+    def create_branch_context(self, branch_id: str) -> ExecutionContext:
+        """Create a child execution context with isolated queue/channel state."""
+        branch_session_id = f"{self.session_id}_{branch_id}"
+        branch_context = ExecutionContext(
+            graph=self.graph,
+            start_node=None,
+            max_steps=self.max_steps,
+            default_max_cycles=self.cycle_controller.default_max_cycles,
+            default_max_retries=self.default_max_retries,
+            queue_backend=self._queue_backend_type,
+            channel_backend=self._channel_backend_type,
+            config=self._original_config,
+            parent_context=self,
+            session_id=branch_session_id,
+        )
+        return branch_context
+
+    def merge_results(self, sub_context: ExecutionContext) -> None:
+        """Merge channel data and metrics from a completed branch context."""
+        if self.channel is not sub_context.channel:
+            for key in sub_context.channel.keys():
+                self.channel.set(key, sub_context.channel.get(key))
+
+        self.steps += sub_context.steps
+        self.cycle_controller.cycle_counts.update(sub_context.cycle_controller.cycle_counts)
+
+    def mark_branch_completed(self, branch_id: str) -> None:
+        """Hook for branch completion bookkeeping (currently a no-op)."""
+        # Placeholder for barrier synchronization or logging extensions.
+        return
 
     @classmethod
     def create(cls, graph: TaskGraph, start_node: str, max_steps: int = 10,
@@ -580,4 +620,3 @@ def execute_with_cycles(graph: TaskGraph, start_node: str, max_steps: int = 10) 
     """Execute tasks allowing cycles from global graph."""
     engine = WorkflowEngine()
     engine.execute_with_cycles(graph, start_node, max_steps)
-
