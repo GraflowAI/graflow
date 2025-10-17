@@ -5,6 +5,8 @@ import time
 import pytest
 import redis
 
+from graflow.core.workflow import clear_workflow_context
+
 try:
     import docker
     DOCKER_AVAILABLE = True
@@ -69,3 +71,10 @@ def clean_redis(redis_server):
     yield redis_server
     # Clean up after test
     redis_server.flushdb()
+
+@pytest.fixture(autouse=True)
+def reset_global_workflow_context():
+    """Ensure workflow ContextVar does not leak state across tests."""
+    clear_workflow_context()
+    yield
+    clear_workflow_context()
