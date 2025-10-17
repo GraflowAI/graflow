@@ -76,7 +76,7 @@ engine.execute(context)  # start_task_id=None → context.start_node使用
 # DirectTaskExecutor経由で統一Engine実行
 def _process_task_wrapper(self, task_spec: TaskSpec):
     # TaskWrapper作成 → DirectTaskExecutor → WorkflowEngine
-    task_wrapper = TaskWrapper(task_spec.task_id, task_spec.get_function())
+    task_wrapper = TaskWrapper(task_spec.task_id, task_spec.get_task())
     task_wrapper.set_execution_context(task_spec.execution_context)
     success = self.handler.process_task(task_wrapper)
     # → DirectTaskExecutor._process_task() → engine.execute(context, start_task_id)
@@ -191,7 +191,7 @@ class TaskWorker:
     def _process_task_wrapper(self, task_spec: TaskSpec) -> Dict[str, Any]:
         """DirectTaskExecutor経由で統一Engine実行への委譲"""
         # TaskWrapper作成
-        task_wrapper = TaskWrapper(task_spec.task_id, task_spec.get_function())
+        task_wrapper = TaskWrapper(task_spec.task_id, task_spec.get_task())
         task_wrapper.set_execution_context(task_spec.execution_context)
 
         # DirectTaskExecutor経由でEngine実行

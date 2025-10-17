@@ -43,9 +43,9 @@ class TaskSpec:
         return self.executable.task_id
 
     @property
-    def function_data(self) -> Dict[str, Any]:
-        """Get function_data by serializing executable's function."""
-        return self.execution_context.function_manager.serialize_task(self.executable, self.strategy)
+    def task_data(self) -> Dict[str, Any]:
+        """Get task_data by serializing executable's task."""
+        return self.execution_context.task_resolver.serialize_task(self.executable, self.strategy)
 
     def __lt__(self, other: 'TaskSpec') -> bool:
         """For queue sorting (FIFO: older first)."""
@@ -61,18 +61,18 @@ class TaskSpec:
         self.last_error = error_message
         self.status = TaskStatus.READY  # Reset to ready for retry
 
-    def get_function(self) -> Optional['Executable']:
-        """Get function for this task by deserializing stored data.
+    def get_task(self) -> Optional['Executable']:
+        """Get task executable by deserializing stored data.
 
         Returns:
-            Function object or None if no function data available
+            Executable object or None if no task data available
 
         Raises:
             TaskResolutionError: If task cannot be resolved
         """
         try:
-            function_data = self.function_data
-            return self.execution_context.function_manager.resolve_task(function_data)
+            task_data = self.task_data
+            return self.execution_context.task_resolver.resolve_task(task_data)
         except ValueError:
             return None
         except Exception:

@@ -199,7 +199,7 @@ class TestRedisCoordinator:
     def test_dispatch_task_enqueues_queue_task_spec(self, coordinator, mock_task_queue, mocker):
         """Dispatch translates executables into queue TaskSpec entries."""
         exec_context = mocker.Mock()
-        exec_context.function_manager.serialize_task_function.return_value = {}
+        exec_context.task_resolver.serialize_task.return_value = {}
         executable = mocker.Mock()
         executable.task_id = "task-123"
         executable.get_execution_context.return_value = exec_context

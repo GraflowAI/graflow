@@ -49,17 +49,17 @@ class RedisTaskQueue(TaskQueue):
         """Add TaskSpec to Redis queue (FIFO)."""
         # Serialize TaskSpec to JSON and store in hash
         try:
-            function_data = task_spec.function_data
+            task_data = task_spec.task_data
         except ValueError:
-            # If function can't be serialized, store None
-            function_data = None
+            # If task can't be serialized, store None
+            task_data = None
 
         spec_data = {
             'task_id': task_spec.task_id,
             'status': task_spec.status.value,
             'created_at': task_spec.created_at,
             'strategy': task_spec.strategy,
-            'function_data': function_data,
+            'task_data': task_data,
             # Phase 3: Advanced features
             'retry_count': task_spec.retry_count,
             'max_retries': task_spec.max_retries,
@@ -95,14 +95,14 @@ class RedisTaskQueue(TaskQueue):
 
         spec_data = json.loads(spec_json)
 
-        # Try to reconstruct the executable with proper function data
+        # Try to reconstruct the executable with proper task data
         task_id_from_spec = spec_data.get('task_id', spec_data.get('node_id', task_id))
-        function_data = spec_data.get('function_data')
+        task_data = spec_data.get('task_data')
 
-        if function_data:
-            # Deserialize the function and create a proper executable
+        if task_data:
+            # Deserialize the task and create a proper executable
             try:
-                func = self.execution_context.function_manager.resolve_task(function_data)
+                func = self.execution_context.task_resolver.resolve_task(task_data)
 
                 # Create a TaskWrapper with the resolved function
                 from graflow.core.task import TaskWrapper

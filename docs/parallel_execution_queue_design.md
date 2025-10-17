@@ -122,11 +122,11 @@ class ExecutionContext:
                 **config,
             )
             self.channel.merge_from(parent_context.channel)
-            self._function_manager = parent_context._function_manager  # ← Share function manager (shallow copy)
+            self._task_resolver = parent_context._task_resolver  # ← Share task resolver (shallow copy)
             # graph is already passed in, so it's naturally shared
         else:
             self.channel = ChannelFactory.create_channel(...)
-            self._function_manager = TaskFunctionManager()
+            self._task_resolver = TaskResolver()
 
         # ... rest of initialization
 
@@ -446,7 +446,7 @@ def create_branch_context(self, branch_id: str) -> 'ExecutionContext':
 |----------|--------------|--------|---------------|
 | **Graph (TaskGraph)** | Shallow (reference) | Read-only during execution | 0 bytes (shared) |
 | **Channel** | Copy & merge | Per-branch session namespace | O(results) for serialization |
-| **FunctionManager** | Shallow (reference) | Task definitions are immutable | 0 bytes (shared) |
+| **TaskResolver** | Shallow (reference) | Task definitions are immutable | 0 bytes (shared) |
 | **CycleController** | New instance | Independent cycle tracking per branch | ~100 bytes |
 | **TaskQueue** | New instance | **Must be isolated** for correctness | ~200 bytes |
 
@@ -701,10 +701,10 @@ class ExecutionContext:
         if parent_context is not None:
             for key in parent_context.channel.keys():
                 self.channel.set(key, parent_context.channel.get(key))
-            self._function_manager = parent_context._function_manager
+            self._task_resolver = parent_context._task_resolver
             self.group_executor = parent_context.group_executor
         else:
-            self._function_manager = TaskFunctionManager()
+            self._task_resolver = TaskResolver()
             self.group_executor = None
 
         self._task_execution_stack: list[TaskExecutionContext] = []
@@ -808,7 +808,7 @@ def test_branch_context_has_isolated_queue():
     # Read-only resources should be shared (shallow copy)
     assert branch_ctx.graph is main_ctx.graph  # Shared
     assert branch_ctx.channel is main_ctx.channel  # Shared
-    assert branch_ctx._function_manager is main_ctx._function_manager  # Shared
+    assert branch_ctx._task_resolver is main_ctx._task_resolver  # Shared
 
     # Task queue should be isolated
     assert branch_ctx.task_queue is not main_ctx.task_queue  # Isolated!

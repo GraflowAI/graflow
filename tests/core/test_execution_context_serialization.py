@@ -335,15 +335,15 @@ class TestExecutionContextSerialization:
             # Test that queue is functional after reconstruction
             assert loaded_context.max_steps == 10
 
-    def test_function_manager_preservation(self):
-        """Test that function manager state is preserved during serialization.
+    def test_task_resolver_preservation(self):
+        """Test that task resolver state is preserved during serialization.
 
         This test validates that:
-        - TaskFunctionManager registry survives pickle serialization
-        - Registered functions remain available and callable after deserialization
-        - Function registration mappings are accurately preserved
-        - Function resolution and execution work correctly after reload
-        - Function manager state integrity is maintained across serialization cycles
+        - TaskResolver registry survives pickle serialization
+        - Registered tasks remain available and callable after deserialization
+        - Task registration mappings are accurately preserved
+        - Task resolution and execution work correctly after reload
+        - Task resolver state integrity is maintained across serialization cycles
         """
         graph = TaskGraph()
 

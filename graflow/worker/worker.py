@@ -232,7 +232,7 @@ class TaskWorker:
 
         try:
             # Resolve task from TaskSpec
-            task_func = task_spec.get_function()
+            task_func = task_spec.get_task()
             if task_func is None:
                 raise GraflowRuntimeError(f"Could not resolve task from spec: {task_id}")
 

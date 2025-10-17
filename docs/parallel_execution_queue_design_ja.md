@@ -115,15 +115,15 @@ class ExecutionContext:
             )
             # 親のチャネル内容をコピー
             self.channel.merge_from(parent_context.channel)
-            # 関数レジストリは共有
-            self._function_manager = parent_context._function_manager
+            # タスクレジストリは共有
+            self._task_resolver = parent_context._task_resolver
         else:
             self.channel = ChannelFactory.create_channel(
                 backend=channel_backend,
                 name=session_id,
                 **config
             )
-            self._function_manager = TaskFunctionManager()
+            self._task_resolver = TaskResolver()
 ```
 
 ---

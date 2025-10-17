@@ -366,7 +366,7 @@ def _serialize_context(self, context: ExecutionContext) -> str:
 | `TaskQueue` | `task_queue` | Redisクライアントを含む |
 | `Channel` | `channel` | Redisクライアントを含む |
 | `GroupExecutor` | `group_executor` | 内部に複雑な状態を持つ |
-| `TaskFunctionManager` | `_function_manager` | 関数レジストリを含む |
+| `TaskResolver` | `_task_resolver` | タスクレジストリを含む |
 
 **実際のエラー例**:
 ```python

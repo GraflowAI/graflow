@@ -140,9 +140,9 @@ class TestRedisTaskQueue:
             assert spec_payload['max_retries'] == 3
             assert spec_payload['last_error'] is None
 
-            function_data = spec_payload['function_data']
-            assert function_data['strategy'] == 'reference'
-            assert function_data['name'].startswith('dummy_test_node')
+            task_data = spec_payload['task_data']
+            assert task_data['strategy'] == 'reference'
+            assert task_data['name'].startswith('dummy_test_node')
 
             mock_redis.rpush.assert_called_once_with(queue.queue_key, "test_node")
 
