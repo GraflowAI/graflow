@@ -272,11 +272,11 @@ class TestExecutionContextAdvancedFeatures:
         """Test ExecutionContext with advanced queue configuration."""
         graph = TaskGraph()
 
-        context = ExecutionContext(
+        context = ExecutionContext.create(
             graph,
-            start_node="start",
+            "start",
             queue_backend=QueueBackend.IN_MEMORY,
-            queue_config={
+            config={
                 'enable_retry': True,
                 'enable_metrics': True
             }
