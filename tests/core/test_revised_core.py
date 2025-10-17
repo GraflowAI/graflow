@@ -1,7 +1,7 @@
 """Tests for revised graflow core functionality."""
 
 from graflow.core.decorators import task
-from graflow.core.task import ParallelGroup, Task, TaskWrapper
+from graflow.core.task import ParallelGroup, SequentialTask, Task, TaskWrapper
 from graflow.core.workflow import clear_workflow_context
 
 
@@ -64,7 +64,10 @@ def test_sequential_operator():
     task_b = Task("B")
     result = task_a >> task_b
 
-    assert result == task_b  # >> returns the right operand
+    assert isinstance(result, SequentialTask)
+    assert result.leftmost == task_a
+    assert result.rightmost == task_b
+    assert result.tasks == [task_a, task_b]
 
 
 def test_reverse_operator():
@@ -74,7 +77,10 @@ def test_reverse_operator():
     task_b = Task("B")
     result = task_b << task_a  # a >> b
 
-    assert result == task_b  # << returns self
+    assert isinstance(result, SequentialTask)
+    assert result.leftmost == task_a
+    assert result.rightmost == task_b
+    assert result.tasks == [task_a, task_b]
 
 
 def test_parallel_operator():
