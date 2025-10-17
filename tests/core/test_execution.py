@@ -13,8 +13,8 @@ def test_create_initial_context():
     context = create_execution_context("A")
 
     assert context.queue.to_list() == ["A"]
-    assert context.executed == []
     assert context.steps == 0
+    assert context.get_result("A") is None
 
 
 def test_save_and_load_context():
@@ -23,14 +23,14 @@ def test_save_and_load_context():
         context_path = os.path.join(tmpdir, "test_context.pkl")
 
         original_context = create_execution_context("A")
-        original_context.executed = ["A", "B"]
-        original_context.steps= 2
+        original_context.set_result("A", "done")
+        original_context.increment_step()
 
         original_context.save(context_path)
         loaded_context = ExecutionContext.load(context_path)
 
-        assert loaded_context.executed == ["A", "B"]
-        assert loaded_context.steps == 2
+        assert loaded_context.get_result("A") == "done"
+        assert loaded_context.steps == 1
         assert loaded_context.queue.to_list() == ["A"]
 
 
