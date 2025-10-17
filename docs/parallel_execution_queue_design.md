@@ -603,15 +603,8 @@ def transform_a(ctx: TaskContext):
 
 ### 5.3 Partial Failures
 
-```python
-def _enqueue_successors_after_parallel_group(...):
-    if failure_count > 0:
-        # Don't enqueue successors if any task failed
-        print(f"  Skipping successors due to {failure_count} failures")
-        return
-```
-
-If any branch fails, successors are **not** enqueued, preventing partial execution.
+> **Open item**  
+> We still need a guard that skips successor enqueue when any branch fails. The design calls for an `_enqueue_successors_after_parallel_group()` helper (or equivalent logic) to run in the coordinator, but that hook has not been implemented yet. Until it lands, a failing branch will allow the main loop to continue and schedule downstream tasks. Track this in Phase 2 follow-up work.
 
 ### 5.4 Non-Diamond Patterns (No Fan-in)
 
@@ -634,75 +627,37 @@ for successor_id in unique_successors:
 
 ---
 
-## 6. Implementation Plan
+## 6. Implementation Plan (status)
 
-### Phase 1: Core Branch Context (Week 1)
+### Phase 1: Core Branch Context — ✅ Completed
 
-**File Changes**:
+- ✅ `graflow/core/context.py`: accepts `parent_context` / `session_id`, seeds branch channels, and exposes `create_branch_context()`, `merge_results()`, `mark_branch_completed()`.
+- ✅ `graflow/core/engine.py`: existing successor filtering works with branch contexts (`execute(start_task_id=...)`).
+- Tests exercised so far: `pytest tests/test_graph.py tests/core/test_parallel_group.py tests/core/test_sequential_task.py tests/utils/test_graph_mermaid.py`. Scenario coverage (e.g. `tests/scenario/test_parallel_diamond.py`) still recommended before release.
 
-1. **graflow/core/context.py**
-   - Add `parent_context` parameter to `__init__`
-   - Add `session_id` parameter to `__init__` (allow override)
-   - Implement `create_branch_context()` method
-   - Share channel/function_manager if `parent_context` exists
+### Phase 2: ThreadingCoordinator Integration — ⚙️ In progress
 
-2. **graflow/core/engine.py**
-   - Drive branch execution with `execute()` and `start_task_id`
-   - Rely on successor filtering to avoid re-queuing group members
+- ✅ `graflow/coordination/threading.py`: now spawns branch contexts per task, runs them with isolated queues, and merges results back into the parent context.
+- ☐ Implement `_enqueue_successors_after_parallel_group()` (or equivalent guard) so downstream successors are skipped when any branch fails. Currently tracked as an outstanding TODO (see §5.3).
+- Follow-up testing: run scenario suites (`tests/scenario/test_parallel_diamond.py`, `tests/scenario/test_successor_handling.py`) once failure gating is in place.
 
-**No changes needed**:
-- ✅ `graflow/queue/base.py` - Already uses `execution_context.session_id`
-- ✅ `graflow/queue/memory.py` - Object isolation is automatic
-- ✅ `graflow/queue/redis.py` - Already uses `session_id` for key isolation
+### Phase 3: Edge Cases & Polish — ⏳ Not started
 
-**Tests**:
-```bash
-pytest tests/scenario/test_parallel_diamond.py
-```
-
-### Phase 2: ThreadingCoordinator Integration (Week 1)
-
-**File Changes**:
-
-5. **graflow/coordination/threading.py**
-   - Rewrite `execute_group()`:
-     - Create branch contexts for each task
-     - Submit tasks with isolated queues
-     - Implement `_enqueue_successors_after_parallel_group()`
-
-**Tests**:
-```bash
-pytest tests/scenario/test_parallel_diamond.py
-pytest tests/scenario/test_successor_handling.py
-```
-
-### Phase 3: Edge Cases & Polish (Week 2)
-
-**File Changes**:
-
-6. **graflow/core/context.py**
-   - Update serialization to handle `queue_namespace`
-   - Ensure `parent_context` is not serialized (use weak reference)
-
-7. **Tests**
-   - Add nested parallel group tests
-   - Add dynamic task in parallel branch tests
-   - Add partial failure tests
-
-**Tests**:
-```bash
-pytest tests/scenario/test_dynamic_tasks.py
-pytest tests/  # Full regression
-```
+- Serialization/namespace cleanup (`ExecutionContext` queue namespace, weak references) still pending.
+- Additional regression coverage to add:
+  - Nested parallel groups in scenario tests.
+  - Dynamic task creation inside branches.
+  - Partial failure handling once the guard logic is wired.
+- Plan to finish with `pytest tests/scenario/test_dynamic_tasks.py` and eventually the full test suite.
 
 ---
 
 ## 7. Code Snippets: Full Implementation
 
-### 7.1 ExecutionContext Enhancement
+### 7.1 ExecutionContext / Coordinator excerpts
 
 ```python
-# graflow/core/context.py (additions)
+# graflow/core/context.py
 
 class ExecutionContext:
     def __init__(
@@ -716,134 +671,114 @@ class ExecutionContext:
         queue_backend: Union[QueueBackend, str] = QueueBackend.IN_MEMORY,
         channel_backend: str = "memory",
         config: Optional[Dict[str, Any]] = None,
-        # NEW PARAMETERS
-        queue_namespace: str = "main",
-        parent_context: Optional['ExecutionContext'] = None
+        parent_context: Optional['ExecutionContext'] = None,
+        session_id: Optional[str] = None,
     ):
-        """Initialize ExecutionContext with optional queue namespace."""
-        session_id = str(uuid.uuid4().int)
-        self.session_id = session_id
+        self.parent_context = parent_context
+        self.session_id = session_id or str(uuid.uuid4().int)
         self.graph = graph
         self.start_node = start_node
         self.max_steps = max_steps
         self.default_max_retries = default_max_retries
         self.steps = steps
 
-        # NEW: Queue namespace support
-        self.queue_namespace = queue_namespace
-        self.parent_context = parent_context
-
-        config = config or {}
-
-        # Add namespace to queue config
-        config = {**config, 'queue_namespace': queue_namespace}
-
+        base_config: Dict[str, Any] = dict(config) if config else {}
+        queue_config = dict(base_config)
         if start_node:
-            config = {**config, 'start_node': start_node}
+            queue_config['start_node'] = start_node
 
-        # Create queue backend
         if isinstance(queue_backend, str):
             queue_backend = QueueBackend(queue_backend)
-
-        self.task_queue: TaskQueue = TaskQueueFactory.create(
-            queue_backend, self, **config
-        )
+        self.task_queue = TaskQueueFactory.create(queue_backend, self, **queue_config)
 
         self.cycle_controller = CycleController(default_max_cycles)
 
-        # Clone channel and reuse function manager if parent exists
-        if parent_context:
-            self.channel = ChannelFactory.create_channel(
-                backend=channel_backend,
-                name=session_id,
-                **config,
-            )
-            self.channel.merge_from(parent_context.channel)
-            self._function_manager = parent_context._function_manager  # ← Shallow copy (shared)
+        self.channel = ChannelFactory.create_channel(
+            backend=channel_backend,
+            name=self.session_id,
+            **base_config,
+        )
+        if parent_context is not None:
+            for key in parent_context.channel.keys():
+                self.channel.set(key, parent_context.channel.get(key))
+            self._function_manager = parent_context._function_manager
+            self.group_executor = parent_context.group_executor
         else:
-            self.channel = ChannelFactory.create_channel(
-                backend=channel_backend,
-                name=session_id,
-                **config
-            )
             self._function_manager = TaskFunctionManager()
+            self.group_executor = None
 
-        # ... rest of existing initialization
         self._task_execution_stack: list[TaskExecutionContext] = []
         self._task_contexts: dict[str, TaskExecutionContext] = {}
-        self.group_executor: Optional[GroupExecutor] = None
-        self._goto_called_in_current_task: bool = False
+        self._goto_called_in_current_task = False
 
         self._queue_backend_type = queue_backend.value if isinstance(queue_backend, QueueBackend) else queue_backend
         self._channel_backend_type = channel_backend
-        self._original_config = config or {}
+        self._original_config = base_config
 
     def create_branch_context(self, branch_id: str) -> 'ExecutionContext':
-        """Create a branch context with isolated queue namespace.
-
-        This creates a new ExecutionContext that:
-        - Has its own isolated task queue
-        - Shares the graph (read-only)
-        - Clones the result channel (merged on completion)
-        - Has a hierarchical namespace
-
-        Args:
-            branch_id: Unique identifier for this branch
-
-        Returns:
-            New ExecutionContext for the branch
-        """
-        branch_namespace = f"{self.queue_namespace}:{branch_id}"
-
+        branch_session_id = f"{self.session_id}_{branch_id}"
         return ExecutionContext(
-            graph=self.graph,  # Shared graph
-            start_node=branch_id,   # Seed branch queue with the target node
-            queue_namespace=branch_namespace,
-            parent_context=self,
+            graph=self.graph,
+            start_node=None,
+            max_steps=self.max_steps,
+            default_max_cycles=self.cycle_controller.default_max_cycles,
+            default_max_retries=self.default_max_retries,
             queue_backend=self._queue_backend_type,
             channel_backend=self._channel_backend_type,
-            max_steps=self.max_steps,
-            default_max_cycles=self.cycle_controller.max_cycles,
-            default_max_retries=self.default_max_retries,
-            steps=0,  # Branch starts with 0 steps
-            config=self._original_config
+            config=self._original_config,
+            parent_context=self,
+            session_id=branch_session_id,
         )
-```
 
-### 7.2 Queue Factory (No Changes Needed!)
+    def merge_results(self, sub_context: 'ExecutionContext') -> None:
+        if self.channel is not sub_context.channel:
+            for key in sub_context.channel.keys():
+                self.channel.set(key, sub_context.channel.get(key))
+        self.steps += sub_context.steps
+        self.cycle_controller.cycle_counts.update(sub_context.cycle_controller.cycle_counts)
 
-```python
-# graflow/queue/factory.py (EXISTING CODE - works as-is!)
+    def mark_branch_completed(self, branch_id: str) -> None:
+        # Placeholder for barrier tracking / logging
+        return
 
-class TaskQueueFactory:
-    @staticmethod
-    def create(
-        queue_type: QueueBackend,
-        execution_context: 'ExecutionContext',
-        **kwargs
-    ) -> TaskQueue:
-        """Create task queue - automatically isolated by session_id."""
-        start_node = kwargs.get('start_node')
+# graflow/coordination/threading.py
 
-        if queue_type == QueueBackend.IN_MEMORY:
-            from graflow.queue.memory import InMemoryTaskQueue
-            return InMemoryTaskQueue(
-                execution_context,  # ← Each context has unique session_id
-                start_node=start_node
-            )
-            # → New object created → automatic isolation!
+class ThreadingCoordinator(TaskCoordinator):
+    def execute_group(
+        self,
+        group_id: str,
+        tasks: List['Executable'],
+        execution_context: 'ExecutionContext'
+    ) -> None:
+        self._ensure_executor()
 
-        elif queue_type == QueueBackend.REDIS:
-            from graflow.queue.redis import RedisTaskQueue
-            return RedisTaskQueue(
-                execution_context,  # ← session_id used for Redis keys
-                start_node=start_node,
-                **kwargs
-            )
-            # → Redis keys use session_id → automatic isolation!
+        def execute_task_with_engine(
+            task: 'Executable',
+            branch_context: 'ExecutionContext'
+        ) -> tuple[str, bool, str]:
+            from graflow.core.engine import WorkflowEngine
 
-        else:
-            raise ValueError(f"Unknown queue type: {queue_type}")
+            engine = WorkflowEngine()
+            engine.execute(branch_context, start_task_id=task.task_id)
+            return task.task_id, True, "Success"
+
+        futures = []
+        future_context_map: dict[concurrent.futures.Future, 'ExecutionContext'] = {}
+        for task in tasks:
+            branch_context = execution_context.create_branch_context(task.task_id)
+            future = self._executor.submit(execute_task_with_engine, task, branch_context)
+            futures.append(future)
+            future_context_map[future] = branch_context
+
+        for future in concurrent.futures.as_completed(futures):
+            branch_context = future_context_map[future]
+            task_id, success, message = future.result()
+            if success:
+                execution_context.merge_results(branch_context)
+                execution_context.mark_branch_completed(task_id)
+            else:
+                # Failure handling TBD (§5.3)
+                ...
 ```
 
 **Why no changes needed**:

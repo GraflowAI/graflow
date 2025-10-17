@@ -37,81 +37,26 @@ Refactor graph modeling so that:
      ```
    - Regression test: `tests/core/test_sequential_task.py::test_nested_parallel_execution` should confirm execution order `["fetch", "transform_a", "subtask_a", "transform_b", "store"]` with no duplicates.
 
-2. **Phase 1 – API modernization**
-   - Stop registering parallel membership edges in `ParallelGroup.__init__`.
-     ```python
-     class ParallelGroup(Executable):
-         def __init__(self, tasks: list[Executable]) -> None:
-             super().__init__()
-             self._task_id = self._get_group_name()
-             self.tasks = list(tasks)
-             self._register_to_context()
-             # removed: for task in self.tasks: self._add_dependency_edge(self._task_id, task.task_id)
-     ```
-   - Add `TaskGraph.get_parallel_group_members(group_id)` (or similar) for explicit membership access.
-     ```python
-     class TaskGraph:
-         def get_parallel_group_members(self, group_id: str) -> list[str]:
-             node_data = self._graph.nodes[group_id]
-             task = node_data.get("task")
-             if isinstance(task, ParallelGroup):
-                 return [member.task_id for member in task.tasks]
-             return []
-     ```
-   - Update `ParallelGroup._has_successors`, merge logic, and tests to use the new API instead of decoding successors.
-     ```python
-     def _has_successors(self) -> bool:
-         graph = current_workflow_context().graph._graph
-         successors = list(graph.successors(self.task_id))
-         member_ids = {task.task_id for task in self.tasks}
-         return any(succ for succ in successors if succ not in member_ids)
-     ```
-     Test updates:
-     ```python
-     members = ctx.graph.get_parallel_group_members("group1")
-     assert set(members) == {"task1", "task2"}
-     ```
+2. **Phase 1 – API modernization** ✅
+   - ✅ `ParallelGroup.__init__` no longer registers membership edges in the runtime graph.
+   - ✅ Added `TaskGraph.get_parallel_group_members()` to expose container membership from node metadata.
+   - ✅ Updated `_has_successors`, merge operators, and unit tests (`tests/core/test_parallel_group.py`, `tests/core/test_sequential_task.py`) to call the new API instead of relying on `graph.successors(group)`.
+   - ✅ Extended graph tests to assert both membership sets and external successor edges.
 
-3. **Phase 2 – Visualization refresh**
-   - Rewrite Mermaid/DOT transforms in `graflow/utils/graph.py` to rely on `ParallelGroup.tasks` rather than graph successors.
-     ```python
-     parallel_members = [member.task_id for member in task.tasks]
-     for member_id in parallel_members:
-         # render inside subgraph / cluster
-     external_successors = [
-         succ for succ in graph.successors(group_id)
-         if succ not in parallel_members
-     ]
-     ```
-   - Preserve container rendering (double boxes, subgraphs) by iterating over member lists and scanning downstream edges separately.
+3. **Phase 2 – Visualization refresh** ✅
+   - ✅ `build_graph()` now synthesizes container edges from `ParallelGroup.tasks`, ensuring visualization helpers include member nodes without mutating the execution graph.
+   - ✅ Mermaid/DOT utilities reuse the explicit membership lists when classifying internal vs external edges (see `graflow/utils/graph.py`).
+   - ✅ Regression coverage: `tests/test_graph.py` and `tests/utils/test_graph_mermaid.py` confirm container rendering without relying on implicit successor edges.
 
-4. **Phase 3 – Execution + Queue strategy**
-   - Implement branch-specific execution contexts (`ExecutionContext.create_branch_context`) that clone shared graph/channel but spawn isolated task queues (reusing session ID scheme).  
-     ```python
-    def create_branch_context(self, task_id: str) -> "ExecutionContext":
-        branch_session_id = f"{self.session_id}_{task_id}"
-        return ExecutionContext(
-            graph=self.graph,
-            start_node=task_id,   # ensure the branch queue seeds with the target task
-            session_id=branch_session_id,
-            parent_context=self,
-            queue_backend=self._queue_backend_type,
-            channel_backend=self._channel_backend_type,
-            max_steps=self.max_steps,
-            default_max_retries=self.default_max_retries,
-            config=self._original_config,
-        )
-     ```
-   - Ensure `GroupExecutor` / `ThreadingCoordinator` use the branch contexts so main queue only tracks external successors.
-     ```python
-     branch_ctx = execution_context.create_branch_context(task.task_id)
-     engine.execute(branch_ctx, start_task_id=task.task_id)
-     ```
-   - Details on queue isolation live in `docs/parallel_execution_queue_design.md`; both documents assume branch contexts keep read-only structures but create new queue/channel instances. After branch execution, coordinators call `merge_results` and `mark_branch_completed` to fold sub-context state back into the parent session.
+4. **Phase 3 – Execution + Queue strategy** ✅
+   - ✅ Introduced `ExecutionContext.create_branch_context()` / `merge_results()` / `mark_branch_completed()` to isolate branch queues while sharing read-only graph metadata.
+   - ✅ Branch contexts copy parent channel state on creation and merge results back after successful completion.
+   - ✅ `ThreadingCoordinator.execute_group()` now spins up branch contexts per task, executes them with dedicated `WorkflowEngine` instances, and merges outcomes before resuming the parent queue.
+   - 📎 Additional design details remain documented in `docs/parallel_execution_queue_design.md`.
 
-5. **Phase 4 – Cleanup**
-   - Remove compatibility helpers; ensure all tests (`tests/core/test_parallel_group.py`, `tests/core/test_sequential_task.py`, `tests/utils/test_graph_mermaid.py`, `tests/scenario/test_parallel_diamond.py`) cover the new model.
-   - Update developer docs and code comments to reflect the container-first design.
+5. **Phase 4 – Cleanup** ✅
+   - ✅ Regression suite updated (`tests/test_graph.py`, `tests/core/test_parallel_group.py`, `tests/core/test_sequential_task.py`, `tests/utils/test_graph_mermaid.py`).
+   - ✅ Documentation refreshed to describe membership APIs and branch-context execution flow.
 
 ## Execution Notes
 
