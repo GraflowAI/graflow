@@ -35,7 +35,8 @@ class DirectTaskHandler(TaskHandler):
             # Execute task
             result = task.run()
             # Store result in context
-            context.set_result(task_id, result)
+            if result is not None:
+               context.set_result(task_id, result)
             logger.debug(f"[DirectTaskHandler] Task {task_id} completed successfully")
         except Exception as e:
             # Store exception in context
