@@ -1,89 +1,49 @@
 # 01_basics - Getting Started with Graflow
 
-This directory contains the most basic Graflow examples to help you get started.
+This directory contains a minimal introduction to Graflow.
 
 ## Prerequisites
 
 - Python 3.11+
 - Graflow installed (`pip install -e .` from the project root)
 
-## Examples
+## Example
 
-### 1. hello_world.py
+### hello_world.py
 **Concepts**: @task decorator, basic task execution
 
-The simplest possible Graflow workflow. Learn how to:
+The simplest possible Graflow task. Learn how to:
 - Define a task using the `@task` decorator
-- Execute a task
+- Execute a task directly
 - Understand the basic task execution model
 
 ```bash
 python examples/01_basics/hello_world.py
 ```
 
-### 2. task_dependencies.py
-**Concepts**: Data flow, task composition
+## Important: Start with 02_workflows/
 
-Learn how to:
-- Pass data between tasks using return values
-- Create a simple data processing pipeline
-- Chain tasks together
+**This basic example is just an introduction.** For real Graflow usage, you should start with the examples in `02_workflows/`, which demonstrate:
 
-```bash
-python examples/01_basics/task_dependencies.py
-```
+- **Workflow context** (`workflow()` context manager)
+- **Operators** (`>>` for sequential, `|` for parallel execution)
+- **Context injection** (accessing `ExecutionContext`)
+- **Proper task composition patterns**
 
-### 3. task_with_parameters.py
-**Concepts**: Task parameters, type hints, nested execution
-
-Learn how to:
-- Define tasks with parameters
-- Use type hints for clarity
-- Chain and nest task execution
-- Build flexible, reusable tasks
-
-```bash
-python examples/01_basics/task_with_parameters.py
-```
-
-## Key Concepts
-
-### Tasks
-Tasks are the fundamental building blocks in Graflow. A task is simply a Python function decorated with `@task`:
-
-```python
-from graflow.core.decorators import task
-
-@task
-def my_task():
-    return "Hello, Graflow!"
-```
-
-### Calling Tasks
-Tasks can be called just like regular functions:
-
-```python
-result = my_task()  # Execute the task
-print(result)  # "Hello, Graflow!"
-```
-
-### Passing Data
-Tasks can accept parameters and return values:
-
-```python
-@task
-def process(data):
-    return data * 2
-
-result = process(21)  # 42
-```
+The standalone `@task` decorator shown here is mainly used within workflow contexts, not in isolation.
 
 ## Next Steps
 
-Once you're comfortable with these basics, move on to:
-- **02_workflows/** - Learn about workflow orchestration
-- **03_data_flow/** - Explore channels for inter-task communication
+**→ Go directly to `examples/02_workflows/`** to learn the recommended workflow patterns:
+1. **02_workflows/simple_pipeline.py** - Sequential task execution with `>>`
+2. **02_workflows/operators_demo.py** - Parallel and mixed execution patterns
+3. **02_workflows/context_injection.py** - Accessing workflow state
+4. **02_workflows/workflow_decorator.py** - Reusable workflow definitions
+
+After mastering workflows, explore:
+- **03_data_flow/** - Channels for inter-task communication
 - **04_execution/** - Custom execution handlers
+- **05_distributed/** - Redis-based distributed execution
 
 ## Troubleshooting
 

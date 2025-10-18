@@ -248,10 +248,10 @@ tests/
 
 ## Examples Guide
 
-The `examples/` directory contains **29 production-ready examples** organized by complexity:
+The `examples/` directory contains **27 production-ready examples** organized by complexity:
 
-1. **01_basics/**: Task definition, dependencies, parameters (3 examples)
-2. **02_workflows/**: Workflow context, operators (`>>`, `|`), context injection (4 examples)
+1. **01_basics/**: Basic task introduction (1 example - hello_world.py)
+2. **02_workflows/**: Workflow context, operators (`>>`, `|`), context injection (4 examples) - **Start here for real usage**
 3. **03_data_flow/**: Channels, typed channels, result storage (3 examples)
 4. **04_execution/**: Custom handlers (direct, docker, custom) (3 examples)
 5. **05_distributed/**: Redis-based distribution, workers (3 examples)
