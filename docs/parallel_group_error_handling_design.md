@@ -118,99 +118,102 @@ But there's no equivalent for parallel groups.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│ TaskHandler (unified handler for both levels)               │
+│ TaskHandler (two methods for different contexts)            │
 │                                                              │
 │  execute_task(task, context)                                │
-│    - Controls HOW each task executes                        │
-│    - Examples: direct execution, docker, logging            │
+│    - Controls HOW individual tasks execute                  │
+│    - Used for: @task(handler="docker")                      │
+│    - Examples: direct execution, docker, remote             │
+│    - NOT used for tasks inside ParallelGroup                │
 │                                                              │
-│  on_group_finished(group_id, tasks, results, context) │
+│  on_group_finished(group_id, tasks, results, context)       │
 │    - Controls WHEN parallel groups succeed/fail             │
+│    - Used for: .with_execution(handler=PolicyHandler())     │
 │    - Default: strict mode (all tasks must succeed)          │
 │    - Override: custom success criteria                      │
 │                                                              │
-│  Specified: @task(handler="custom")                         │
-│            .with_execution(handler="custom")                │
-│            .with_execution(handler=CustomHandler())         │
+│  Two Usage Patterns:                                        │
+│    1. Individual tasks: @task(handler="docker")             │
+│    2. ParallelGroup policy: .with_execution(handler=...)    │
 └──────────────────────────────────────────────────────────────┘
 ```
 
 ### Design Principles
 
-1. **Unified abstraction**: Single TaskHandler for both task execution and group policy
-2. **Composition over inheritance**: Use composition pattern to separate concerns
-3. **Fail-safe default**: Strict mode (all tasks must succeed)
-4. **Backward compatible**: Existing handlers work without modification
-5. **Distributed-aware**: Works with both local and Redis execution
+1. **Clear separation of concerns**:
+   - Individual task execution: Controlled by `@task(handler="...")` decorator
+   - ParallelGroup policy: Controlled by `.with_execution(handler=...)` method
+2. **Fail-safe default**: Strict mode (all tasks must succeed)
+3. **Backward compatible**: Existing handlers work without modification
+4. **Distributed-aware**: Works with both local and Redis execution
 
-### Addressing Codex Concerns: Separation of Concerns
+### Understanding TaskHandler's Two Roles
 
-**Concern**: Combining execution strategy (Docker, etc.) with success policy in one handler reduces reusability.
+**IMPORTANT**: TaskHandler has two methods, but they are used in **different contexts**:
 
-**Solution**: Use **composition pattern** to delegate responsibilities:
+#### 1. `execute_task()` - Individual Task Execution
+- **Used by**: WorkflowEngine when executing individual tasks
+- **Specified via**: `@task(handler="docker")` decorator
+- **Controls**: HOW a single task executes (direct, docker, remote, etc.)
+- **NOT used**: When task is inside a ParallelGroup (each task uses its own handler)
+
+#### 2. `on_group_finished()` - ParallelGroup Policy
+- **Used by**: GroupExecutor after all parallel tasks complete
+- **Specified via**: `.with_execution(handler=PolicyHandler())` on ParallelGroup
+- **Controls**: WHEN a parallel group succeeds/fails
+- **Default behavior**: Strict mode (all tasks must succeed)
+
+### Correct Usage Pattern
 
 ```python
-# Execution-only handlers (unchanged from current)
-class DirectTaskHandler(TaskHandler):
-    def get_name(self) -> str:
-        return "direct"
+from graflow.core.decorators import task
+from graflow.core.task import ParallelGroup
 
-    def execute_task(self, task, context):
-        result = task.run()
-        context.set_result(task.task_id, result)
-    # Inherits default strict on_group_finished()
+# Step 1: Define tasks with execution strategy
+@task(handler="docker")  # ← Individual task execution strategy
+def process_data_a(x: int) -> int:
+    return x * 2
 
-# Policy-only handlers (focus on group success criteria)
-class AtLeastNSuccessHandler(TaskHandler):
+@task(handler="docker")  # ← Each task specifies its own handler
+def process_data_b(x: int) -> int:
+    return x * 3
+
+@task  # ← Default handler (direct execution)
+def process_data_c(x: int) -> int:
+    return x * 4
+
+# Step 2: Create parallel group with custom policy
+class AtLeastNSuccessHandler(DirectTaskHandler):
+    """Allow group to succeed if at least N tasks succeed.
+
+    Inherits execute_task() from DirectTaskHandler.
+    """
+
     def __init__(self, min_success: int):
         self.min_success = min_success
 
     def get_name(self) -> str:
         return f"at_least_{self.min_success}"
 
-    def execute_task(self, task, context):
-        # Delegate to direct execution
-        result = task.run()
-        context.set_result(task.task_id, result)
+    # execute_task() inherited from DirectTaskHandler (not used for ParallelGroup anyway)
 
     def on_group_finished(self, group_id, tasks, results, context):
-        # Custom policy logic
-        ...
+        successful = [tid for tid, r in results.items() if r.success]
+        if len(successful) < self.min_success:
+            raise ParallelGroupError(
+                f"Only {len(successful)}/{len(tasks)} tasks succeeded, "
+                f"need at least {self.min_success}"
+            )
 
-# Composition pattern: Combine execution strategy + policy
-class PolicyDelegatingHandler(TaskHandler):
-    """Delegates execution to one handler, group policy to another."""
-
-    def __init__(self, execution_handler: TaskHandler, policy_handler: TaskHandler):
-        self.execution_handler = execution_handler
-        self.policy_handler = policy_handler
-
-    def get_name(self) -> str:
-        return f"{self.execution_handler.get_name()}_{self.policy_handler.get_name()}"
-
-    def execute_task(self, task, context):
-        # Delegate to execution handler
-        return self.execution_handler.execute_task(task, context)
-
-    def on_group_finished(self, group_id, tasks, results, context):
-        # Delegate to policy handler
-        return self.policy_handler.on_group_finished(group_id, tasks, results, context)
-
-# Usage: Combine Docker execution with "at least 3" policy
-docker_at_least_3 = PolicyDelegatingHandler(
-    execution_handler=DockerTaskHandler(),
-    policy_handler=AtLeastNSuccessHandler(min_success=3)
-)
-engine.register_handler("docker_at_least_3", docker_at_least_3)
-
-(task_a | task_b | task_c | task_d).with_execution(handler="docker_at_least_3")
+# Step 3: Apply policy to ParallelGroup (not to individual tasks)
+policy = AtLeastNSuccessHandler(min_success=2)
+parallel_group = (task_a | task_b | task_c).with_execution(handler=policy)
 ```
 
-**Benefits**:
-- **Separation**: Execution strategy and success policy are separate objects
-- **Reusability**: Any execution handler × Any policy handler
-- **No inheritance explosion**: Composition, not inheritance
-- **Backward compatible**: Existing handlers continue to work
+**Key Points**:
+- Each task inside the group uses **its own handler** (`@task(handler="docker")`)
+- The group handler **only controls success/failure policy** via `on_group_finished()`
+- The group handler's `execute_task()` is **never called**
 
 ---
 
@@ -227,10 +230,14 @@ from typing import Any, Dict, List, Optional
 
 @dataclass
 class TaskResult:
-    """Result of a task execution."""
+    """Result of a task execution.
+
+    Note: Task result values are stored in ExecutionContext and can be
+    accessed via context.get_result(task_id) or channels if needed.
+    This dataclass focuses on execution status, not result values.
+    """
     task_id: str
     success: bool
-    result: Any = None
     error: Optional[Exception] = None
     error_message: Optional[str] = None
     duration: float = 0.0
@@ -240,9 +247,17 @@ class TaskResult:
 class TaskHandler(ABC):
     """Base class for task execution handlers.
 
-    TaskHandler controls both:
-    1. How individual tasks execute (execute_task)
-    2. When parallel groups succeed/fail (on_group_finished)
+    TaskHandler has two roles used in different contexts:
+    1. How individual tasks execute (execute_task) - via @task(handler="...")
+    2. When parallel groups succeed/fail (on_group_finished) - via .with_execution(handler=...)
+
+    Design:
+    - execute_task() is abstract - all handlers must provide execution strategy
+    - on_group_finished() has default implementation (strict mode)
+    - get_name() has default implementation (class name)
+
+    For policy handlers: Inherit from DirectTaskHandler to get execute_task() implementation.
+    For execution handlers: Inherit from TaskHandler and implement execute_task().
     """
 
     def get_name(self) -> str:
@@ -278,13 +293,25 @@ class TaskHandler(ABC):
     def execute_task(self, task: Executable, context: ExecutionContext) -> None:
         """Execute single task and store result in context.
 
+        Abstract method - all handlers must implement execution strategy.
+
         Args:
             task: Executable task to execute
             context: Execution context
 
+        Usage Context:
+            - Called by WorkflowEngine for individual task execution
+            - Specified via @task(handler="docker") decorator
+            - NOT called for tasks inside ParallelGroup (each task uses its own handler)
+            - For ParallelGroup, only on_group_finished() is used
+
         Note:
             Implementation must call context.set_result(task_id, result) or
             context.set_result(task_id, exception) within the execution environment.
+
+        Implementation Pattern:
+            For policy handlers: Inherit from DirectTaskHandler instead.
+            For execution handlers: Implement custom execution logic.
         """
         pass
 
@@ -309,6 +336,12 @@ class TaskHandler(ABC):
         Raises:
             ParallelGroupError: If group execution should fail
 
+        Usage Context:
+            - Called by GroupExecutor after all parallel tasks complete
+            - Specified via .with_execution(handler=PolicyHandler()) on ParallelGroup
+            - NOT called for individual task execution
+            - Use context.get_result(task_id) to access task result values if needed
+
         Note:
             Called after ALL tasks complete (success or failure).
             Handler decides whether to raise exception based on results.
@@ -316,6 +349,28 @@ class TaskHandler(ABC):
         # Default implementation: Strict mode
         from graflow.exceptions import ParallelGroupError
 
+        # Validate that all tasks have results
+        expected_task_ids = {task.task_id for task in tasks}
+        actual_task_ids = set(results.keys())
+
+        if expected_task_ids != actual_task_ids:
+            missing = expected_task_ids - actual_task_ids
+            unexpected = actual_task_ids - expected_task_ids
+
+            error_parts = []
+            if missing:
+                error_parts.append(f"missing results for tasks: {missing}")
+            if unexpected:
+                error_parts.append(f"unexpected results for tasks: {unexpected}")
+
+            raise ParallelGroupError(
+                f"Parallel group {group_id} result mismatch: {', '.join(error_parts)}",
+                group_id=group_id,
+                failed_tasks=[],
+                successful_tasks=list(actual_task_ids)
+            )
+
+        # Check for task failures
         failed_tasks = [
             (task_id, result.error_message or "Unknown error")
             for task_id, result in results.items()
@@ -340,7 +395,7 @@ class DirectTaskHandler(TaskHandler):
     """Direct task execution handler (default).
 
     Executes tasks directly in the current process.
-    Uses default strict mode for group execution (inherited from TaskHandler).
+    Provides concrete implementation of execute_task() (abstract in TaskHandler).
     """
 
     def get_name(self) -> str:
@@ -348,18 +403,20 @@ class DirectTaskHandler(TaskHandler):
         return "direct"
 
     def execute_task(self, task: Executable, context: ExecutionContext) -> None:
-        """Execute task directly."""
+        """Execute task directly and store result in context."""
+        task_id = task.task_id
         try:
             result = task.run()
-            context.set_result(task.task_id, result)
+            if result is not None:
+                context.set_result(task_id, result)
         except Exception as e:
-            context.set_result(task.task_id, e)
+            context.set_result(task_id, e)
             raise
 
-    # on_group_finished is inherited from TaskHandler (strict mode)
+    # on_group_finished() inherited from TaskHandler (strict mode)
 ```
 
-Note: `DirectTaskHandler` inherits the default strict mode from `TaskHandler.on_group_finished()`.
+Note: Policy handlers should inherit from `DirectTaskHandler` to get execute_task() implementation.
 
 ### 3. Custom Handler Examples
 
@@ -367,20 +424,17 @@ Users can implement custom handlers for any success criteria.
 
 **Example 1: Best-effort handler (never fail)**
 ```python
-class BestEffortHandler(TaskHandler):
-    """Continue even if tasks fail."""
+class BestEffortHandler(DirectTaskHandler):
+    """Continue even if tasks fail.
+
+    Inherits execute_task() from DirectTaskHandler (direct execution).
+    Only overrides on_group_finished() for custom policy.
+    """
 
     def get_name(self) -> str:
         return "best_effort"
 
-    def execute_task(self, task: Executable, context: ExecutionContext) -> None:
-        """Execute task (delegates to direct execution)."""
-        try:
-            result = task.run()
-            context.set_result(task.task_id, result)
-        except Exception as e:
-            context.set_result(task.task_id, e)
-            raise
+    # execute_task() inherited from DirectTaskHandler (no need to override)
 
     def on_group_finished(self, group_id, tasks, results, context):
         """Never fail - always succeed."""
@@ -392,8 +446,12 @@ class BestEffortHandler(TaskHandler):
 
 **Example 2: At least N success handler**
 ```python
-class AtLeastNSuccessHandler(TaskHandler):
-    """Need at least N tasks to succeed."""
+class AtLeastNSuccessHandler(DirectTaskHandler):
+    """Need at least N tasks to succeed.
+
+    Inherits execute_task() from DirectTaskHandler (direct execution).
+    Only overrides on_group_finished() for custom policy.
+    """
 
     def __init__(self, min_success: int):
         self.min_success = min_success
@@ -401,14 +459,7 @@ class AtLeastNSuccessHandler(TaskHandler):
     def get_name(self) -> str:
         return f"at_least_{self.min_success}"
 
-    def execute_task(self, task: Executable, context: ExecutionContext) -> None:
-        """Execute task (delegates to direct execution)."""
-        try:
-            result = task.run()
-            context.set_result(task.task_id, result)
-        except Exception as e:
-            context.set_result(task.task_id, e)
-            raise
+    # execute_task() inherited from DirectTaskHandler (no need to override)
 
     def on_group_finished(self, group_id, tasks, results, context):
         """Require at least N tasks to succeed."""
@@ -426,8 +477,12 @@ class AtLeastNSuccessHandler(TaskHandler):
 
 **Example 3: Threshold handler**
 ```python
-class ThresholdHandler(TaskHandler):
-    """Need X% success rate."""
+class ThresholdHandler(DirectTaskHandler):
+    """Need X% success rate.
+
+    Inherits execute_task() from DirectTaskHandler (direct execution).
+    Only overrides on_group_finished() for custom policy.
+    """
 
     def __init__(self, threshold: float = 0.75):
         self.threshold = threshold
@@ -435,14 +490,7 @@ class ThresholdHandler(TaskHandler):
     def get_name(self) -> str:
         return f"threshold_{int(self.threshold * 100)}"
 
-    def execute_task(self, task: Executable, context: ExecutionContext) -> None:
-        """Execute task (delegates to direct execution)."""
-        try:
-            result = task.run()
-            context.set_result(task.task_id, result)
-        except Exception as e:
-            context.set_result(task.task_id, e)
-            raise
+    # execute_task() inherited from DirectTaskHandler (no need to override)
 
     def on_group_finished(self, group_id, tasks, results, context):
         """Require threshold percentage to succeed."""
@@ -463,8 +511,12 @@ class ThresholdHandler(TaskHandler):
 
 **Example 4: Critical tasks handler**
 ```python
-class CriticalTasksHandler(TaskHandler):
-    """Succeed if critical tasks succeed, ignore others."""
+class CriticalTasksHandler(DirectTaskHandler):
+    """Succeed if critical tasks succeed, ignore others.
+
+    Inherits execute_task() from DirectTaskHandler (direct execution).
+    Only overrides on_group_finished() for custom policy.
+    """
 
     def __init__(self, critical_task_ids: List[str]):
         self.critical_task_ids = set(critical_task_ids)
@@ -472,14 +524,7 @@ class CriticalTasksHandler(TaskHandler):
     def get_name(self) -> str:
         return "critical_tasks"
 
-    def execute_task(self, task: Executable, context: ExecutionContext) -> None:
-        """Execute task (delegates to direct execution)."""
-        try:
-            result = task.run()
-            context.set_result(task.task_id, result)
-        except Exception as e:
-            context.set_result(task.task_id, e)
-            raise
+    # execute_task() inherited from DirectTaskHandler (no need to override)
 
     def on_group_finished(self, group_id, tasks, results, context):
         """Succeed if critical tasks succeed."""
@@ -497,7 +542,9 @@ class CriticalTasksHandler(TaskHandler):
             )
 ```
 
-Note: These examples show how to implement custom handlers. Only `DirectTaskHandler` is built-in.
+**Key Design Pattern**:
+- **Policy handlers** (BestEffort, AtLeastN, Threshold, etc.): Inherit from `DirectTaskHandler`
+- **Execution handlers** (Docker, Kubernetes, etc.): Inherit from `TaskHandler` and implement `execute_task()`
 
 ### 4. ParallelGroupError Exception
 
@@ -644,6 +691,23 @@ class TaskCoordinator(ABC):
 
 **Solution**: Clear data flow at each execution layer.
 
+### Design Note: Why TaskResult Excludes Result Values
+
+**TaskResult focuses on execution status only:**
+- `task_id`: Task identifier
+- `success`: Whether task succeeded
+- `error_message`: Error message if failed
+- `timestamp`: Completion time
+
+**Result values are NOT included because:**
+1. **Already stored**: ExecutionContext already stores result values via `context.set_result()`
+2. **Unnecessary duplication**: Copying results into TaskResult duplicates data
+3. **Performance cost**: Serialization/deserialization overhead in distributed execution
+4. **Not needed by handlers**: All custom handler examples only check `success` and `error_message`
+5. **Access when needed**: Handlers can access result values via `context.get_result(task_id)` if truly necessary
+
+This keeps TaskResult lightweight and focused on its purpose: reporting task execution status.
+
 ### Local Execution (Direct/Threading)
 
 ```
@@ -671,6 +735,8 @@ class TaskCoordinator(ABC):
 │            error_message=message if not success else None,   │
 │            timestamp=time.time()                             │
 │        )                                                     │
+│                                                              │
+│    # Note: Result values already in execution_context       │
 └─────────────────────────────────────────────────────────────┘
                            ↓
 ┌─────────────────────────────────────────────────────────────┐
@@ -692,7 +758,7 @@ def execute_group(self, group_id, tasks, execution_context, handler=None):
     for future in completed_futures:
         task_id, success, message = future.result()
 
-        # Create TaskResult
+        # Create TaskResult (result values already in execution_context)
         results[task_id] = TaskResult(
             task_id=task_id,
             success=success,
@@ -700,7 +766,7 @@ def execute_group(self, group_id, tasks, execution_context, handler=None):
             timestamp=time.time()
         )
 
-    # Apply handler
+    # Apply handler (can access result values via context.get_result() if needed)
     handler.on_group_finished(group_id, tasks, results, execution_context)
 ```
 
@@ -726,7 +792,10 @@ def execute_group(self, group_id, tasks, execution_context, handler=None):
 │         "error_message": error_message,                      │
 │         "timestamp": time.time()                             │
 │     }                                                        │
-│     redis.zadd(f"completions:{group_id}", {json.dumps(...)})│
+│     redis.hset(f"completions:{group_id}", task_id,          │
+│                json.dumps(completion_data))                  │
+│                                                              │
+│  Note: Result values stored in ExecutionContext separately  │
 └─────────────────────────────────────────────────────────────┘
                            ↓ Redis
 ┌─────────────────────────────────────────────────────────────┐
@@ -736,13 +805,13 @@ def execute_group(self, group_id, tasks, execution_context, handler=None):
 │     wait_barrier(group_id)                                   │
 │                                                              │
 │  4. Collect results from Redis                              │
-│     completion_records = redis.zrange(f"completions:{group_id}")│
+│     completion_records = redis.hgetall(f"completions:{group_id}")│
 │                                                              │
 │     results: Dict[str, TaskResult] = {}                     │
-│     for record in completion_records:                        │
+│     for task_id, record in completion_records.items():       │
 │         data = json.loads(record)                            │
-│         results[data["task_id"]] = TaskResult(               │
-│             task_id=data["task_id"],                         │
+│         results[task_id] = TaskResult(                       │
+│             task_id=task_id,                                 │
 │             success=data["success"],                         │
 │             error_message=data.get("error_message"),         │
 │             timestamp=data.get("timestamp")                  │
@@ -750,6 +819,8 @@ def execute_group(self, group_id, tasks, execution_context, handler=None):
 │                                                              │
 │  5. Apply handler                                            │
 │     handler.on_group_finished(group_id, tasks, results, context)│
+│                                                              │
+│  Note: Result values accessed via context.get_result()      │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -768,28 +839,30 @@ def execute_group(self, group_id, tasks, execution_context, handler=None):
     # Collect results from Redis
     completion_results = self._get_completion_results(group_id)
 
-    # Convert to TaskResult
-    task_results: Dict[str, TaskResult] = {}
+    # Convert to TaskResult (result values already in execution_context)
+    results: Dict[str, TaskResult] = {}
     for result_data in completion_results:
-        task_results[result_data["task_id"]] = TaskResult(
+        results[result_data["task_id"]] = TaskResult(
             task_id=result_data["task_id"],
             success=result_data["success"],
             error_message=result_data.get("error_message"),
             timestamp=result_data.get("timestamp", 0.0)
         )
 
-    # Apply handler
-    handler.on_group_finished(group_id, tasks, task_results, execution_context)
+    # Apply handler (can access result values via context.get_result() if needed)
+    handler.on_group_finished(group_id, tasks, results, execution_context)
 
 def _get_completion_results(self, group_id: str) -> List[Dict[str, Any]]:
     """Retrieve all completion records from Redis."""
     completion_key = f"{self.task_queue.key_prefix}:completions:{group_id}"
-    records = self.redis.zrange(completion_key, 0, -1)
+    records = self.redis.hgetall(completion_key)
 
     results = []
-    for record in records:
+    for task_id, record_json in records.items():
         try:
-            data = json.loads(record)
+            data = json.loads(record_json)
+            # Ensure task_id is in the data
+            data["task_id"] = task_id.decode() if isinstance(task_id, bytes) else task_id
             results.append(data)
         except json.JSONDecodeError:
             continue
@@ -802,13 +875,44 @@ def _get_completion_results(self, group_id: str) -> List[Dict[str, Any]]:
 **Guarantee**: All task completions are captured before handler execution.
 
 1. **Local execution**: Futures API ensures no results are lost
-2. **Distributed execution**: Redis sorted set ensures atomic result storage
+2. **Distributed execution**: Redis hash (hset/hgetall) ensures atomic result storage with task_id as key
 3. **Barrier synchronization**: Ensures all tasks complete before result collection
 
 **Edge cases handled**:
 - Worker crash: Task remains in RUNNING state, barrier times out → Group fails
 - Network partition: Redis atomic operations prevent partial updates
-- Duplicate completion: Sorted set + task_id as key prevents duplicates
+- Duplicate completion: Hash with task_id as key prevents duplicates (overwrites instead of appending)
+
+### Redis Key Cleanup
+
+**Keys created during group execution**:
+- `completions:{group_id}` - Hash storing task completion records
+- `barrier:{group_id}` - Barrier counter
+- `barrier:{group_id}:count` - Expected task count
+
+**Cleanup strategy**:
+```python
+# After group execution completes (success or failure)
+def cleanup_group_keys(redis_client, key_prefix, group_id):
+    """Clean up Redis keys after group execution."""
+    completion_key = f"{key_prefix}:completions:{group_id}"
+    barrier_key = f"{key_prefix}:barrier:{group_id}"
+    barrier_count_key = f"{key_prefix}:barrier:{group_id}:count"
+
+    # Option 1: Immediate deletion (for short-lived workflows)
+    redis_client.delete(completion_key, barrier_key, barrier_count_key)
+
+    # Option 2: Set expiration (for debugging/auditing)
+    ttl_seconds = 3600  # 1 hour
+    redis_client.expire(completion_key, ttl_seconds)
+    redis_client.expire(barrier_key, ttl_seconds)
+    redis_client.expire(barrier_count_key, ttl_seconds)
+```
+
+**Recommended approach**:
+- Set expiration in `execute_group()` after `on_group_finished()` completes
+- Use configurable TTL (default: 1 hour for debugging, 5 minutes for production)
+- Add cleanup to finally block to ensure cleanup on errors
 
 ---
 
@@ -1000,6 +1104,49 @@ class DatabaseHandler(TaskHandler):
         return self._connection
 ```
 
+#### Error Handling for Serialization Failures
+
+**Detection**: Serialization errors occur when pickling ParallelGroup with handler instance.
+
+**Common causes**:
+1. Handler contains unpicklable objects (locks, connections, file handles)
+2. Handler class not importable on worker side
+3. Circular references in handler state
+
+**Error handling strategy**:
+```python
+# In ParallelGroup.with_execution() or run()
+try:
+    import cloudpickle
+    # Test serialization early
+    cloudpickle.dumps(handler)
+except Exception as e:
+    raise ValueError(
+        f"Handler {handler.get_name()} is not serializable for distributed execution. "
+        f"Ensure handler contains only picklable state (no locks, connections, etc.). "
+        f"Original error: {e}"
+    ) from e
+```
+
+**Recommendations**:
+- Document serialization requirements in handler docstrings
+- Provide clear error messages when serialization fails
+- Include handler name and class in error messages for debugging
+- Test handler serializability in unit tests
+
+**Example unit test**:
+```python
+def test_handler_serializable():
+    """Ensure custom handlers are picklable for distributed execution."""
+    handler = AtLeastNSuccessHandler(min_success=3)
+
+    # Should not raise
+    serialized = cloudpickle.dumps(handler)
+    deserialized = cloudpickle.loads(serialized)
+
+    assert deserialized.min_success == 3
+```
+
 ---
 
 ## Distributed Execution Considerations
@@ -1034,7 +1181,7 @@ def _task_completed(self, task_spec: TaskSpec, future: Future):
     success = result.get("success", False)
     error_message = result.get("error")
 
-    # Notify with error message
+    # Notify with error message (result values stored in ExecutionContext)
     if task_spec.group_id:
         self.queue.notify_task_completion(
             task_id,
@@ -1083,7 +1230,8 @@ class RedisCoordinator(TaskCoordinator):
     ):
         # Default handler
         if handler is None:
-            handler = execution_context.engine.get_handler("direct")
+            from graflow.core.handlers.direct import DirectTaskHandler
+            handler = DirectTaskHandler()
 
         # Dispatch all tasks
         self.create_barrier(group_id, len(tasks))
@@ -1125,7 +1273,20 @@ def record_task_completion(
     success: bool,
     error_message: Optional[str] = None
 ):
-    """Record task completion in Redis for barrier tracking."""
+    """Record task completion in Redis for barrier tracking.
+
+    Args:
+        redis_client: Redis client instance
+        key_prefix: Key prefix for Redis keys
+        task_id: Task identifier
+        group_id: Group identifier
+        success: Whether task succeeded
+        error_message: Error message if task failed
+
+    Note:
+        Task result values are stored in ExecutionContext, not in completion records.
+        This keeps completion records lightweight and focused on execution status.
+    """
     completion_key = f"{key_prefix}:completions:{group_id}"
 
     completion_data = {
@@ -1135,10 +1296,11 @@ def record_task_completion(
         "error_message": error_message
     }
 
-    # Add to sorted set with timestamp as score
-    redis_client.zadd(
+    # Store in hash with task_id as key (prevents duplicates/overwrites)
+    redis_client.hset(
         completion_key,
-        {json.dumps(completion_data): time.time()}
+        task_id,
+        json.dumps(completion_data)
     )
 ```
 
@@ -1218,8 +1380,10 @@ class ParallelGroupError(GraflowRuntimeError):
 │                                                                  │
 │    # graflow/core/task.py                                       │
 │    class ParallelGroup(Executable):                             │
-│        def run(self, context: ExecutionContext):                │
-│            executor = GroupExecutor(context)                    │
+│        def run(self) -> Any:                                    │
+│            context = self.get_execution_context()               │
+│            # Use configured executor or context.group_executor  │
+│            executor = self._create_configured_executor()        │
 │            executor.execute_parallel_group(...)                 │
 │            # ← ParallelGroupError propagates              │
 └─────────────────────────────────────────────────────────────────┘
@@ -1417,25 +1581,40 @@ except Exception as e:
 **Files to modify**:
 
 1. ✅ `graflow/core/handler.py`
-   - Add `TaskResult` dataclass
-   - Add `get_name()` abstract method to `TaskHandler`
+   - Add `TaskResult` dataclass (execution status only, no result values)
+   - `TaskHandler(ABC)` - Keep as abstract base class
+   - Add `get_name()` method to `TaskHandler` with default implementation (returns class name)
+   - Add `@abstractmethod execute_task()` to `TaskHandler` (all handlers must implement)
    - Add `on_group_finished()` method to `TaskHandler` with default strict implementation
+   - Include result validation in `on_group_finished()` (checks for missing/unexpected task results)
 
 2. ✅ `graflow/exceptions.py`
    - Add `ParallelGroupError` exception
 
 3. ✅ `graflow/core/handlers/direct.py`
    - Add `get_name()` method to `DirectTaskHandler` returning "direct"
+   - Implement `execute_task()` method (direct execution in current process)
    - Inherit default `on_group_finished()` from `TaskHandler` (strict mode)
+   - Note: Policy handlers should inherit from `DirectTaskHandler`, not `TaskHandler`
 
 4. ✅ `graflow/core/engine.py`
    - **No changes needed** - existing handler registry already supports TaskHandler
+
+5. ✅ `graflow/__init__.py` and `graflow/core/__init__.py`
+   - Export `TaskResult` from `graflow.core.handler`
+   - Export `ParallelGroupError` from `graflow.exceptions`
+   - Example:
+     ```python
+     # graflow/__init__.py
+     from graflow.core.handler import TaskResult
+     from graflow.exceptions import ParallelGroupError
+     ```
 
 ### Phase 2: API Surface
 
 **Files to modify**:
 
-5. ✅ `graflow/core/task.py`
+6. ✅ `graflow/core/task.py`
    - Update `ParallelGroup._execution_config` to include `handler` field
    - Update `ParallelGroup.with_execution()` signature to accept `handler: Optional[TaskHandler]`
    - Update `ParallelGroup.run()` to:
@@ -1448,10 +1627,10 @@ except Exception as e:
 
 **Files to modify**:
 
-6. ✅ `graflow/coordination/coordinator.py` (base.py)
+7. ✅ `graflow/coordination/coordinator.py` (base.py)
    - Update `TaskCoordinator.execute_group()` signature to include `handler` parameter
 
-7. ✅ `graflow/coordination/executor.py`
+8. ✅ `graflow/coordination/executor.py`
    - Update `GroupExecutor.execute_parallel_group()` signature:
      - Add `handler: Optional[TaskHandler] = None` as 4th parameter
      - Current signature: `execute_parallel_group(group_id, tasks, exec_context)`
@@ -1466,13 +1645,13 @@ except Exception as e:
    - Update `_create_coordinator()` to remain unchanged (already takes exec_context)
    - Note: `GroupExecutor.__init__(backend, backend_config)` remains unchanged for backward compatibility
 
-8. ✅ `graflow/coordination/threading.py`
+9. ✅ `graflow/coordination/threading.py`
    - Update `ThreadingCoordinator.execute_group()` signature
    - Collect task results into `Dict[str, TaskResult]`
    - Call `handler.on_group_finished()` after all tasks complete
    - Raise `ParallelGroupError` if handler raises it
 
-9. ✅ `graflow/coordination/redis.py`
+10. ✅ `graflow/coordination/redis.py`
     - Update `RedisCoordinator.execute_group()` signature
     - Add `_get_completion_results()` method
     - Update `record_task_completion()` to accept `error_message`
@@ -1482,26 +1661,27 @@ except Exception as e:
 
 **Files to modify**:
 
-10. ✅ `graflow/worker/worker.py`
+11. ✅ `graflow/worker/worker.py`
     - Update `_process_task_wrapper()` to capture error messages
     - Update `_task_completed()` to pass error messages to queue
 
-11. ✅ `graflow/queue/base.py`
+12. ✅ `graflow/queue/base.py`
     - Update `TaskQueue.notify_task_completion()` signature to include `error_message`
 
-12. ✅ `graflow/queue/redis.py`
-    - Update `RedisTaskQueue.notify_task_completion()` to pass error_message
+13. ✅ `graflow/queue/redis.py`
+    - Update `RedisTaskQueue.notify_task_completion()` to pass error_message to `record_task_completion()`
+    - Note: Task result values are stored in ExecutionContext, not in completion records
 
 ### Phase 5: Testing
 
-13. ✅ Add unit tests for handlers
-14. ✅ Add integration tests for local execution
-15. ✅ Add integration tests for distributed execution
+14. ✅ Add unit tests for handlers
+15. ✅ Add integration tests for local execution
+16. ✅ Add integration tests for distributed execution
 
 ### Phase 6: Documentation and Examples
 
-16. ✅ Update CLAUDE.md with new API
-17. ✅ Add example files to `examples/` directory:
+17. ✅ Update CLAUDE.md with new API
+18. ✅ Add example files to `examples/` directory:
     - `examples/11_error_handling/parallel_group_strict_mode.py`
       - Default strict mode (all tasks must succeed)
       - Shows ParallelGroupError handling
@@ -1521,7 +1701,7 @@ except Exception as e:
       - Overview of custom handler patterns
       - When to use each pattern
       - How to implement your own handler
-18. ✅ Update README if needed
+19. ✅ Update README if needed
 
 **Note**: Only `DirectTaskHandler` is built-in to core. All other handlers (BestEffort, AtLeastN, etc.) are user-implemented examples in `examples/` directory. Users copy and adapt these samples for their specific requirements.
 
@@ -1568,18 +1748,15 @@ with workflow("test") as wf:
 ```python
 # First, implement a custom handler
 class BestEffortHandler(TaskHandler):
-    """Continue even if tasks fail."""
+    """Continue even if tasks fail.
+
+    Inherits default execute_task() from TaskHandler.
+    """
 
     def get_name(self) -> str:
         return "best_effort"
 
-    def execute_task(self, task, context):
-        try:
-            result = task.run()
-            context.set_result(task.task_id, result)
-        except Exception as e:
-            context.set_result(task.task_id, e)
-            raise
+    # execute_task() inherited from TaskHandler (no need to override)
 
     def on_group_finished(self, group_id, tasks, results, context):
         failed = [tid for tid, r in results.items() if not r.success]
@@ -1617,7 +1794,10 @@ with workflow("test") as wf:
 
 ```python
 class AtLeastNSuccessHandler(TaskHandler):
-    """Need at least N tasks to succeed."""
+    """Need at least N tasks to succeed.
+
+    Inherits default execute_task() from TaskHandler.
+    """
 
     def __init__(self, min_success: int):
         self.min_success = min_success
@@ -1625,13 +1805,7 @@ class AtLeastNSuccessHandler(TaskHandler):
     def get_name(self) -> str:
         return f"at_least_{self.min_success}"
 
-    def execute_task(self, task, context):
-        try:
-            result = task.run()
-            context.set_result(task.task_id, result)
-        except Exception as e:
-            context.set_result(task.task_id, e)
-            raise
+    # execute_task() inherited from TaskHandler (no need to override)
 
     def on_group_finished(self, group_id, tasks, results, context):
         successful = [tid for tid, r in results.items() if r.success]
@@ -1656,7 +1830,10 @@ class AtLeastNSuccessHandler(TaskHandler):
 
 ```python
 class CriticalTasksHandler(TaskHandler):
-    """Success if critical tasks succeed, ignore others."""
+    """Success if critical tasks succeed, ignore others.
+
+    Inherits default execute_task() from TaskHandler.
+    """
 
     def __init__(self, critical_task_ids: List[str]):
         self.critical_task_ids = set(critical_task_ids)
@@ -1664,13 +1841,7 @@ class CriticalTasksHandler(TaskHandler):
     def get_name(self) -> str:
         return "critical_tasks"
 
-    def execute_task(self, task, context):
-        try:
-            result = task.run()
-            context.set_result(task.task_id, result)
-        except Exception as e:
-            context.set_result(task.task_id, e)
-            raise
+    # execute_task() inherited from TaskHandler (no need to override)
 
     def on_group_finished(self, group_id, tasks, results, context):
         failed_critical = [
@@ -1694,91 +1865,167 @@ class CriticalTasksHandler(TaskHandler):
 
 ---
 
-## Backward Compatibility
+## Design Rationale: Inheritance Pattern
 
-### Addressing Codex Concern: get_name() Impact on Existing Handlers
+### Why Use Inheritance Pattern?
 
-**Concern**: Making `get_name()` required breaks all existing TaskHandler implementations.
+The design uses **abstract `execute_task()` + concrete DirectTaskHandler** pattern:
 
-**Solution**: Provide default implementation in base class.
+1. **execute_task() is abstract** - All handlers must provide an execution strategy
+2. **on_group_finished() has default implementation** - Strict mode (all tasks must succeed)
+3. **get_name() has default implementation** - Returns class name
+4. **Policy handlers inherit from DirectTaskHandler** - Get execute_task() for free
+5. **Execution handlers inherit from TaskHandler** - Implement custom execute_task()
 
-#### Before (would break existing code):
+This matches the existing implementation and makes the design intent clear.
+
+### Final TaskHandler Definition
+
 ```python
+from abc import ABC, abstractmethod
+
 class TaskHandler(ABC):
+    """Base class for task execution handlers.
+
+    Design:
+    - execute_task() is abstract - all handlers must provide execution strategy
+    - on_group_finished() has default implementation (strict mode)
+    - get_name() has default implementation (class name)
+
+    For policy handlers: Inherit from DirectTaskHandler to get execute_task().
+    For execution handlers: Inherit from TaskHandler and implement execute_task().
+    """
+
+    def get_name(self) -> str:
+        """Get handler name for registration.
+
+        Default: Returns class name.
+        Override only if specific name needed (e.g., "direct", "docker").
+        """
+        return self.__class__.__name__
+
     @abstractmethod
-    def get_name(self) -> str:  # ← Breaks existing handlers!
+    def execute_task(self, task: Executable, context: ExecutionContext) -> None:
+        """Execute single task and store result in context.
+
+        Abstract method - all handlers must implement.
+
+        Note: Only called for individual tasks via @task(handler="...").
+              NOT called for tasks inside ParallelGroup.
+        """
         pass
+
+    def on_group_finished(
+        self,
+        group_id: str,
+        tasks: List[Executable],
+        results: Dict[str, TaskResult],
+        context: ExecutionContext
+    ) -> None:
+        """Handle parallel group execution results.
+
+        Default: Strict mode - fail if any task fails.
+        Override for custom success criteria (best-effort, threshold, etc.).
+
+        Note: Only called for ParallelGroup via .with_execution(handler=...).
+              NOT called for individual task execution.
+        """
+        # Validate all tasks have results
+        expected = {t.task_id for t in tasks}
+        actual = set(results.keys())
+        if expected != actual:
+            raise ParallelGroupError(f"Result mismatch: {expected ^ actual}")
+
+        # Check for failures (strict mode)
+        failed = [r for r in results.values() if not r.success]
+        if failed:
+            raise ParallelGroupError(
+                f"Parallel group {group_id} failed: "
+                f"{len(failed)}/{len(tasks)} tasks failed"
+            )
 ```
 
-#### After (backward compatible):
-```python
-class TaskHandler(ABC):
-    def get_name(self) -> str:
-        """Default implementation: Use class name."""
-        return self.__class__.__name__  # ← No breaking change!
-
-    @abstractmethod
-    def execute_task(...): pass
-```
-
-#### Impact Analysis:
-
-| Handler Type | Before | After | Status |
-|-------------|--------|-------|--------|
-| Existing custom handlers | No `get_name()` | Inherits default | ✅ Works |
-| DirectTaskHandler | No `get_name()` | Override to return "direct" | ⚠️ Minor change |
-| New custom handlers | - | Can override or use default | ✅ Works |
-
-#### Migration Required:
-
-**Only for built-in handlers** (DirectTaskHandler, DockerTaskHandler, etc.):
+### DirectTaskHandler (Built-in)
 
 ```python
-# graflow/core/handlers/direct.py (ONE TIME CHANGE)
 class DirectTaskHandler(TaskHandler):
-    def get_name(self) -> str:
-        return "direct"  # ← Add this method
+    """Direct task execution in current process.
 
-    def execute_task(self, task, context):
-        # ... existing implementation unchanged
+    Provides concrete implementation of execute_task().
+    Policy handlers should inherit from this class.
+    """
+
+    def get_name(self) -> str:
+        return "direct"
+
+    def execute_task(self, task: Executable, context: ExecutionContext) -> None:
+        """Execute task directly and store result in context."""
+        task_id = task.task_id
+        try:
+            result = task.run()
+            if result is not None:
+                context.set_result(task_id, result)
+        except Exception as e:
+            context.set_result(task_id, e)
+            raise
 ```
 
-**User custom handlers**: No changes required - they inherit `__class__.__name__`.
+### Common Handler Implementation Patterns
+
+#### 1. Policy Handler (Most Common)
+```python
+class AtLeastNSuccessHandler(DirectTaskHandler):
+    """Inherit from DirectTaskHandler to get execute_task()."""
+
+    def __init__(self, min_success: int):
+        self.min_success = min_success
+
+    # Only override on_group_finished()
+    def on_group_finished(self, group_id, tasks, results, context):
+        successful = sum(1 for r in results.values() if r.success)
+        if successful < self.min_success:
+            raise ParallelGroupError(...)
+
+    # get_name() inherited → "AtLeastNSuccessHandler"
+    # execute_task() inherited from DirectTaskHandler
+```
+
+#### 2. Execution Handler
+```python
+class DockerTaskHandler(TaskHandler):
+    """Inherit from TaskHandler and implement execute_task()."""
+
+    def get_name(self) -> str:
+        return "docker"
+
+    # Must implement abstract method
+    def execute_task(self, task, context):
+        # Custom execution logic (docker container, etc.)
+        ...
+
+    # on_group_finished() inherited → strict mode
+```
 
 ### Breaking Changes
 
-⚠️ **Behavior Change**: The default group execution will change from "ignore failures" to "fail on any failure".
+⚠️ **Behavior Change**: ParallelGroup will fail on any task failure (strict mode).
 
-**Before** (current broken behavior):
 ```python
-(task_a | task_b | task_c)  # If task_b fails, workflow continues (BUG!)
+# New behavior
+(task_a | task_b | task_c)  # Raises ParallelGroupError if any task fails
 ```
 
-**After** (new correct behavior):
-```python
-(task_a | task_b | task_c)  # If task_b fails, raises ParallelGroupError
-```
-
-This is intentional and necessary to fix the broken behavior. Users should not rely on the old behavior.
-
-### Migration Path
-
-If users need failure-tolerant behavior, implement a custom handler:
+**If failure-tolerant behavior is needed**, use a custom policy handler:
 
 ```python
 # Implement best-effort handler
-class BestEffortHandler(TaskHandler):
+class BestEffortHandler(DirectTaskHandler):
+    """Best-effort handler - inherits execute_task() from DirectTaskHandler."""
+
     def get_name(self) -> str:
         return "best_effort"  # Optional override
 
-    def execute_task(self, task, context):
-        # Direct execution
-        try:
-            result = task.run()
-            context.set_result(task.task_id, result)
-        except Exception as e:
-            context.set_result(task.task_id, e)
-            raise
+    # execute_task() inherited from DirectTaskHandler (no need to override)
 
     def on_group_finished(self, group_id, tasks, results, context):
         # Don't raise exception - always succeed
@@ -1786,9 +2033,8 @@ class BestEffortHandler(TaskHandler):
         if failed:
             print(f"⚠️  {len(failed)} tasks failed (best-effort mode)")
 
-# Register and use
-engine.register_handler("best_effort", BestEffortHandler())
-(task_a | task_b | task_c).with_execution(handler="best_effort")
+# Use handler instance directly
+(task_a | task_b | task_c).with_execution(handler=BestEffortHandler())
 ```
 
 **Rationale**: The current behavior is a bug. Workflows should not silently continue when tasks fail.
@@ -1828,11 +2074,11 @@ class ConditionalHandler(TaskHandler):
         if not self.condition(results):
             raise ParallelGroupError(...)
 
-# Usage
-engine.register_handler(
-    "custom_condition",
-    ConditionalHandler(lambda results: results["task_a"].success or results["task_b"].success)
+# Usage: Pass handler instance directly
+conditional_handler = ConditionalHandler(
+    lambda results: results["task_a"].success or results["task_b"].success
 )
+# Use with: .with_execution(handler=conditional_handler)
 ```
 
 ### 3. Weighted Success
