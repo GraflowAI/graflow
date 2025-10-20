@@ -174,6 +174,7 @@ class RedisCoordinator(TaskCoordinator):
             # Clean up Redis keys
             self.redis.delete(barrier_info["key"])
             self.redis.delete(f"{barrier_info['key']}:expected")
+            self.redis.delete(f"{self.task_queue.key_prefix}:completions:{barrier_id}")
 
             # Remove from active barriers
             with self._lock:
