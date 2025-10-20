@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  # Backend service - FastAPI
+  backend:
+    build:
+      context: ../..
+      dockerfile: examples/gpt_newspaper/Dockerfile.backend
+    container_name: gpt-newspaper-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - TAVILY_API_KEY=${TAVILY_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - COHERE_API_KEY=${COHERE_API_KEY:-}
+      - GPT_NEWSPAPER_MODEL=${GPT_NEWSPAPER_MODEL:-gpt-4o-mini}
+      - NEWSPAPER_LAYOUT=${NEWSPAPER_LAYOUT:-layout_1.html}
+      - MAX_CRITIQUE_ITERATIONS=${MAX_CRITIQUE_ITERATIONS:-5}
+      - OUTPUT_DIR=${OUTPUT_DIR:-outputs}
+    volumes:
+      # Mount outputs directory for persistence
+      - ./outputs:/app/outputs
+      # Optional: Mount source code for development hot-reload
+      # - ./backend:/app
+      # - ../../graflow:/workspace/graflow
+    networks:
+      - gpt-newspaper-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Frontend service - React + Nginx
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: gpt-newspaper-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - gpt-newspaper-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+networks:
+  gpt-newspaper-network:
+    driver: bridge
+
+volumes:
+  outputs:
+    driver: local
