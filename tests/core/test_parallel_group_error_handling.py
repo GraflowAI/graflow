@@ -6,6 +6,14 @@ from graflow.core.context import ExecutionContext
 from graflow.core.decorators import task
 from graflow.core.handler import TaskResult
 from graflow.core.handlers.direct import DirectTaskHandler
+from graflow.core.handlers.group_policy import (
+    AtLeastNGroupPolicy,
+    BestEffortGroupPolicy,
+    CriticalGroupPolicy,
+    StrictGroupPolicy,
+    resolve_group_policy,
+    serialize_group_policy,
+)
 from graflow.core.workflow import workflow
 from graflow.exceptions import ParallelGroupError
 
@@ -190,26 +198,72 @@ class TestDirectTaskHandler:
             error = exc_info.value
             assert "missing results" in str(error).lower()
 
+    def test_set_group_policy_changes_behavior(self):
+        """Setting a custom group policy should change outcome."""
+        handler = DirectTaskHandler()
+        handler.set_group_policy(AtLeastNGroupPolicy(min_success=2))
 
-class TestCustomHandlers:
-    """Test custom handler implementations."""
+        with workflow("test") as wf:
+            @task
+            def task_a():
+                return "a"
 
-    def test_best_effort_handler(self):
-        """Test best-effort handler that never fails."""
+            @task
+            def task_b():
+                return "b"
 
-        class BestEffortHandler(DirectTaskHandler):
-            """Continue even if tasks fail."""
+            @task
+            def task_c():
+                raise Exception("Task C failed!")
 
-            def get_name(self):
-                return "best_effort"
+            tasks = [task_a, task_b, task_c]
+            results = {
+                "task_a": TaskResult(task_id="task_a", success=True),
+                "task_b": TaskResult(task_id="task_b", success=True),
+                "task_c": TaskResult(task_id="task_c", success=False, error_message="Task C failed!"),
+            }
 
-            def on_group_finished(self, group_id, tasks, results, context):  # type: ignore[override]
-                # Never raise exception - always succeed
-                failed = [tid for tid, r in results.items() if not r.success]
-                if failed:
-                    print(f"⚠️  Group {group_id} completed with {len(failed)} failures (best-effort)")
+            # With min_success=2 and two successes, this should NOT raise
+            handler.on_group_finished("group_success", tasks, results, ExecutionContext.create(wf.graph, "test"))
 
-        handler = BestEffortHandler()
+        # Now require three successes -> should fail
+        handler.set_group_policy(AtLeastNGroupPolicy(min_success=3))
+
+        with workflow("test_fail") as wf_fail:
+            @task
+            def task_d():
+                return "d"
+
+            @task
+            def task_e():
+                return "e"
+
+            @task
+            def task_f():
+                raise Exception("Task F failed!")
+
+            tasks_fail = [task_d, task_e, task_f]
+            results_fail = {
+                "task_d": TaskResult(task_id="task_d", success=True),
+                "task_e": TaskResult(task_id="task_e", success=True),
+                "task_f": TaskResult(task_id="task_f", success=False, error_message="Task F failed!"),
+            }
+
+            with pytest.raises(ParallelGroupError):
+                handler.on_group_finished(
+                    "group_failure",
+                    tasks_fail,
+                    results_fail,
+                    ExecutionContext.create(wf_fail.graph, "test_fail"),
+                )
+
+
+class TestPolicyHandlers:
+    """Test built-in parallel group policy handlers."""
+
+    def test_strict_group_handler_matches_default(self):
+        """Strict handler should raise when any task fails."""
+        handler = StrictGroupPolicy()
 
         with workflow("test") as wf:
             @task
@@ -226,35 +280,34 @@ class TestCustomHandlers:
                 "task_b": TaskResult(task_id="task_b", success=False, error_message="Task B failed!")
             }
 
-            # Should NOT raise exception
+            with pytest.raises(ParallelGroupError):
+                handler.on_group_finished("group_1", tasks, results, ExecutionContext.create(wf.graph, "test"))
+
+    def test_best_effort_handler(self):
+        """Best-effort handler should not raise when tasks fail."""
+        handler = BestEffortGroupPolicy()
+
+        with workflow("test") as wf:
+            @task
+            def task_a():
+                return "a"
+
+            @task
+            def task_b():
+                raise Exception("Task B failed!")
+
+            tasks = [task_a, task_b]
+            results = {
+                "task_a": TaskResult(task_id="task_a", success=True),
+                "task_b": TaskResult(task_id="task_b", success=False, error_message="Task B failed!")
+            }
+
             handler.on_group_finished("group_1", tasks, results, ExecutionContext.create(wf.graph, "test"))
 
     def test_at_least_n_success_handler(self):
-        """Test at-least-N-success handler."""
+        """At-least-N handler should enforce minimum success count."""
 
-        class AtLeastNSuccessHandler(DirectTaskHandler):
-            """Require at least N tasks to succeed."""
-
-            def __init__(self, min_success: int):
-                self.min_success = min_success
-
-            def get_name(self):
-                return f"at_least_{self.min_success}"
-
-            def on_group_finished(self, group_id, tasks, results, context):
-                successful = [tid for tid, r in results.items() if r.success]
-
-                if len(successful) < self.min_success:
-                    failed = [(tid, r.error_message) for tid, r in results.items() if not r.success]
-                    raise ParallelGroupError(
-                        f"Only {len(successful)}/{self.min_success} tasks succeeded",
-                        group_id=group_id,
-                        failed_tasks=failed,
-                        successful_tasks=successful
-                    )
-
-        # Test case 1: 3 out of 4 succeed (min_success=2) - should pass
-        handler = AtLeastNSuccessHandler(min_success=2)
+        handler = AtLeastNGroupPolicy(min_success=2)
 
         with workflow("test") as wf:
             @task
@@ -281,11 +334,9 @@ class TestCustomHandlers:
                 "task_d": TaskResult(task_id="task_d", success=False, error_message="Task D failed!")
             }
 
-            # Should NOT raise exception (3 >= 2)
             handler.on_group_finished("group_1", tasks, results, ExecutionContext.create(wf.graph, "test"))
 
-        # Test case 2: 1 out of 4 succeed (min_success=2) - should fail
-        handler2 = AtLeastNSuccessHandler(min_success=2)
+        handler2 = AtLeastNGroupPolicy(min_success=2)
 
         with workflow("test2") as wf2:
             @task
@@ -312,7 +363,6 @@ class TestCustomHandlers:
                 "task_h": TaskResult(task_id="task_h", success=False, error_message="Task H failed!")
             }
 
-            # Should raise ParallelGroupError (1 < 2)
             with pytest.raises(ParallelGroupError) as exc_info:
                 handler2.on_group_finished("group_2", tasks2, results2, ExecutionContext.create(wf2.graph, "test2"))
 
@@ -320,6 +370,54 @@ class TestCustomHandlers:
             assert "1/2" in str(error)
             assert len(error.failed_tasks) == 3
             assert len(error.successful_tasks) == 1
+
+    def test_critical_tasks_handler(self):
+        """Critical handler should fail only when critical tasks fail."""
+        handler = CriticalGroupPolicy(critical_task_ids=["critical_task"])
+
+        with workflow("test") as wf:
+            @task
+            def critical_task():
+                return "critical success"
+
+            @task
+            def optional_task():
+                raise Exception("Optional task failed!")
+
+            tasks = [critical_task, optional_task]
+            results = {
+                "critical_task": TaskResult(task_id="critical_task", success=True),
+                "optional_task": TaskResult(task_id="optional_task", success=False, error_message="Optional task failed!")
+            }
+
+            handler.on_group_finished("group_1", tasks, results, ExecutionContext.create(wf.graph, "test"))
+
+        handler_failure = CriticalGroupPolicy(critical_task_ids=["critical_task_fail"])
+
+        with workflow("test_failure") as wf_failure:
+            @task
+            def critical_task_fail():
+                raise Exception("Critical task failed!")
+
+            @task
+            def optional_task_success():
+                return "optional"
+
+            tasks_failure = [critical_task_fail, optional_task_success]
+            results_failure = {
+                "critical_task_fail": TaskResult(task_id="critical_task_fail", success=False, error_message="Critical task failed!"),
+                "optional_task_success": TaskResult(task_id="optional_task_success", success=True),
+            }
+
+            with pytest.raises(ParallelGroupError) as exc_info:
+                handler_failure.on_group_finished(
+                    "group_critical",
+                    tasks_failure,
+                    results_failure,
+                    ExecutionContext.create(wf_failure.graph, "test_failure"),
+                )
+
+            assert "critical_task_fail" in str(exc_info.value)
 
 
 class TestHandlerInheritance:
@@ -360,3 +458,51 @@ class TestHandlerInheritance:
 
         # Default implementation should return class name
         assert handler.get_name() == "direct"  # Inherits from DirectTaskHandler
+
+
+class TestPolicySerialization:
+    """Validate serialization helpers for group execution policies."""
+
+    def test_serialize_and_resolve_strict_policy(self):
+        """String policies round-trip without instantiation issues."""
+        serialized = serialize_group_policy("strict")
+        assert serialized == "strict"
+
+        resolved = resolve_group_policy(serialized)
+        assert isinstance(resolved, StrictGroupPolicy)
+
+    def test_serialize_and_resolve_best_effort_policy(self):
+        serialized = serialize_group_policy(BestEffortGroupPolicy())
+        assert serialized == "best_effort"
+        resolved = resolve_group_policy(serialized)
+        assert isinstance(resolved, BestEffortGroupPolicy)
+
+    def test_serialize_and_resolve_critical_policy(self):
+        policy = CriticalGroupPolicy(["task_a", "task_b"])
+        serialized = serialize_group_policy(policy)
+
+        assert serialized == {
+            "type": "critical",
+            "critical_task_ids": ["task_a", "task_b"],
+        }
+
+        resolved = resolve_group_policy(serialized)
+        assert isinstance(resolved, CriticalGroupPolicy)
+        assert resolved.critical_task_ids == ["task_a", "task_b"]
+
+    def test_serialize_and_resolve_at_least_n_policy(self):
+        policy = AtLeastNGroupPolicy(min_success=3)
+        serialized = serialize_group_policy(policy)
+
+        assert serialized == {"type": "at_least_n", "min_success": 3}
+
+        resolved = resolve_group_policy(serialized)
+        assert isinstance(resolved, AtLeastNGroupPolicy)
+        assert resolved.min_success == 3
+
+    def test_resolve_raises_for_unknown_policy(self):
+        with pytest.raises(ValueError):
+            resolve_group_policy("unknown_policy")
+
+        with pytest.raises(ValueError):
+            resolve_group_policy({"type": "unknown"})

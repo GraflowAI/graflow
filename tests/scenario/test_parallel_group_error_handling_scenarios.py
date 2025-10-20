@@ -6,7 +6,11 @@ from graflow.coordination.coordinator import CoordinationBackend
 from graflow.core.context import ExecutionContext
 from graflow.core.decorators import task
 from graflow.core.engine import WorkflowEngine
-from graflow.core.handlers.direct import DirectTaskHandler
+from graflow.core.handlers.group_policy import (
+    AtLeastNGroupPolicy,
+    CriticalGroupPolicy,
+    GroupExecutionPolicy,
+)
 from graflow.core.workflow import workflow
 from graflow.exceptions import ParallelGroupError
 
@@ -146,18 +150,6 @@ class TestCustomHandlers:
     def test_best_effort_handler_continues_on_failure(self):
         """Test that best-effort handler continues even when tasks fail."""
 
-        class BestEffortHandler(DirectTaskHandler):
-            """Never fail - always succeed."""
-
-            def get_name(self):
-                return "best_effort"
-
-            def on_group_finished(self, group_id, tasks, results, context):  # type: ignore[override]
-                # Never raise exception
-                failed = [tid for tid, r in results.items() if not r.success]
-                if failed:
-                    print(f"Best-effort: {len(failed)} tasks failed but continuing")
-
         with workflow("test") as wf:
             @task
             def task_a():
@@ -178,7 +170,7 @@ class TestCustomHandlers:
             # Use best-effort handler
             parallel = (task_a | task_b | task_c).with_execution(
                 backend=CoordinationBackend.THREADING,
-                handler=BestEffortHandler()
+                policy="best_effort"
             )
 
             parallel >> final_task
@@ -197,24 +189,6 @@ class TestCustomHandlers:
 
     def test_at_least_n_success_handler(self):
         """Test at-least-N-success handler with various scenarios."""
-
-        class AtLeastNSuccessHandler(DirectTaskHandler):
-            def __init__(self, min_success: int):
-                self.min_success = min_success
-
-            def get_name(self):
-                return f"at_least_{self.min_success}"
-
-            def on_group_finished(self, group_id, tasks, results, context):  # type: ignore[override]
-                successful = [tid for tid, r in results.items() if r.success]
-                if len(successful) < self.min_success:
-                    failed = [(tid, r.error_message) for tid, r in results.items() if not r.success]
-                    raise ParallelGroupError(
-                        f"Only {len(successful)}/{self.min_success} tasks succeeded",
-                        group_id=group_id,
-                        failed_tasks=failed,
-                        successful_tasks=successful
-                    )
 
         # Test 1: 3 out of 4 succeed (min=2) - should pass
         with workflow("test1") as wf1:
@@ -236,7 +210,7 @@ class TestCustomHandlers:
 
             parallel = (task_a | task_b | task_c | task_d).with_execution(
                 backend=CoordinationBackend.THREADING,
-                handler=AtLeastNSuccessHandler(min_success=2)
+                policy=AtLeastNGroupPolicy(min_success=2)
             )
 
             engine = WorkflowEngine()
@@ -265,7 +239,7 @@ class TestCustomHandlers:
 
             parallel2 = (task_e | task_f | task_g | task_h).with_execution(
                 backend=CoordinationBackend.THREADING,
-                handler=AtLeastNSuccessHandler(min_success=2)
+                policy=AtLeastNGroupPolicy(min_success=2)
             )
 
             engine2 = WorkflowEngine()
@@ -281,26 +255,6 @@ class TestCustomHandlers:
     def test_critical_tasks_handler(self):
         """Test critical tasks handler that only fails on critical task failures."""
 
-        class CriticalTasksHandler(DirectTaskHandler):
-            def __init__(self, critical_task_ids: list[str]):
-                self.critical_task_ids = set(critical_task_ids)
-
-            def get_name(self):
-                return "critical_tasks"
-
-            def on_group_finished(self, group_id, tasks, results, context):  # type: ignore[override]
-                failed_critical = [
-                    tid for tid in self.critical_task_ids
-                    if tid in results and not results[tid].success
-                ]
-                if failed_critical:
-                    raise ParallelGroupError(
-                        f"Critical tasks failed: {failed_critical}",
-                        group_id=group_id,
-                        failed_tasks=[(tid, results[tid].error_message) for tid in failed_critical],
-                        successful_tasks=[tid for tid, r in results.items() if r.success]
-                    )
-
         # Test 1: Critical task succeeds, optional task fails - should pass
         with workflow("test1") as wf1:
             @task
@@ -313,7 +267,7 @@ class TestCustomHandlers:
 
             parallel = (critical_task | optional_task).with_execution(
                 backend=CoordinationBackend.THREADING,
-                handler=CriticalTasksHandler(critical_task_ids=["critical_task"])
+                policy=CriticalGroupPolicy(critical_task_ids=["critical_task"])
             )
 
             engine = WorkflowEngine()
@@ -335,7 +289,7 @@ class TestCustomHandlers:
 
             parallel2 = (critical_task2 | optional_task2).with_execution(
                 backend=CoordinationBackend.THREADING,
-                handler=CriticalTasksHandler(critical_task_ids=["critical_task2"])
+                policy=CriticalGroupPolicy(critical_task_ids=["critical_task2"])
             )
 
             engine2 = WorkflowEngine()
@@ -420,11 +374,11 @@ class TestHandlerWithDifferentBackends:
     def test_custom_handler_with_direct_backend(self):
         """Test custom handler with DIRECT backend."""
 
-        class TestHandler(DirectTaskHandler):
+        class TestPolicy(GroupExecutionPolicy):
             def get_name(self):
                 return "test"
 
-            def on_group_finished(self, group_id, tasks, results, context):  # type: ignore[override]
+            def on_group_finished(self, group_id, tasks, results, context):
                 # Custom logic: fail if more than 1 task fails
                 failed = [tid for tid, r in results.items() if not r.success]
                 if len(failed) > 1:
@@ -432,7 +386,7 @@ class TestHandlerWithDifferentBackends:
                         f"Too many failures: {len(failed)}",
                         group_id=group_id,
                         failed_tasks=[(tid, results[tid].error_message) for tid in failed],
-                        successful_tasks=[tid for tid, r in results.items() if r.success]
+                        successful_tasks=[tid for tid, r in results.items() if r.success],
                     )
 
         with workflow("test") as wf:
@@ -446,7 +400,7 @@ class TestHandlerWithDifferentBackends:
 
             parallel = (task_a | task_b).with_execution(
                 backend=CoordinationBackend.DIRECT,
-                handler=TestHandler()
+                policy=TestPolicy(),
             )
 
             engine = WorkflowEngine()
@@ -458,23 +412,25 @@ class TestHandlerWithDifferentBackends:
     def test_custom_handler_with_threading_backend(self):
         """Test custom handler with THREADING backend."""
 
-        class PercentageHandler(DirectTaskHandler):
+        class PercentagePolicy(GroupExecutionPolicy):
             def __init__(self, min_percentage: float):
                 self.min_percentage = min_percentage
 
             def get_name(self):
                 return f"percentage_{int(self.min_percentage * 100)}"
 
-            def on_group_finished(self, group_id, tasks, results, context):  # type: ignore[override]
+            def on_group_finished(self, group_id, tasks, results, context):
                 success_count = sum(1 for r in results.values() if r.success)
                 success_rate = success_count / len(results)
                 if success_rate < self.min_percentage:
-                    failed = [(tid, r.error_message) for tid, r in results.items() if not r.success]
+                    failed = [
+                        (tid, r.error_message) for tid, r in results.items() if not r.success
+                    ]
                     raise ParallelGroupError(
                         f"Success rate {success_rate:.1%} < {self.min_percentage:.1%}",
                         group_id=group_id,
                         failed_tasks=failed,
-                        successful_tasks=[tid for tid, r in results.items() if r.success]
+                        successful_tasks=[tid for tid, r in results.items() if r.success],
                     )
 
         with workflow("test") as wf:
@@ -497,7 +453,7 @@ class TestHandlerWithDifferentBackends:
             # 75% success rate (3/4), need 70%
             parallel = (task_a | task_b | task_c | task_d).with_execution(
                 backend=CoordinationBackend.THREADING,
-                handler=PercentageHandler(min_percentage=0.70)
+                policy=PercentagePolicy(min_percentage=0.70),
             )
 
             engine = WorkflowEngine()
