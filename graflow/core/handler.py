@@ -2,10 +2,13 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, Optional, Sequence
+from typing import TYPE_CHECKING, Dict, Optional, Sequence
 
 from graflow.core.context import ExecutionContext
 from graflow.core.task import Executable
+
+if TYPE_CHECKING:
+    from graflow.core.handlers.group_policy import GroupExecutionPolicy
 
 
 @dataclass
@@ -52,20 +55,17 @@ class TaskHandler(ABC):
 
         Examples:
             >>> # Execution handler: inherits from TaskHandler
-            >>> class DirectTaskHandler(TaskHandler):
+            >>> class DockerTaskHandler(TaskHandler):
             ...     def get_name(self):
-            ...         return "direct"
+            ...         return "docker"
             ...     def execute_task(self, task, context):
             ...         # ... implementation
             >>>
-            >>> # Policy handler: inherits from DirectTaskHandler
-            >>> class AtLeastNSuccessHandler(DirectTaskHandler):
-            ...     def __init__(self, min_success: int):
-            ...         self.min_success = min_success
-            ...     def get_name(self):
-            ...         return f"at_least_{self.min_success}"
-            ...     # execute_task() inherited from DirectTaskHandler
-            >>>
+            >>> # Policy handler: can reuse built-in names
+            >>> from graflow.core.handlers import AtLeastNGroupPolicy
+            >>> handler = AtLeastNGroupPolicy(min_success=2)
+            >>> handler.get_name()
+            'at_least_2'
             >>> # Default get_name() implementation (no override needed)
             >>> class MyHandler(TaskHandler):
             ...     # get_name() inherited -> returns "MyHandler"
@@ -100,6 +100,20 @@ class TaskHandler(ABC):
         """
         pass
 
+    def set_group_policy(self, policy: 'GroupExecutionPolicy') -> None:
+        """Assign a custom group execution policy for this handler."""
+        self._group_policy = policy
+
+    def get_group_policy(self) -> 'GroupExecutionPolicy':
+        """Return the group execution policy for this handler."""
+        from graflow.core.handlers.group_policy import StrictGroupPolicy
+
+        policy = getattr(self, "_group_policy", None)
+        if policy is None:
+            policy = StrictGroupPolicy()
+            self._group_policy = policy
+        return policy
+
     def on_group_finished(
         self,
         group_id: str,
@@ -131,41 +145,5 @@ class TaskHandler(ABC):
             Called after ALL tasks complete (success or failure).
             Handler decides whether to raise exception based on results.
         """
-        # Default implementation: Strict mode
-        from graflow.exceptions import ParallelGroupError
-
-        # Validate that all tasks have results
-        expected_task_ids = {task.task_id for task in tasks}
-        actual_task_ids = set(results.keys())
-
-        if expected_task_ids != actual_task_ids:
-            missing = expected_task_ids - actual_task_ids
-            unexpected = actual_task_ids - expected_task_ids
-
-            error_parts = []
-            if missing:
-                error_parts.append(f"missing results for tasks: {missing}")
-            if unexpected:
-                error_parts.append(f"unexpected results for tasks: {unexpected}")
-
-            raise ParallelGroupError(
-                f"Parallel group {group_id} result mismatch: {', '.join(error_parts)}",
-                group_id=group_id,
-                failed_tasks=[],
-                successful_tasks=list(actual_task_ids)
-            )
-
-        # Check for task failures
-        failed_tasks = [
-            (task_id, result.error_message or "Unknown error")
-            for task_id, result in results.items()
-            if not result.success
-        ]
-
-        if failed_tasks:
-            raise ParallelGroupError(
-                f"Parallel group {group_id} failed: {len(failed_tasks)} task(s) failed",
-                group_id=group_id,
-                failed_tasks=failed_tasks,
-                successful_tasks=[tid for tid, r in results.items() if r.success]
-            )
+        policy = self.get_group_policy()
+        policy.on_group_finished(group_id, tasks, results, context)

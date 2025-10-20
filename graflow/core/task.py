@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 from graflow.coordination.coordinator import CoordinationBackend
 from graflow.coordination.executor import GroupExecutor
@@ -11,7 +11,7 @@ from graflow.core.context import ExecutionContext
 from graflow.exceptions import GraflowRuntimeError
 
 if TYPE_CHECKING:
-    from graflow.core.handler import TaskHandler
+    from graflow.core.handlers.group_policy import GroupExecutionPolicy
 
 
 class Executable(ABC):
@@ -343,7 +343,7 @@ class ParallelGroup(Executable):
         self._execution_config = {
             "backend": None,  # None = use context.group_executor or default
             "backend_config": {},
-            "handler": None  # None = use default DirectTaskHandler (strict mode)
+            "policy": "strict",
         }
 
         # Register this parallel group to current workflow context
@@ -371,18 +371,16 @@ class ParallelGroup(Executable):
         self,
         backend: Optional[CoordinationBackend] = None,
         backend_config: Optional[dict] = None,
-        handler: Optional[TaskHandler] = None
+        policy: Union[str, GroupExecutionPolicy] = "strict",
     ) -> ParallelGroup:
-        """Configure execution backend and handler for this parallel group.
+        """Configure execution backend and group policy for this parallel group.
 
         Args:
             backend: Coordinator backend (DIRECT, THREADING, REDIS)
             backend_config: Backend-specific configuration
                 - THREADING: {"thread_count": int}
                 - REDIS: Future extension
-            handler: TaskHandler instance for group execution
-                    - TaskHandler instance: Passed directly to coordinator
-                    - None (default): Uses DirectTaskHandler (strict mode - all tasks must succeed)
+            policy: Group execution policy name or instance
 
         Returns:
             Self (for method chaining)
@@ -391,24 +389,22 @@ class ParallelGroup(Executable):
             # Default: All tasks must succeed (strict mode)
             (task_a | task_b | task_c).with_execution()
 
-            # Best-effort: Continue even if tasks fail (custom handler)
-            (task_a | task_b | task_c).with_execution(
-                handler=BestEffortHandler()
-            )
+            # Best-effort: Continue even if tasks fail
+            (task_a | task_b | task_c).with_execution(policy="best_effort")
 
             # At least 3 out of 4 tasks must succeed
             (task_a | task_b | task_c | task_d).with_execution(
-                handler=AtLeastNSuccessHandler(min_success=3)
+                policy=AtLeastNGroupPolicy(min_success=3)
             )
 
             # Critical tasks must succeed
             (task_a | task_b).with_execution(
-                handler=CriticalTasksHandler(critical_task_ids=["task_a"])
+                policy=CriticalGroupPolicy(critical_task_ids=["task_a"])
             )
 
         Note:
             Individual task execution handlers should be set at task level using @task(handler="...").
-            The handler parameter here controls parallel group success/failure policy via on_group_finished().
+            The ``policy`` parameter controls parallel group success/failure criteria.
         """
         if backend is not None:
             self._execution_config["backend"] = backend
@@ -416,8 +412,9 @@ class ParallelGroup(Executable):
         if backend_config is not None:
             self._execution_config["backend_config"].update(backend_config)
 
-        if handler is not None:
-            self._execution_config["handler"] = handler
+        from graflow.core.handlers.group_policy import serialize_group_policy
+
+        self._execution_config["policy"] = serialize_group_policy(policy)
 
         return self
 
@@ -440,11 +437,15 @@ class ParallelGroup(Executable):
             # Set execution context for each task
             task.set_execution_context(context)
 
-        # Extract handler from config
-        handler = self._execution_config.get("handler")
+        # Extract policy configuration
+        policy = self._execution_config.get("policy", "strict")
 
-        # Pass handler to executor
-        executor.execute_parallel_group(self.task_id, self.tasks, context, handler)
+        executor.execute_parallel_group(
+            self.task_id,
+            self.tasks,
+            context,
+            policy=policy,
+        )
 
     def _create_configured_executor(self) -> GroupExecutor:
         """Create GroupExecutor based on execution configuration.

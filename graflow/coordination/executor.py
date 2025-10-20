@@ -1,6 +1,6 @@
 """Parallel execution orchestrator for coordinating task groups."""
 
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from graflow.coordination.coordinator import CoordinationBackend, TaskCoordinator
 from graflow.coordination.redis import RedisCoordinator
@@ -11,8 +11,8 @@ from graflow.queue.redis import RedisTaskQueue
 if TYPE_CHECKING:
     from graflow.core.context import ExecutionContext
     from graflow.core.handler import TaskHandler
+    from graflow.core.handlers.group_policy import GroupExecutionPolicy
     from graflow.core.task import Executable
-
 
 class GroupExecutor:
     """Unified executor for parallel task groups supporting multiple backends."""
@@ -45,20 +45,24 @@ class GroupExecutor:
         group_id: str,
         tasks: List['Executable'],
         exec_context: 'ExecutionContext',
-        handler: Optional['TaskHandler'] = None
+        *,
+        policy: Union[str, 'GroupExecutionPolicy'] = "strict",
     ) -> None:
-        """Execute parallel group with handler.
+        """Execute parallel group with a configurable group policy.
 
         Args:
             group_id: Parallel group identifier
             tasks: List of tasks to execute
             exec_context: Execution context
-            handler: TaskHandler instance (None = use default DirectTaskHandler)
+            policy: Group execution policy (name or instance)
         """
-        # Use handler instance directly or create default
-        if handler is None:
-            from graflow.core.handlers.direct import DirectTaskHandler
-            handler = DirectTaskHandler()
+        from graflow.core.handlers.direct import DirectTaskHandler
+        from graflow.core.handlers.group_policy import resolve_group_policy
+
+        policy_instance = resolve_group_policy(policy)
+
+        handler = DirectTaskHandler()
+        handler.set_group_policy(policy_instance)
 
         # Execute with appropriate backend
         if self.backend == CoordinationBackend.DIRECT:
