@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 from graflow.coordination.coordinator import CoordinationBackend
 from graflow.coordination.executor import GroupExecutor
 from graflow.core.context import ExecutionContext
 from graflow.exceptions import GraflowRuntimeError
+
+if TYPE_CHECKING:
+    from graflow.core.handlers.group_policy import GroupExecutionPolicy
 
 
 class Executable(ABC):
@@ -339,7 +342,8 @@ class ParallelGroup(Executable):
         # Execution configuration for with_execution()
         self._execution_config = {
             "backend": None,  # None = use context.group_executor or default
-            "backend_config": {}
+            "backend_config": {},
+            "policy": "strict",
         }
 
         # Register this parallel group to current workflow context
@@ -366,43 +370,51 @@ class ParallelGroup(Executable):
     def with_execution(
         self,
         backend: Optional[CoordinationBackend] = None,
-        backend_config: Optional[dict] = None
+        backend_config: Optional[dict] = None,
+        policy: Union[str, GroupExecutionPolicy] = "strict",
     ) -> ParallelGroup:
-        """Configure execution backend (coordinator) for this parallel group.
+        """Configure execution backend and group policy for this parallel group.
 
         Args:
             backend: Coordinator backend (DIRECT, THREADING, REDIS)
             backend_config: Backend-specific configuration
                 - THREADING: {"thread_count": int}
                 - REDIS: Future extension
+            policy: Group execution policy name or instance
 
         Returns:
             Self (for method chaining)
 
         Examples:
-            >>> # Basic usage
-            >>> (task_a | task_b).with_execution(backend=CoordinationBackend.THREADING)
-            >>>
-            >>> # With configuration
-            >>> (task_a | task_b).with_execution(
-            ...     backend=CoordinationBackend.THREADING,
-            ...     backend_config={"thread_count": 4}
-            ... )
-            >>>
-            >>> # Method chaining
-            >>> group = (task_a | task_b | task_c) \\
-            ...     .with_execution(backend=CoordinationBackend.REDIS) \\
-            ...     .set_group_name("training_tasks")
+            # Default: All tasks must succeed (strict mode)
+            (task_a | task_b | task_c).with_execution()
+
+            # Best-effort: Continue even if tasks fail
+            (task_a | task_b | task_c).with_execution(policy="best_effort")
+
+            # At least 3 out of 4 tasks must succeed
+            (task_a | task_b | task_c | task_d).with_execution(
+                policy=AtLeastNGroupPolicy(min_success=3)
+            )
+
+            # Critical tasks must succeed
+            (task_a | task_b).with_execution(
+                policy=CriticalGroupPolicy(critical_task_ids=["task_a"])
+            )
 
         Note:
-            Handler configuration should be done at task level using @task decorator.
-            with_execution() configures only the coordinator (parallel execution method).
+            Individual task execution handlers should be set at task level using @task(handler="...").
+            The ``policy`` parameter controls parallel group success/failure criteria.
         """
         if backend is not None:
             self._execution_config["backend"] = backend
 
         if backend_config is not None:
             self._execution_config["backend_config"].update(backend_config)
+
+        from graflow.core.handlers.group_policy import canonicalize_group_policy
+
+        self._execution_config["policy"] = canonicalize_group_policy(policy)
 
         return self
 
@@ -425,7 +437,15 @@ class ParallelGroup(Executable):
             # Set execution context for each task
             task.set_execution_context(context)
 
-        executor.execute_parallel_group(self.task_id, self.tasks, context)
+        # Extract policy configuration
+        policy = self._execution_config.get("policy", "strict")
+
+        executor.execute_parallel_group(
+            self.task_id,
+            self.tasks,
+            context,
+            policy=policy,
+        )
 
     def _create_configured_executor(self) -> GroupExecutor:
         """Create GroupExecutor based on execution configuration.

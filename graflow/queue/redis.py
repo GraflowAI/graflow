@@ -159,20 +159,26 @@ class RedisTaskQueue(TaskQueue):
         queue_items = cast(list, self.redis_client.lrange(self.queue_key, 0, -1))
         return [str(item) for item in queue_items]
 
-    def notify_task_completion(self, task_id: str, success: bool,
-                             group_id: Optional[str] = None) -> None:
+    def notify_task_completion(
+        self,
+        task_id: str,
+        success: bool,
+        group_id: Optional[str] = None,
+        error_message: Optional[str] = None
+    ) -> None:
         """Notify task completion to redis.py functions.
 
         Args:
             task_id: Task identifier
             success: Whether task succeeded
             group_id: Group ID for barrier synchronization
+            error_message: Error message if task failed
         """
         if group_id:
             from graflow.coordination.redis import record_task_completion
             record_task_completion(
                 self.redis_client, self.key_prefix,
-                task_id, group_id, success
+                task_id, group_id, success, error_message
             )
 
     def cleanup(self) -> None:

@@ -178,8 +178,13 @@ class TaskQueue(ABC):
             'failures': 0
         }
 
-    def notify_task_completion(self, task_id: str, success: bool,
-                             group_id: Optional[str] = None) -> None:
+    def notify_task_completion(
+        self,
+        task_id: str,
+        success: bool,
+        group_id: Optional[str] = None,
+        error_message: Optional[str] = None
+    ) -> None:
         """Notify task completion for barrier synchronization.
 
         Default implementation does nothing. Subclasses can override
@@ -189,7 +194,11 @@ class TaskQueue(ABC):
             task_id: Task identifier
             success: Whether task succeeded
             group_id: Group ID for barrier synchronization
+            error_message: Error message if task failed
         """
         # Default implementation does nothing
-        logger.debug(f"Task {task_id} completed with success={success} in group {group_id}")
+        if success:
+            logger.debug(f"Task {task_id} completed successfully in group {group_id}")
+        else:
+            logger.debug(f"Task {task_id} failed in group {group_id}: {error_message}")
         pass

@@ -271,17 +271,22 @@ class TaskHandler(ABC):
             Override to provide a custom name.
 
         Examples:
+            >>> # Execution handler: inherits from TaskHandler
             >>> class DirectTaskHandler(TaskHandler):
             ...     def get_name(self):
             ...         return "direct"
+            ...     def execute_task(self, task, context):
+            ...         # ... implementation
             >>>
-            >>> class AtLeastNSuccessHandler(TaskHandler):
+            >>> # Policy handler: inherits from DirectTaskHandler
+            >>> class AtLeastNSuccessHandler(DirectTaskHandler):
             ...     def __init__(self, min_success: int):
             ...         self.min_success = min_success
             ...     def get_name(self):
             ...         return f"at_least_{self.min_success}"
+            ...     # execute_task() inherited from DirectTaskHandler
             >>>
-            >>> # Default implementation (no override needed)
+            >>> # Default get_name() implementation (no override needed)
             >>> class MyHandler(TaskHandler):
             ...     # get_name() inherited -> returns "MyHandler"
             ...     def execute_task(self, task, context): ...
@@ -1073,27 +1078,30 @@ class GroupExecutor:
 
 **Example - Picklable Handler**:
 ```python
-class AtLeastNSuccessHandler(TaskHandler):
+class AtLeastNSuccessHandler(DirectTaskHandler):
+    """Policy handler - inherits execute_task() from DirectTaskHandler."""
+
     def __init__(self, min_success: int):
         self.min_success = min_success  # Simple int - picklable
 
-    def execute_task(self, task, context):
-        # ...
+    # execute_task() inherited from DirectTaskHandler
 
     def on_group_finished(self, group_id, tasks, results, context):
-        # ...
+        # ... custom policy logic
 ```
 
 **Example - Non-Picklable Handler (Avoid)**:
 ```python
-class DatabaseHandler(TaskHandler):
+class DatabaseHandler(DirectTaskHandler):
     def __init__(self, db_connection):
         self.db_connection = db_connection  # ❌ Not picklable!
 ```
 
 **Best Practice for Distributed Execution**:
 ```python
-class DatabaseHandler(TaskHandler):
+class DatabaseHandler(DirectTaskHandler):
+    """Store connection info (picklable), not connection object."""
+
     def __init__(self, db_url: str):
         self.db_url = db_url  # ✅ Picklable string
         self._connection = None  # Lazy initialization
@@ -1747,16 +1755,16 @@ with workflow("test") as wf:
 
 ```python
 # First, implement a custom handler
-class BestEffortHandler(TaskHandler):
+class BestEffortHandler(DirectTaskHandler):
     """Continue even if tasks fail.
 
-    Inherits default execute_task() from TaskHandler.
+    Inherits execute_task() from DirectTaskHandler.
     """
 
     def get_name(self) -> str:
         return "best_effort"
 
-    # execute_task() inherited from TaskHandler (no need to override)
+    # execute_task() inherited from DirectTaskHandler (no need to override)
 
     def on_group_finished(self, group_id, tasks, results, context):
         failed = [tid for tid, r in results.items() if not r.success]
@@ -1793,10 +1801,10 @@ with workflow("test") as wf:
 ### Example 3: At Least N Success Handler
 
 ```python
-class AtLeastNSuccessHandler(TaskHandler):
+class AtLeastNSuccessHandler(DirectTaskHandler):
     """Need at least N tasks to succeed.
 
-    Inherits default execute_task() from TaskHandler.
+    Inherits execute_task() from DirectTaskHandler.
     """
 
     def __init__(self, min_success: int):
@@ -1805,7 +1813,7 @@ class AtLeastNSuccessHandler(TaskHandler):
     def get_name(self) -> str:
         return f"at_least_{self.min_success}"
 
-    # execute_task() inherited from TaskHandler (no need to override)
+    # execute_task() inherited from DirectTaskHandler (no need to override)
 
     def on_group_finished(self, group_id, tasks, results, context):
         successful = [tid for tid, r in results.items() if r.success]
@@ -1829,10 +1837,10 @@ class AtLeastNSuccessHandler(TaskHandler):
 ### Example 4: Critical Tasks Handler
 
 ```python
-class CriticalTasksHandler(TaskHandler):
+class CriticalTasksHandler(DirectTaskHandler):
     """Success if critical tasks succeed, ignore others.
 
-    Inherits default execute_task() from TaskHandler.
+    Inherits execute_task() from DirectTaskHandler.
     """
 
     def __init__(self, critical_task_ids: List[str]):
@@ -1841,7 +1849,7 @@ class CriticalTasksHandler(TaskHandler):
     def get_name(self) -> str:
         return "critical_tasks"
 
-    # execute_task() inherited from TaskHandler (no need to override)
+    # execute_task() inherited from DirectTaskHandler (no need to override)
 
     def on_group_finished(self, group_id, tasks, results, context):
         failed_critical = [
@@ -2046,9 +2054,16 @@ class BestEffortHandler(DirectTaskHandler):
 ### 1. Retry Support
 
 ```python
-class RetryOnFailureHandler(TaskHandler):
+class RetryOnFailureHandler(DirectTaskHandler):
+    """Retry failed tasks up to max_retries times.
+
+    Inherits execute_task() from DirectTaskHandler.
+    """
+
     def __init__(self, max_retries: int = 3):
         self.max_retries = max_retries
+
+    # execute_task() inherited from DirectTaskHandler
 
     def on_group_finished(self, group_id, tasks, results, context):
         failed_tasks = [tid for tid, r in results.items() if not r.success]
@@ -2066,9 +2081,16 @@ class RetryOnFailureHandler(TaskHandler):
 ### 2. Conditional Handlers
 
 ```python
-class ConditionalHandler(TaskHandler):
+class ConditionalHandler(DirectTaskHandler):
+    """Custom condition-based success criteria.
+
+    Inherits execute_task() from DirectTaskHandler.
+    """
+
     def __init__(self, condition: Callable[[Dict[str, TaskResult]], bool]):
         self.condition = condition
+
+    # execute_task() inherited from DirectTaskHandler
 
     def on_group_finished(self, group_id, tasks, results, context):
         if not self.condition(results):
@@ -2084,10 +2106,17 @@ conditional_handler = ConditionalHandler(
 ### 3. Weighted Success
 
 ```python
-class WeightedSuccessHandler(TaskHandler):
+class WeightedSuccessHandler(DirectTaskHandler):
+    """Weighted success criteria based on task importance.
+
+    Inherits execute_task() from DirectTaskHandler.
+    """
+
     def __init__(self, weights: Dict[str, float], threshold: float = 0.75):
         self.weights = weights
         self.threshold = threshold
+
+    # execute_task() inherited from DirectTaskHandler
 
     def on_group_finished(self, group_id, tasks, results, context):
         total_weight = sum(self.weights.values())

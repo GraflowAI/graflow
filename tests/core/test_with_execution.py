@@ -4,6 +4,7 @@ from graflow.coordination.coordinator import CoordinationBackend
 from graflow.coordination.executor import GroupExecutor
 from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
+from graflow.core.handlers.group_policy import AtLeastNGroupPolicy
 from graflow.core.task import ParallelGroup, Task
 from graflow.core.workflow import WorkflowContext
 
@@ -47,6 +48,28 @@ class TestWithExecution:
             config = group._execution_config["backend_config"]
             assert config["thread_count"] == 4
             assert config["timeout"] == 30
+
+    def test_with_execution_stores_policy_string(self):
+        """Passing a built-in policy name stores the serialized string."""
+        with WorkflowContext("test"):
+            task1 = Task("task1")
+            task2 = Task("task2")
+            group = ParallelGroup([task1, task2])
+
+            group.with_execution(policy="best_effort")
+
+            assert group._execution_config["policy"] == "best_effort"
+
+    def test_with_execution_serializes_policy_instance(self):
+        """Passing a policy instance stores a lightweight configuration."""
+        with WorkflowContext("test"):
+            task1 = Task("task1")
+            task2 = Task("task2")
+            group = ParallelGroup([task1, task2])
+
+            group.with_execution(policy=AtLeastNGroupPolicy(min_success=2))
+
+            assert group._execution_config["policy"] == {"type": "at_least_n", "min_success": 2}
 
     def test_with_execution_method_chaining(self):
         """Test method chaining with with_execution()."""
@@ -119,6 +142,8 @@ class TestWithExecutionRunBehavior:
                 CoordinationBackend.THREADING, {}
             )
             mock_executor.execute_parallel_group.assert_called_once()
+            _, kwargs = mock_executor.execute_parallel_group.call_args
+            assert kwargs["policy"] == group._execution_config["policy"]
 
     def test_run_uses_context_executor_when_backend_none(self, mocker):
         """Test that run() uses context.group_executor when backend is None."""
@@ -139,6 +164,8 @@ class TestWithExecutionRunBehavior:
 
             # Verify context.group_executor was used
             context.group_executor.execute_parallel_group.assert_called_once() # type: ignore
+            _, kwargs = context.group_executor.execute_parallel_group.call_args # type: ignore
+            assert kwargs["policy"] == group._execution_config["policy"] # type: ignore
 
     def test_run_with_execution_overrides_context_executor(self, mocker):
         """Test that with_execution() takes priority over context.group_executor."""
@@ -170,6 +197,8 @@ class TestWithExecutionRunBehavior:
                 CoordinationBackend.DIRECT, {}
             )
             mock_executor.execute_parallel_group.assert_called_once()
+            _, kwargs = mock_executor.execute_parallel_group.call_args
+            assert kwargs["policy"] == group._execution_config["policy"]
             context.group_executor.execute_parallel_group.assert_not_called() # type: ignore
 
     def test_run_uses_default_when_no_backend_and_no_context_executor(self, mocker):

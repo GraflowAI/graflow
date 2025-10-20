@@ -4,7 +4,7 @@ graflow.exceptions
 This module defines custom exceptions for the Graflow library.
 """
 
-from typing import Optional
+from typing import Optional, Sequence
 
 
 class GraflowError(Exception):
@@ -63,6 +63,33 @@ class ConfigError(GraflowError):
 
     def __init__(self, message: str, cause: Optional[Exception] = None):
         super().__init__(message, cause)
+
+
+class ParallelGroupError(GraflowRuntimeError):
+    """Exception raised when parallel group execution fails.
+
+    This is a subclass of GraflowRuntimeError, so it's compatible
+    with existing exception handling while providing specific
+    information about parallel group failures.
+
+    Attributes:
+        group_id: Parallel group identifier
+        failed_tasks: List of (task_id, error_message) tuples where error_message may be None
+        successful_tasks: List of successful task IDs
+    """
+
+    def __init__(
+        self,
+        message: str,
+        group_id: str,
+        failed_tasks: Sequence[tuple[str, str | None]],
+        successful_tasks: Sequence[str]
+    ):
+        super().__init__(message)
+        self.group_id = group_id
+        self.failed_tasks = failed_tasks
+        self.successful_tasks = successful_tasks
+
 
 def as_runtime_error(ex: Exception) -> GraflowRuntimeError:
     """Wrap a generic exception into a GraflowRuntimeError."""
