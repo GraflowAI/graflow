@@ -412,9 +412,9 @@ class ParallelGroup(Executable):
         if backend_config is not None:
             self._execution_config["backend_config"].update(backend_config)
 
-        from graflow.core.handlers.group_policy import serialize_group_policy
+        from graflow.core.handlers.group_policy import canonicalize_group_policy
 
-        self._execution_config["policy"] = serialize_group_policy(policy)
+        self._execution_config["policy"] = canonicalize_group_policy(policy)
 
         return self
 

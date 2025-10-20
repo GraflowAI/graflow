@@ -10,9 +10,10 @@ from graflow.core.handlers.group_policy import (
     AtLeastNGroupPolicy,
     BestEffortGroupPolicy,
     CriticalGroupPolicy,
+    GroupExecutionPolicy,
     StrictGroupPolicy,
+    canonicalize_group_policy,
     resolve_group_policy,
-    serialize_group_policy,
 )
 from graflow.core.workflow import workflow
 from graflow.exceptions import ParallelGroupError
@@ -465,21 +466,21 @@ class TestPolicySerialization:
 
     def test_serialize_and_resolve_strict_policy(self):
         """String policies round-trip without instantiation issues."""
-        serialized = serialize_group_policy("strict")
+        serialized = canonicalize_group_policy("strict")
         assert serialized == "strict"
 
         resolved = resolve_group_policy(serialized)
         assert isinstance(resolved, StrictGroupPolicy)
 
     def test_serialize_and_resolve_best_effort_policy(self):
-        serialized = serialize_group_policy(BestEffortGroupPolicy())
+        serialized = canonicalize_group_policy(BestEffortGroupPolicy())
         assert serialized == "best_effort"
         resolved = resolve_group_policy(serialized)
         assert isinstance(resolved, BestEffortGroupPolicy)
 
     def test_serialize_and_resolve_critical_policy(self):
         policy = CriticalGroupPolicy(["task_a", "task_b"])
-        serialized = serialize_group_policy(policy)
+        serialized = canonicalize_group_policy(policy)
 
         assert serialized == {
             "type": "critical",
@@ -492,7 +493,7 @@ class TestPolicySerialization:
 
     def test_serialize_and_resolve_at_least_n_policy(self):
         policy = AtLeastNGroupPolicy(min_success=3)
-        serialized = serialize_group_policy(policy)
+        serialized = canonicalize_group_policy(policy)
 
         assert serialized == {"type": "at_least_n", "min_success": 3}
 
@@ -506,3 +507,16 @@ class TestPolicySerialization:
 
         with pytest.raises(ValueError):
             resolve_group_policy({"type": "unknown"})
+
+    def test_canonicalize_and_resolve_custom_policy(self):
+        class DummyPolicy(GroupExecutionPolicy):
+            def on_group_finished(self, group_id, tasks, results, context):
+                pass
+
+        custom_policy = DummyPolicy()
+
+        serialized = canonicalize_group_policy(custom_policy)
+        assert serialized == {"type": "__custom__", "policy": custom_policy}
+
+        resolved = resolve_group_policy(serialized)
+        assert resolved is custom_policy

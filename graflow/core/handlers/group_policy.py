@@ -249,8 +249,14 @@ POLICY_REGISTRY: Dict[str, type[GroupExecutionPolicy]] = {
 }
 
 
-def serialize_group_policy(policy: Union[str, GroupExecutionPolicy]) -> Union[str, Dict[str, Any], GroupExecutionPolicy]:
-    """Serialize group policy to a lightweight representation when possible."""
+def canonicalize_group_policy(policy: Union[str, GroupExecutionPolicy]) -> Union[str, Dict[str, Any]]:
+    """Return a canonical representation for a group policy.
+
+    Built-in policies are normalized to strings or plain dictionaries to avoid
+    relying on pickle. Custom policies are wrapped in a dictionary that marks
+    the payload as `__custom__` while keeping the instance accessible for
+    immediate execution.
+    """
 
     if isinstance(policy, str):
         return policy
@@ -273,8 +279,10 @@ def serialize_group_policy(policy: Union[str, GroupExecutionPolicy]) -> Union[st
             "min_success": policy.min_success,
         }
 
-    # Custom policy - return instance (will rely on pickle if needed)
-    return policy
+    if isinstance(policy, GroupExecutionPolicy):
+        return {"type": "__custom__", "policy": policy}
+
+    raise TypeError(f"Unsupported policy specification type: {type(policy)!r}")
 
 
 def resolve_group_policy(policy: Union[str, Mapping[str, Any], GroupExecutionPolicy]) -> GroupExecutionPolicy:
@@ -313,6 +321,12 @@ def resolve_group_policy(policy: Union[str, Mapping[str, Any], GroupExecutionPol
 
         if policy_name in ("strict", "best_effort"):
             return resolve_group_policy(policy_name)
+
+        if policy_name == "__custom__":
+            instance = policy.get("policy")
+            if not isinstance(instance, GroupExecutionPolicy):
+                raise ValueError("Serialized custom policy must include a GroupExecutionPolicy instance")
+            return instance
 
         raise ValueError(
             f"Unknown serialized group execution policy '{policy_name}'."
