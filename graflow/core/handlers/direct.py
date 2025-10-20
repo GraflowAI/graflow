@@ -48,5 +48,5 @@ class DirectTaskHandler(TaskHandler):
         except Exception as e:
             # Store exception in context
             context.set_result(task_id, e)
-            logger.error(f"[DirectTaskHandler] Task {task_id} failed: {e}")
+            logger.debug(f"[DirectTaskHandler] Task {task_id} failed: {e}")
             raise

@@ -113,7 +113,7 @@ class WorkflowEngine:
                     self._execute_task(task, context)
             except Exception as e:
                 # Exception already stored by handler, just re-raise
-                raise exceptions.as_runtime_error(e) from e
+                raise exceptions.as_runtime_error(e) # noqa: B904
 
             # Step increment for all executed tasks
             context.increment_step()
