@@ -77,12 +77,15 @@ class ThreadingCoordinator(TaskCoordinator):
         # Submit all tasks to thread pool with isolated branch contexts
         futures = []
         future_context_map: dict[concurrent.futures.Future, ExecutionContext] = {}
+        future_task_map: Dict[concurrent.futures.Future, str] = {}
+
         for task in tasks:
             branch_context = execution_context.create_branch_context(branch_id=task.task_id)
 
             future = self._executor.submit(execute_task_with_engine, task, branch_context)
             futures.append(future)
             future_context_map[future] = branch_context
+            future_task_map[future] = task.task_id
 
         # Wait for all tasks to complete and collect results
         completed_futures = concurrent.futures.as_completed(futures)
@@ -111,11 +114,7 @@ class ThreadingCoordinator(TaskCoordinator):
             except Exception as e:
                 print(f"  ✗ Future execution failed: {e}")
                 # Create failure result for unexpected exceptions
-                task_id = "unknown"
-                for tid, ctx in future_context_map.items():
-                    if tid == future:
-                        task_id = ctx.session_id
-                        break
+                task_id = future_task_map.get(future, "unknown")
                 results[task_id] = TaskResult(
                     task_id=task_id,
                     success=False,
