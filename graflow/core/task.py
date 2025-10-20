@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from graflow.coordination.coordinator import CoordinationBackend
 from graflow.coordination.executor import GroupExecutor
 from graflow.core.context import ExecutionContext
 from graflow.exceptions import GraflowRuntimeError
+
+if TYPE_CHECKING:
+    from graflow.core.handler import TaskHandler
 
 
 class Executable(ABC):
@@ -339,7 +342,8 @@ class ParallelGroup(Executable):
         # Execution configuration for with_execution()
         self._execution_config = {
             "backend": None,  # None = use context.group_executor or default
-            "backend_config": {}
+            "backend_config": {},
+            "handler": None  # None = use default DirectTaskHandler (strict mode)
         }
 
         # Register this parallel group to current workflow context
@@ -366,43 +370,54 @@ class ParallelGroup(Executable):
     def with_execution(
         self,
         backend: Optional[CoordinationBackend] = None,
-        backend_config: Optional[dict] = None
+        backend_config: Optional[dict] = None,
+        handler: Optional[TaskHandler] = None
     ) -> ParallelGroup:
-        """Configure execution backend (coordinator) for this parallel group.
+        """Configure execution backend and handler for this parallel group.
 
         Args:
             backend: Coordinator backend (DIRECT, THREADING, REDIS)
             backend_config: Backend-specific configuration
                 - THREADING: {"thread_count": int}
                 - REDIS: Future extension
+            handler: TaskHandler instance for group execution
+                    - TaskHandler instance: Passed directly to coordinator
+                    - None (default): Uses DirectTaskHandler (strict mode - all tasks must succeed)
 
         Returns:
             Self (for method chaining)
 
         Examples:
-            >>> # Basic usage
-            >>> (task_a | task_b).with_execution(backend=CoordinationBackend.THREADING)
-            >>>
-            >>> # With configuration
-            >>> (task_a | task_b).with_execution(
-            ...     backend=CoordinationBackend.THREADING,
-            ...     backend_config={"thread_count": 4}
-            ... )
-            >>>
-            >>> # Method chaining
-            >>> group = (task_a | task_b | task_c) \\
-            ...     .with_execution(backend=CoordinationBackend.REDIS) \\
-            ...     .set_group_name("training_tasks")
+            # Default: All tasks must succeed (strict mode)
+            (task_a | task_b | task_c).with_execution()
+
+            # Best-effort: Continue even if tasks fail (custom handler)
+            (task_a | task_b | task_c).with_execution(
+                handler=BestEffortHandler()
+            )
+
+            # At least 3 out of 4 tasks must succeed
+            (task_a | task_b | task_c | task_d).with_execution(
+                handler=AtLeastNSuccessHandler(min_success=3)
+            )
+
+            # Critical tasks must succeed
+            (task_a | task_b).with_execution(
+                handler=CriticalTasksHandler(critical_task_ids=["task_a"])
+            )
 
         Note:
-            Handler configuration should be done at task level using @task decorator.
-            with_execution() configures only the coordinator (parallel execution method).
+            Individual task execution handlers should be set at task level using @task(handler="...").
+            The handler parameter here controls parallel group success/failure policy via on_group_finished().
         """
         if backend is not None:
             self._execution_config["backend"] = backend
 
         if backend_config is not None:
             self._execution_config["backend_config"].update(backend_config)
+
+        if handler is not None:
+            self._execution_config["handler"] = handler
 
         return self
 
@@ -425,7 +440,11 @@ class ParallelGroup(Executable):
             # Set execution context for each task
             task.set_execution_context(context)
 
-        executor.execute_parallel_group(self.task_id, self.tasks, context)
+        # Extract handler from config
+        handler = self._execution_config.get("handler")
+
+        # Pass handler to executor
+        executor.execute_parallel_group(self.task_id, self.tasks, context, handler)
 
     def _create_configured_executor(self) -> GroupExecutor:
         """Create GroupExecutor based on execution configuration.

@@ -16,10 +16,17 @@ class DirectTaskHandler(TaskHandler):
     or process isolation. It's the default and most straightforward
     execution method.
 
+    Provides concrete implementation of execute_task() (abstract in TaskHandler).
+    Policy handlers should inherit from this class to get execute_task() for free.
+
     Examples:
         >>> handler = DirectTaskHandler()
         >>> handler.execute_task(my_task, context)
     """
+
+    def get_name(self) -> str:
+        """Return handler name."""
+        return "direct"
 
     def execute_task(self, task: Executable, context: ExecutionContext) -> None:
         """Execute task and store result in context.

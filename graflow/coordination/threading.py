@@ -1,12 +1,14 @@
 """Threading-based coordination backend for local parallel execution."""
 
 import concurrent.futures
-from typing import TYPE_CHECKING, List, Optional
+import time
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 from graflow.coordination.coordinator import TaskCoordinator
 
 if TYPE_CHECKING:
     from graflow.core.context import ExecutionContext
+    from graflow.core.handler import TaskHandler
     from graflow.core.task import Executable
 
 
@@ -27,8 +29,23 @@ class ThreadingCoordinator(TaskCoordinator):
                 thread_name_prefix="ThreadingCoordinator"
             )
 
-    def execute_group(self, group_id: str, tasks: List['Executable'], execution_context: 'ExecutionContext') -> None:
-        """Execute parallel group using WorkflowEngine in thread pool."""
+    def execute_group(
+        self,
+        group_id: str,
+        tasks: List['Executable'],
+        execution_context: 'ExecutionContext',
+        handler: 'TaskHandler'
+    ) -> None:
+        """Execute parallel group using WorkflowEngine in thread pool.
+
+        Args:
+            group_id: Parallel group identifier
+            tasks: List of tasks to execute
+            execution_context: Execution context
+            handler: TaskHandler instance for group execution
+        """
+        from graflow.core.handler import TaskResult
+
         self._ensure_executor()
         assert self._executor is not None  # Type checker hint
 
@@ -40,9 +57,10 @@ class ThreadingCoordinator(TaskCoordinator):
             print(f"  No tasks in group {group_id}")
             return
 
-        def execute_task_with_engine(task: 'Executable', branch_context: 'ExecutionContext') -> tuple[str, bool, str]:
+        def execute_task_with_engine(task: 'Executable', branch_context: 'ExecutionContext') -> tuple[str, bool, str, float]:
             """Execute single task using WorkflowEngine within a branch context."""
             task_id = task.task_id
+            start_time = time.time()
             try:
                 from graflow.core.engine import WorkflowEngine
 
@@ -50,11 +68,11 @@ class ThreadingCoordinator(TaskCoordinator):
                 print(f"  - Executing in session '{branch_context.session_id}': {task_id}")
                 engine.execute(branch_context, start_task_id=task_id)
 
-                return task_id, True, "Success"
+                return task_id, True, "Success", time.time() - start_time
             except Exception as e:
                 error_msg = f"Task {task_id} failed: {e}"
                 print(f"    {error_msg}")
-                return task_id, False, str(e)
+                return task_id, False, str(e), time.time() - start_time
 
         # Submit all tasks to thread pool with isolated branch contexts
         futures = []
@@ -68,26 +86,47 @@ class ThreadingCoordinator(TaskCoordinator):
 
         # Wait for all tasks to complete and collect results
         completed_futures = concurrent.futures.as_completed(futures)
-        success_count = 0
-        failure_count = 0
+        results: Dict[str, TaskResult] = {}
 
         for future in completed_futures:
             branch_context = future_context_map[future]
             try:
-                task_id, success, message = future.result()
+                task_id, success, message, duration = future.result()
+
+                # Create TaskResult
+                results[task_id] = TaskResult(
+                    task_id=task_id,
+                    success=success,
+                    error_message=message if not success else None,
+                    duration=duration,
+                    timestamp=time.time()
+                )
+
                 if success:
-                    success_count += 1
                     print(f"  ✓ Task {task_id} completed successfully")
                     execution_context.merge_results(branch_context)
                     execution_context.mark_branch_completed(task_id)
                 else:
-                    failure_count += 1
                     print(f"  ✗ Task {task_id} failed: {message}")
             except Exception as e:
-                failure_count += 1
                 print(f"  ✗ Future execution failed: {e}")
+                # Create failure result for unexpected exceptions
+                task_id = "unknown"
+                for tid, ctx in future_context_map.items():
+                    if tid == future:
+                        task_id = ctx.session_id
+                        break
+                results[task_id] = TaskResult(
+                    task_id=task_id,
+                    success=False,
+                    error_message=str(e),
+                    timestamp=time.time()
+                )
 
-        print(f"  Threading group {group_id} completed: {success_count} success, {failure_count} failed")
+        print(f"  Threading group {group_id} completed: {len([r for r in results.values() if r.success])} success, {len([r for r in results.values() if not r.success])} failed")
+
+        # Apply handler (can raise ParallelGroupError)
+        handler.on_group_finished(group_id, tasks, results, execution_context)
 
     def shutdown(self) -> None:
         """Shutdown the coordinator and cleanup resources."""

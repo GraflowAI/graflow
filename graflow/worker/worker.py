@@ -303,6 +303,7 @@ class TaskWorker:
             success = result.get("success", False)
             duration = result.get("duration", 0.0)
             is_timeout = result.get("timeout", False)
+            error_message = result.get("error") if not success else None
 
             # Update metrics
             self._update_metrics(success, duration, is_timeout)
@@ -310,7 +311,7 @@ class TaskWorker:
             # Notify task completion via TaskQueue for barrier synchronization
             if task_spec.group_id:
                 self.queue.notify_task_completion(
-                    task_id, success, task_spec.group_id
+                    task_id, success, task_spec.group_id, error_message
                 )
 
             if success:
