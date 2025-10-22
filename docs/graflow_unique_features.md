@@ -1472,15 +1472,6 @@ It fills the gap between lightweight tools (LangGraph) and heavyweight infrastru
 
 ---
 
-## References
-
-- **Project Repository**: [https://github.com/yourorg/graflow](https://github.com/yourorg/graflow)
-- **Documentation**: [https://docs.graflow.io](https://docs.graflow.io)
-- **Examples**: `examples/` directory (27 production-ready examples)
-- **Community**: Discord, GitHub Discussions
-
----
-
 **Document Maintainer**: Graflow Team
 **Last Review**: 2025-10-22
 **Next Review**: Quarterly

@@ -1472,15 +1472,6 @@ Graflowは**新世代のワークフローオーケストレーション**を代
 
 ---
 
-## リファレンス
-
-- **プロジェクトリポジトリ**: [https://github.com/yourorg/graflow](https://github.com/yourorg/graflow)
-- **ドキュメント**: [https://docs.graflow.io](https://docs.graflow.io)
-- **サンプル**: `examples/`ディレクトリ（27の本番環境対応サンプル）
-- **コミュニティ**: Discord、GitHub Discussions
-
----
-
 **ドキュメント管理者**: Graflowチーム
 **最終レビュー**: 2025-10-22
 **次回レビュー**: 四半期ごと
