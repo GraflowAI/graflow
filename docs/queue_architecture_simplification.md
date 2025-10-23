@@ -58,11 +58,10 @@ This yields a clean separation:
 - Keep for external use, but mark Redis branch as “for coordinator/workers”.
 - Consider `TaskQueueFactory` helpers that return in-memory queues for tests.
 
-### Redis Task Flow
-
 - `RedisCoordinator` creates its own `RedisTaskQueue` from `backend_config` supplied by `GroupExecutor`.
 - `TaskWorker` receives a `RedisTaskQueue` directly (e.g., instantiated in `graflow/worker/main.py` from Redis settings).
 - The execution context’s in-memory queue is used only for local scheduling and checkpoint restore; it is never shared with distributed components.
+- Redis queue keys are derived solely from a user-supplied `key_prefix` (no session coupling), allowing workers to attach to queues without knowledge of a specific `ExecutionContext.session_id`.
 
 ### Executor (`graflow/coordination/executor.py`)
 
@@ -79,7 +78,8 @@ This yields a clean separation:
 | Area | Impact |
 |------|--------|
 | **API** | `ExecutionContext.create` signature change (no `queue_backend` argument). |
-| **Workers** | TaskWorker CLI / constructor assumes Redis queues only; the CLI instantiates a RedisTaskQueue from connection settings and passes it in. |
+| **Workers** | TaskWorker CLI / constructor assumes Redis queues only; the CLI instantiates a RedisTaskQueue from connection settings (host/port/db/key prefix) and passes it in. |
+| **Redis Queues** | Queue keys no longer include `session_id`; a shared key prefix is sufficient for coordinators and workers to locate the same queue. |
 | **Testing** | Simplifies most tests (only in-memory queues), but distributed tests need explicit Redis setup through coordinator/worker APIs. |
 | **Documentation** | Update queue/worker docs to reflect new separation. |
 | **Checkpoints** | Simplifies checkpoint state (always in-memory queue). Need migration notes for existing checkpoints that stored Redis queue metadata. |
@@ -97,6 +97,7 @@ This yields a clean separation:
    - Refresh worker guides, distributed execution docs, and feature comparison.
 3. **Phase 3 – Cleanup**
    - Remove unused Redis queue serialization helpers from ExecutionContext.
+   - Migrate existing Redis queues to the prefix-only key scheme and provide guidance/scripts for legacy deployments.
    - Monitor for user feedback; consider providing convert script for legacy checkpoints if needed.
 
 ---
