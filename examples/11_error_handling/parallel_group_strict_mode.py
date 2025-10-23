@@ -163,7 +163,7 @@ def example_multiple_failures():
 
             assert len(e.failed_tasks) == 2
             assert set(e.successful_tasks) == {"task_b"}
-        
+
     print()
 
 

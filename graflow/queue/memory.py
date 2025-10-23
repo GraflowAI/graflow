@@ -16,9 +16,17 @@ class InMemoryTaskQueue(TaskQueue):
         super().__init__(execution_context)
         self._queue: deque[TaskSpec] = deque()
         if start_node:
-            # Create a simple task for the start node (import locally to avoid circular import)
-            from graflow.core.task import Task
-            start_task = Task(start_node, register_to_context=False)
+            # Get task from graph instead of creating a new Task object
+            # This ensures single source of truth and preserves task metadata
+            start_task = execution_context.graph.get_node(start_node)
+
+            if start_task is None:
+                available_nodes = list(execution_context.graph.nodes.keys())
+                raise ValueError(
+                    f"Start node '{start_node}' not found in graph. "
+                    f"Available nodes: {available_nodes}"
+                )
+
             task_spec = TaskSpec(
                 executable=start_task,
                 execution_context=execution_context
@@ -69,6 +77,10 @@ class InMemoryTaskQueue(TaskQueue):
     def to_list(self) -> list[str]:
         """Get list of node IDs in queue order."""
         return [task_spec.task_id for task_spec in self._queue]
+
+    def get_pending_task_specs(self) -> list[TaskSpec]:
+        """Return pending TaskSpec objects (shallow copy)."""
+        return list(self._queue)
 
     # === Phase 3: Advanced features ===
     def retry_failed_task(self, task_spec: TaskSpec) -> bool:

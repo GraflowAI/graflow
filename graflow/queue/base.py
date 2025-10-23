@@ -5,7 +5,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 if TYPE_CHECKING:
     from graflow.core.context import ExecutionContext
@@ -139,6 +139,10 @@ class TaskQueue(ABC):
     def get_task_spec(self, task_id: str) -> Optional[TaskSpec]:
         """Get TaskSpec by task ID."""
         return self._task_specs.get(task_id)
+
+    def get_pending_task_specs(self) -> List[TaskSpec]:
+        """Return TaskSpec objects for pending tasks (checkpoint helper)."""
+        return []
 
     # === Phase 3: Advanced features ===
     def configure(self, enable_retry: bool = False, enable_metrics: bool = False) -> None:

@@ -32,3 +32,7 @@ class CycleController:
         """Register a cycle execution and return current count."""
         self.cycle_counts[node_id] = self.cycle_counts.get(node_id, 0) + 1
         return self.cycle_counts[node_id]
+
+    def get_cycle_count(self, node_id: str) -> int:
+        """Return how many times the given node has executed (0 if never)."""
+        return self.cycle_counts.get(node_id, 0)

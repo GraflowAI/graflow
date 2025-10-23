@@ -110,6 +110,60 @@ class TaskExecutionContext:
         """Get elapsed time since task started."""
         return time.time() - self.start_time
 
+    def checkpoint(
+        self,
+        metadata: Optional[dict[str, Any]] = None,
+        *,
+        path: Optional[str] = None,
+        deferred: bool = True
+    ) -> Optional[tuple[str, Any]]:
+        """Create or request a checkpoint from within the task.
+
+        Args:
+            metadata: User-supplied metadata stored alongside the checkpoint.
+            path: Optional explicit checkpoint path. When omitted a path is generated.
+            deferred: If True (default), the checkpoint is created after the
+                current task completes and before successors execute. When False,
+                the checkpoint is written immediately and the workflow will
+                resume from this task when restored.
+
+        Returns:
+            (path, metadata) tuple for immediate checkpoints; None when deferred.
+        """
+        enriched_metadata: dict[str, Any] = dict(metadata) if metadata else {}
+        enriched_metadata.setdefault("task_id", self.task_id)
+        enriched_metadata.setdefault("cycle_count", self.cycle_count)
+        enriched_metadata.setdefault("elapsed_time", self.elapsed_time())
+        enriched_metadata.setdefault("mode", "deferred" if deferred else "immediate")
+
+        if deferred:
+            self.execution_context.request_checkpoint(
+                enriched_metadata,
+                path=path,
+            )
+            return None
+
+        # Immediate checkpoint: capture current task as pending work so resume
+        # continues from the same task.
+        from graflow.core.checkpoint import CheckpointManager
+        from graflow.queue.base import TaskSpec
+
+        current_task = self.execution_context.graph.get_node(self.task_id)
+        current_spec = TaskSpec(
+            executable=current_task,
+            execution_context=self.execution_context,
+        )
+
+        checkpoint_path, checkpoint_metadata = CheckpointManager.create_checkpoint(
+            self.execution_context,
+            path=path,
+            metadata=enriched_metadata,
+            include_current_task=current_spec,
+        )
+        self.execution_context.checkpoint_metadata = checkpoint_metadata.to_dict()
+        self.execution_context.last_checkpoint_path = checkpoint_path
+        return checkpoint_path, checkpoint_metadata
+
     def __str__(self) -> str:
         return f"TaskExecutionContext(task_id={self.task_id}, cycle_count={self.cycle_count})"
 
@@ -195,6 +249,14 @@ class ExecutionContext:
         self._channel_backend_type = channel_backend
         self._original_config = base_config
 
+        # Checkpoint-related state
+        self.completed_tasks: set[str] = set()
+        self.checkpoint_metadata: dict[str, Any] = {}
+        self.last_checkpoint_path: Optional[str] = None
+        self.checkpoint_requested: bool = False
+        self.checkpoint_request_metadata: Optional[dict[str, Any]] = None
+        self.checkpoint_request_path: Optional[str] = None
+
     def create_branch_context(self, branch_id: str) -> ExecutionContext:
         """Create a child execution context with isolated queue/channel state."""
         branch_session_id = f"{self.session_id}_{branch_id}"
@@ -227,7 +289,7 @@ class ExecutionContext:
         return
 
     @classmethod
-    def create(cls, graph: TaskGraph, start_node: str, max_steps: int = 10,
+    def create(cls, graph: TaskGraph, start_node: Optional[str] = None, max_steps: int = 10,
                default_max_cycles: int = 10, default_max_retries: int = 3,
                queue_backend: Union[QueueBackend, str] = QueueBackend.IN_MEMORY,
                channel_backend: str = "memory",
@@ -235,6 +297,11 @@ class ExecutionContext:
         """Create a new execution context with configurable queue and channel backends.
 
         Args:
+            graph: Task graph defining the workflow
+            start_node: Optional starting task node (can be None for checkpoint scenarios)
+            max_steps: Maximum execution steps
+            default_max_cycles: Default maximum cycles for tasks
+            default_max_retries: Default maximum retry attempts
             queue_backend: Backend for task queue (default: IN_MEMORY)
             channel_backend: Backend for inter-task communication (default: memory)
             config: Configuration applied to both queue and channel (e.g., redis_client, key_prefix)
@@ -318,6 +385,45 @@ class ExecutionContext:
         """Get the currently executing task ID (backward compatibility)."""
         ctx = self.current_task_context
         return ctx.task_id if ctx else None
+
+    # === Checkpoint helpers ===
+
+    def mark_task_completed(self, task_id: str) -> None:
+        """Track task completion for checkpoint state."""
+        self.completed_tasks.add(task_id)
+
+    def request_checkpoint(
+        self,
+        metadata: Optional[dict[str, Any]] = None,
+        *,
+        path: Optional[str] = None,
+    ) -> None:
+        """Request a checkpoint after current task completes."""
+        self.checkpoint_requested = True
+        # Store a shallow copy to avoid accidental mutation by caller
+        self.checkpoint_request_metadata = dict(metadata) if metadata else {}
+        self.checkpoint_request_path = path
+
+    def clear_checkpoint_request(self) -> None:
+        """Reset checkpoint request flags."""
+        self.checkpoint_requested = False
+        self.checkpoint_request_metadata = None
+        self.checkpoint_request_path = None
+
+    def get_checkpoint_state(self) -> dict[str, Any]:
+        """Collect minimal checkpoint state for serialization."""
+        return {
+            "schema_version": "1.0",
+            "session_id": self.session_id,
+            "start_node": self.start_node,
+            "steps": self.steps,
+            "completed_tasks": list(self.completed_tasks),
+            "cycle_counts": dict(self.cycle_controller.cycle_counts),
+            "backend": {
+                "queue": self._queue_backend_type,
+                "channel": self._channel_backend_type,
+            },
+        }
 
     @property
     def goto_called(self) -> bool:
@@ -583,6 +689,17 @@ class ExecutionContext:
         # GroupExecutor is left as None (can be reset if needed)
         if not hasattr(self, 'group_executor'):
             self.group_executor = None
+
+        # Ensure checkpoint attributes exist for older checkpoints
+        if not hasattr(self, 'completed_tasks') or self.completed_tasks is None:
+            self.completed_tasks = set()
+        if not hasattr(self, 'checkpoint_metadata') or self.checkpoint_metadata is None:
+            self.checkpoint_metadata = {}
+        if not hasattr(self, 'last_checkpoint_path'):
+            self.last_checkpoint_path = None
+        self.checkpoint_requested = False
+        self.checkpoint_request_metadata = None
+        self.checkpoint_request_path = None
 
     def save(self, path: str = "execution_context.pkl") -> None:
         """Save execution context to a pickle file using cloudpickle.
