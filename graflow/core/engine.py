@@ -113,7 +113,7 @@ class WorkflowEngine:
                     self._execute_task(task, context)
             except Exception as e:
                 # Exception already stored by handler, just re-raise
-                raise exceptions.as_runtime_error(e)  # noqa: B904
+                raise exceptions.as_runtime_error(e)
 
             # Handle successor scheduling
             if context.goto_called:
