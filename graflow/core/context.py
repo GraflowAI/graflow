@@ -145,7 +145,7 @@ class TaskExecutionContext:
 
         # Immediate checkpoint: capture current task as pending work so resume
         # continues from the same task.
-        from graflow.checkpoint import CheckpointManager
+        from graflow.core.checkpoint import CheckpointManager
         from graflow.queue.base import TaskSpec
 
         current_task = self.execution_context.graph.get_node(self.task_id)
