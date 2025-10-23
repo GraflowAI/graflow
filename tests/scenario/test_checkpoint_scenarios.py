@@ -23,8 +23,17 @@ import pytest
 from graflow.core.checkpoint import CheckpointManager
 from graflow.core.context import ExecutionContext
 from graflow.core.decorators import task
-from graflow.core.engine import WorkflowEngine
 from graflow.core.graph import TaskGraph
+
+
+def run_task(context: ExecutionContext, task_id: str):
+    """Execute a single task within the given execution context."""
+    task = context.graph.get_node(task_id)
+    with context.executing_task(task):
+        result = task.run()
+    if result is not None:
+        context.set_result(task_id, result)
+    return result
 
 
 class TestStateBasedCheckpointScenarios:
@@ -84,21 +93,20 @@ class TestStateBasedCheckpointScenarios:
         context.channel.set("order_data", {"id": "ORD123", "amount": 100})
         context.channel.set("order_state", "NEW")
 
-        engine = WorkflowEngine()
-
         with tempfile.TemporaryDirectory() as tmpdir:
             # Execute first state transition (NEW -> VALIDATED)
             next_task = context.task_queue.get_next_task()
+            assert next_task is not None
             assert next_task == "process_order"
 
-            task_obj = graph.get_node(next_task)
-            task_obj.execute(context)
+            run_task(context, next_task)
             context.mark_task_completed(next_task)
             context.increment_step()
 
             # Check that checkpoint was requested
             assert context.checkpoint_requested
             checkpoint_metadata = context.checkpoint_request_metadata
+            assert checkpoint_metadata is not None
             assert checkpoint_metadata["stage"] == "validation_complete"
 
             # Create checkpoint as engine would do
@@ -121,14 +129,15 @@ class TestStateBasedCheckpointScenarios:
 
             # Execute second state transition (VALIDATED -> PAID)
             next_task = restored_context.task_queue.get_next_task()
-            task_obj = graph.get_node(next_task)
-            task_obj.execute(restored_context)
+            assert next_task is not None
+            run_task(restored_context, next_task)
             restored_context.mark_task_completed(next_task)
             restored_context.increment_step()
 
             # Check checkpoint request for PAID state
             assert restored_context.checkpoint_requested
             checkpoint_metadata_2 = restored_context.checkpoint_request_metadata
+            assert checkpoint_metadata_2 is not None
             assert checkpoint_metadata_2["stage"] == "payment_complete"
 
             # Create second checkpoint
@@ -145,8 +154,8 @@ class TestStateBasedCheckpointScenarios:
 
             # Execute final state transition (PAID -> SHIPPED)
             next_task = final_context.task_queue.get_next_task()
-            task_obj = graph.get_node(next_task)
-            result = task_obj.execute(final_context)
+            assert next_task is not None
+            result = run_task(final_context, next_task)
 
             assert result == "ORDER_COMPLETE"
             assert final_context.channel.get("order_state") == "SHIPPED"
@@ -194,18 +203,19 @@ class TestStateBasedCheckpointScenarios:
             for i in range(6):
                 next_task = context.task_queue.get_next_task()
                 if next_task:
-                    task_obj = graph.get_node(next_task)
-                    task_obj.execute(context)
+                    run_task(context, next_task)
                     context.mark_task_completed(next_task)
                     context.increment_step()
 
                     # Create checkpoint if requested
                     if context.checkpoint_requested:
                         checkpoint_path = os.path.join(tmpdir, f"checkpoint_iter_{i+1}")
+                        checkpoint_metadata = context.checkpoint_request_metadata
+                        assert checkpoint_metadata is not None
                         CheckpointManager.create_checkpoint(
                             context,
                             path=checkpoint_path,
-                            metadata=context.checkpoint_request_metadata
+                            metadata=checkpoint_metadata
                         )
                         context.clear_checkpoint_request()
 
@@ -224,17 +234,18 @@ class TestStateBasedCheckpointScenarios:
             for i in range(4):  # Iterations 7-10
                 next_task = restored_context.task_queue.get_next_task()
                 if next_task:
-                    task_obj = graph.get_node(next_task)
-                    result = task_obj.execute(restored_context)
+                    result = run_task(restored_context, next_task)
                     restored_context.mark_task_completed(next_task)
                     restored_context.increment_step()
 
                     if restored_context.checkpoint_requested:
                         checkpoint_path = os.path.join(tmpdir, f"checkpoint_iter_{6+i+1}")
+                        checkpoint_metadata = restored_context.checkpoint_request_metadata
+                        assert checkpoint_metadata is not None
                         CheckpointManager.create_checkpoint(
                             restored_context,
                             path=checkpoint_path,
-                            metadata=restored_context.checkpoint_request_metadata
+                            metadata=checkpoint_metadata
                         )
                         restored_context.clear_checkpoint_request()
 
@@ -262,7 +273,8 @@ class TestFaultToleranceScenarios:
         @task("step_2", inject_context=True)
         def step_2_func(task_ctx):
             """Step 2 that checkpoints before processing."""
-            task_ctx.checkpoint(metadata={"stage": "step_2_start"})
+            checkpoint_path = os.path.join(tempfile.gettempdir(), "step2_checkpoint")
+            task_ctx.checkpoint(metadata={"stage": "step_2_start"}, path=checkpoint_path)
             return "step_2_complete"
 
         @task("step_3")
@@ -292,19 +304,24 @@ class TestFaultToleranceScenarios:
             for _ in range(2):
                 next_task = context.task_queue.get_next_task()
                 if next_task:
-                    task_obj = graph.get_node(next_task)
-                    result = task_obj.execute(context)
-                    context.set_result(next_task, result)
+                    result = run_task(context, next_task)
                     context.mark_task_completed(next_task)
                     context.increment_step()
+
+                    # Schedule successors as engine would
+                    for successor in graph.successors(next_task):
+                        successor_task = graph.get_node(successor)
+                        context.add_to_queue(successor_task)
 
                     # Create checkpoint if requested
                     if context.checkpoint_requested:
                         checkpoint_path = os.path.join(tmpdir, "recovery_checkpoint")
+                        checkpoint_metadata = context.checkpoint_request_metadata
+                        assert checkpoint_metadata is not None
                         CheckpointManager.create_checkpoint(
                             context,
                             path=checkpoint_path,
-                            metadata=context.checkpoint_request_metadata
+                            metadata=checkpoint_metadata
                         )
                         context.clear_checkpoint_request()
 
@@ -318,11 +335,11 @@ class TestFaultToleranceScenarios:
 
             # Try to execute step 3 (will fail)
             next_task = context.task_queue.get_next_task()
+            assert next_task is not None
             assert next_task == "step_3"
 
             try:
-                task_obj = graph.get_node(next_task)
-                task_obj.execute(context)
+                run_task(context, next_task)
                 pytest.fail("Expected RuntimeError from step 3")
             except RuntimeError as e:
                 assert "Simulated failure" in str(e)
@@ -341,6 +358,7 @@ class TestFaultToleranceScenarios:
 
             # Verify step 3 is in queue
             next_task = restored_context.task_queue.get_next_task()
+            assert next_task is not None
             assert next_task == "step_3"
 
     def test_checkpoint_before_expensive_operation(self):
@@ -380,25 +398,32 @@ class TestFaultToleranceScenarios:
         with tempfile.TemporaryDirectory() as tmpdir:
             # Execute prepare_data
             next_task = context.task_queue.get_next_task()
-            task_obj = graph.get_node(next_task)
-            result = task_obj.execute(context)
-            context.set_result(next_task, result)
+            assert next_task is not None
+            run_task(context, next_task)
             context.mark_task_completed(next_task)
             context.increment_step()
 
+            # Schedule successor (expensive_operation)
+            for successor in graph.successors("prepare_data"):
+                successor_task = graph.get_node(successor)
+                context.add_to_queue(successor_task)
+
             # Execute expensive_operation (will checkpoint)
             next_task = context.task_queue.get_next_task()
-            task_obj = graph.get_node(next_task)
-            result = task_obj.execute(context)
-            context.set_result(next_task, result)
+            assert next_task is not None
+            run_task(context, next_task)
             context.mark_task_completed(next_task)
             context.increment_step()
 
             # Create checkpoint as engine would
             assert context.checkpoint_requested
             checkpoint_path = os.path.join(tmpdir, "expensive_checkpoint")
+            checkpoint_metadata = context.checkpoint_request_metadata
+            assert checkpoint_metadata is not None
             pkl_path, metadata = CheckpointManager.create_checkpoint(
-                context, path=checkpoint_path, metadata=context.checkpoint_request_metadata
+                context,
+                path=checkpoint_path,
+                metadata=checkpoint_metadata,
             )
 
             # Resume and verify state
@@ -448,17 +473,18 @@ class TestDynamicTaskCheckpointScenarios:
         with tempfile.TemporaryDirectory() as tmpdir:
             # Execute coordinator (creates workers)
             next_task = context.task_queue.get_next_task()
-            task_obj = graph.get_node(next_task)
-            result = task_obj.execute(context)
-            context.set_result(next_task, result)
+            assert next_task is not None
+            run_task(context, next_task)
             context.mark_task_completed(next_task)
             context.increment_step()
 
             # Create checkpoint
             assert context.checkpoint_requested
             checkpoint_path = os.path.join(tmpdir, "dynamic_checkpoint")
+            checkpoint_metadata = context.checkpoint_request_metadata
+            assert checkpoint_metadata is not None
             pkl_path, metadata = CheckpointManager.create_checkpoint(
-                context, path=checkpoint_path, metadata=context.checkpoint_request_metadata
+                context, path=checkpoint_path, metadata=checkpoint_metadata
             )
 
             # Verify workers are in graph and queue
@@ -518,21 +544,22 @@ class TestComplexWorkflowCheckpointScenarios:
             for i in range(4):
                 next_task = context.task_queue.get_next_task()
                 if next_task:
-                    task_obj = graph.get_node(next_task)
-                    task_obj.execute(context)
+                    run_task(context, next_task)
                     context.mark_task_completed(next_task)
                     context.increment_step()
 
                     # Track cycle count
-                    cycle_count = context.cycle_controller.get_count("cyclic_task")
+                    cycle_count = context.cycle_controller.get_cycle_count("cyclic_task")
 
                     # Create checkpoint if requested
                     if context.checkpoint_requested:
                         checkpoint_path = os.path.join(tmpdir, f"cycle_checkpoint_{i+1}")
+                        checkpoint_metadata = context.checkpoint_request_metadata
+                        assert checkpoint_metadata is not None
                         pkl_path, metadata = CheckpointManager.create_checkpoint(
                             context,
                             path=checkpoint_path,
-                            metadata=context.checkpoint_request_metadata
+                            metadata=checkpoint_metadata
                         )
                         context.clear_checkpoint_request()
 
@@ -552,8 +579,8 @@ class TestComplexWorkflowCheckpointScenarios:
             # Continue to completion
             next_task = restored_context.task_queue.get_next_task()
             if next_task:
-                task_obj = graph.get_node(next_task)
-                result = task_obj.execute(restored_context)
+                assert next_task is not None
+                result = run_task(restored_context, next_task)
                 assert result == "cycles_complete"
 
     def test_checkpoint_with_multiple_branches(self):
@@ -592,22 +619,20 @@ class TestComplexWorkflowCheckpointScenarios:
         with tempfile.TemporaryDirectory() as tmpdir:
             # Execute start
             next_task = context.task_queue.get_next_task()
-            task_obj = graph.get_node(next_task)
-            result = task_obj.execute(context)
-            context.set_result(next_task, result)
+            assert next_task is not None
+            run_task(context, next_task)
             context.mark_task_completed(next_task)
             context.increment_step()
 
             # Schedule successors (branch_a and branch_b)
             for successor in graph.successors("start"):
                 successor_task = graph.get_node(successor)
-                context.task_queue.add_to_queue(successor)
+                context.add_to_queue(successor_task)
 
             # Execute branch_a (will checkpoint)
             next_task = context.task_queue.get_next_task()
-            task_obj = graph.get_node(next_task)
-            result = task_obj.execute(context)
-            context.set_result(next_task, result)
+            assert next_task is not None
+            run_task(context, next_task)
             context.mark_task_completed(next_task)
             context.increment_step()
 
@@ -615,8 +640,10 @@ class TestComplexWorkflowCheckpointScenarios:
             checkpoint_path = None
             if context.checkpoint_requested:
                 checkpoint_path = os.path.join(tmpdir, "branch_checkpoint")
+                checkpoint_metadata = context.checkpoint_request_metadata
+                assert checkpoint_metadata is not None
                 pkl_path, metadata = CheckpointManager.create_checkpoint(
-                    context, path=checkpoint_path, metadata=context.checkpoint_request_metadata
+                    context, path=checkpoint_path, metadata=checkpoint_metadata
                 )
                 context.clear_checkpoint_request()
 
@@ -659,16 +686,18 @@ class TestCheckpointMetadataScenarios:
         with tempfile.TemporaryDirectory() as tmpdir:
             # Execute task
             next_task = context.task_queue.get_next_task()
-            task_obj = graph.get_node(next_task)
-            result = task_obj.execute(context)
+            assert next_task is not None
+            result = run_task(context, next_task)
             context.mark_task_completed(next_task)
             context.increment_step()
 
             # Create checkpoint
             assert context.checkpoint_requested
             checkpoint_path = os.path.join(tmpdir, "metadata_checkpoint")
+            checkpoint_metadata = context.checkpoint_request_metadata
+            assert checkpoint_metadata is not None
             pkl_path, metadata = CheckpointManager.create_checkpoint(
-                context, path=checkpoint_path, metadata=context.checkpoint_request_metadata
+                context, path=checkpoint_path, metadata=checkpoint_metadata
             )
 
             # Verify metadata enrichment
@@ -719,17 +748,18 @@ class TestCheckpointMetadataScenarios:
             for i in range(4):
                 next_task = context.task_queue.get_next_task()
                 if next_task:
-                    task_obj = graph.get_node(next_task)
-                    result = task_obj.execute(context)
+                    result = run_task(context, next_task)
                     context.mark_task_completed(next_task)
                     context.increment_step()
 
                     if context.checkpoint_requested:
                         checkpoint_path = os.path.join(tmpdir, f"progress_checkpoint_{(i+1)*25}")
+                        checkpoint_metadata = context.checkpoint_request_metadata
+                        assert checkpoint_metadata is not None
                         pkl_path, metadata = CheckpointManager.create_checkpoint(
                             context,
                             path=checkpoint_path,
-                            metadata=context.checkpoint_request_metadata
+                            metadata=checkpoint_metadata
                         )
                         checkpoints.append((pkl_path, metadata))
                         context.clear_checkpoint_request()
