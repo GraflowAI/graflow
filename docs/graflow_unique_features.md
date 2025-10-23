@@ -35,7 +35,7 @@ Graflow is a **general-purpose workflow execution engine** that combines the bes
 | **Docker Execution** | Built-in containerized task execution | External tools required |
 | **Granular Error Policies** | 5 built-in parallel group error handling modes | None |
 | **Seamless Local/Distributed** | Single-line backend switching | None (most require infrastructure) |
-| **Channel-based Communication** | Pub/Sub style inter-task messaging | XCom (Airflow), State (LangGraph) |
+| **Channel-based Communication** | Namespaced key-value store for workflow state sharing | XCom (Airflow), State (LangGraph) |
 
 ---
 
@@ -52,7 +52,7 @@ Graflow's unique features can be grouped into **8 major categories**:
 5. **Granular Error Policies** - Flexible parallel group error handling
 6. **Pythonic Operators DSL** - Mathematical DAG syntax
 7. **Seamless Local/Distributed** - Backend switching
-8. **Channel Communication** - Pub/Sub messaging
+8. **Channel Communication** - Namespaced KVS for state sharing
 
 ### 1. Worker Fleet Management 🚀
 
@@ -1150,7 +1150,7 @@ context = ExecutionContext.create(graph, queue_backend=backend)
 
 **Implementation**: `examples/03_data_flow/channels_basic.py`
 
-#### Pub/Sub Style Messaging
+#### Workflow-scoped Key-Value Store
 
 ```python
 # Producer task
@@ -1224,12 +1224,12 @@ context = ExecutionContext.create(
 
 | Tool | Inter-task Communication | Distributed Support | API Style |
 |------|-------------------------|---------------------|-----------|
-| **Graflow** | ✅ Channels | ✅ Redis | Pub/Sub |
+| **Graflow** | ✅ Channels | ✅ Redis | Namespaced KVS |
 | **Airflow** | ⚠️ XCom | ⚠️ Via metadata DB | Key-value |
 | **LangGraph** | ⚠️ State object | ❌ | Shared state |
 | **Celery** | ❌ (via result backend) | ⚠️ Limited | N/A |
 
-**Key Advantage**: **Decoupled, Pub/Sub-style communication** with distributed support.
+**Key Advantage**: **Workflow-scoped state sharing via namespaced key-value store** with distributed support.
 
 ---
 
@@ -1247,7 +1247,7 @@ context = ExecutionContext.create(
 | **Docker Execution** | ✅ Built-in handler | ❌ | ⚠️ Via operators | ⚠️ DockerOperator |
 | **Parallel Error Policies** | ✅ 5 modes + custom | ❌ | ⚠️ Basic | ⚠️ trigger_rule |
 | **Local/Distributed Switch** | ✅ 1 line | ❌ | ❌ | ❌ |
-| **Channel Communication** | ✅ Pub/Sub | ⚠️ State | ❌ | ⚠️ XCom |
+| **Channel Communication** | ✅ Namespaced KVS | ⚠️ State | ❌ | ⚠️ XCom |
 | **Graceful Shutdown** | ✅ Built-in | N/A | ✅ | ✅ |
 | **Metrics Collection** | ✅ Worker-level | ❌ | ⚠️ Flower | ✅ |
 | **Cycle Detection** | ✅ Built-in | ⚠️ Manual | N/A | ❌ |

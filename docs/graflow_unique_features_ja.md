@@ -35,7 +35,7 @@ Graflowは、**汎用ワークフロー実行エンジン**として、タスク
 | **Docker実行** | 組み込みコンテナ化タスク実行 | 外部ツールが必要 |
 | **細粒度エラーポリシー** | 5つの組み込み並列グループエラーハンドリングモード | なし |
 | **シームレスなローカル/分散** | 1行でのバックエンド切り替え | なし（ほとんどがインフラ必要） |
-| **チャンネルベース通信** | Pub/Subスタイルのタスク間メッセージング | XCom（Airflow）、State（LangGraph） |
+| **チャンネルベース通信** | ワークフローステート共有のための名前空間付きKVS | XCom（Airflow）、State（LangGraph） |
 
 ---
 
@@ -52,7 +52,7 @@ Graflowの独自機能は**8つの主要カテゴリ**に分類できます：
 5. **細粒度エラーポリシー** - 柔軟な並列グループエラーハンドリング
 6. **Pythonic演算子DSL** - 数学的DAG構文
 7. **シームレスなローカル/分散** - バックエンド切り替え
-8. **チャンネル通信** - Pub/Subメッセージング
+8. **チャンネル通信** - ステート共有のための名前空間付きKVS
 
 ### 1. ワーカーフリート管理 🚀
 
@@ -1150,7 +1150,7 @@ context = ExecutionContext.create(graph, queue_backend=backend)
 
 **実装**: `examples/03_data_flow/channels_basic.py`
 
-#### Pub/Subスタイルメッセージング
+#### ワークフロースコープのKey-Value Store
 
 ```python
 # プロデューサータスク
@@ -1224,12 +1224,12 @@ context = ExecutionContext.create(
 
 | ツール | タスク間通信 | 分散サポート | APIスタイル |
 |--------|------------|------------|-----------|
-| **Graflow** | ✅ チャンネル | ✅ Redis | Pub/Sub |
+| **Graflow** | ✅ チャンネル | ✅ Redis | 名前空間付きKVS |
 | **Airflow** | ⚠️ XCom | ⚠️ メタデータDB経由 | Key-value |
 | **LangGraph** | ⚠️ Stateオブジェクト | ❌ | 共有state |
 | **Celery** | ❌ (result backend経由) | ⚠️ 限定的 | N/A |
 
-**主要な利点**: 分散サポートを備えた**疎結合なPub/Subスタイル通信**。
+**主要な利点**: 分散サポートを備えた**名前空間付きKey-Value Storeによるワークフロースコープのステート共有**。
 
 ---
 
@@ -1247,7 +1247,7 @@ context = ExecutionContext.create(
 | **Docker実行** | ✅ 組み込みハンドラー | ❌ | ⚠️ Operator経由 | ⚠️ DockerOperator |
 | **並列エラーポリシー** | ✅ 5モード + カスタム | ❌ | ⚠️ 基本的 | ⚠️ trigger_rule |
 | **ローカル/分散切替** | ✅ 1行 | ❌ | ❌ | ❌ |
-| **チャンネル通信** | ✅ Pub/Sub | ⚠️ State | ❌ | ⚠️ XCom |
+| **チャンネル通信** | ✅ 名前空間付きKVS | ⚠️ State | ❌ | ⚠️ XCom |
 | **Graceful Shutdown** | ✅ 組み込み | N/A | ✅ | ✅ |
 | **メトリクス収集** | ✅ ワーカーレベル | ❌ | ⚠️ Flower | ✅ |
 | **サイクル検出** | ✅ 組み込み | ⚠️ 手動 | N/A | ❌ |
