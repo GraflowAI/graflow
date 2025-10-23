@@ -87,14 +87,11 @@ Graflow's unique features can be grouped into **9 major categories**:
 
 #### Key Features
 
-##### a. Built-in CLI Worker
+##### a. Dedicated Task Worker Process
 
-```bash
-# Start workers in separate terminals or servers
-python -m graflow.worker.main --worker-id worker-1 --max-concurrent-tasks 4
-python -m graflow.worker.main --worker-id worker-2 --max-concurrent-tasks 8
-python -m graflow.worker.main --worker-id worker-3 --max-concurrent-tasks 16
-```
+- Drop-in `TaskWorker` process that you can run on servers or containers
+- Pulls work from the shared queue, respects per-worker concurrency limits
+- Makes it trivial to scale horizontally by starting more workers anywhere
 
 ##### b. Autonomous Lifecycle Management
 
