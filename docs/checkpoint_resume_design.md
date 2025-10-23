@@ -1,10 +1,36 @@
 # Checkpoint/Resume Design Document
 
-**Document Version**: 1.5
+**Document Version**: 2.2
 **Date**: 2025-01-23
 **Status**: Draft
 
 **Changelog**:
+- v2.2: Deferred checkpoint execution (major design improvement)
+  - **Breaking change**: `context.checkpoint()` now sets flag instead of creating checkpoint immediately
+  - Checkpoint created by engine AFTER task completes successfully (not during execution)
+  - Removed `current_task_spec` from checkpoint state (no longer needed)
+  - Task that requested checkpoint is marked as completed on resume
+  - Added `checkpoint_requested` and `checkpoint_request_metadata` to ExecutionContext
+  - Added `request_checkpoint(metadata)` method to ExecutionContext
+  - Updated WorkflowEngine.execute() to handle deferred checkpoint creation
+  - Simplified checkpoint semantics: tasks are either completed or pending
+- v2.1: Added Resume Execution Flow section and clarified start_task_id usage
+  - Added "Resume Execution Flow" section explaining auto-resume vs manual override
+  - Clarified `engine.execute(context, start_task_id)` API usage
+  - Updated all usage examples to show auto-resume pattern
+  - Added detailed explanation of task re-execution semantics (restart from beginning)
+  - Added channel-based state machine pattern example for idempotent task execution
+- v2.0: Major design revisions based on review feedback
+  - Changed `pending_tasks` from task IDs to full TaskSpec (includes task_data, retry_count, etc.)
+  - Added `current_task_spec` to capture currently executing task for mid-execution checkpoints
+  - Added `schema_version` field to checkpoint state for compatibility validation
+  - Changed `CheckpointMetadata.created_at` to ISO 8601 string (was datetime)
+  - Added `CheckpointMetadata.create()` class method for timestamp generation
+  - Added `_atomic_save()` for atomic write using tmpfile + rename (local backend)
+  - Added `_get_base_path()` to handle multi-file naming (prevents double extensions)
+  - Added `_validate_schema_version()` for compatibility checking
+  - Added Storage Abstraction Design section (Phase 2 implementation plan)
+  - Updated Implementation Checklist with all new requirements
 - v1.5: Changed CheckpointManager to class methods, storage backend inferred from path format
 - v1.4: `mark_task_completed()` adds task_id to completed_tasks set (reverted from no-op)
 - v1.3: Removed remaining `__workflow_state__` references from architecture diagrams
@@ -27,13 +53,22 @@ This document describes Graflow's checkpoint/resume functionality for workflow s
    - S3: `"s3://bucket/session_123.pkl"` (future)
 3. **Three-file Structure**:
    - `.pkl` (ExecutionContext pickle)
-   - `.state.json` (checkpoint state with pending_tasks)
-   - `.meta.json` (metadata)
-4. **Queue State Persistence**:
-   - InMemoryTaskQueue: Pending tasks saved to checkpoint and re-queued on resume
+   - `.state.json` (checkpoint state with schema_version, pending TaskSpecs)
+   - `.meta.json` (metadata with ISO 8601 timestamps)
+4. **Full TaskSpec Persistence**:
+   - Save complete TaskSpec (task_data, retry_count, execution_strategy) not just IDs
+   - Enables dynamic task and retry state restoration
+5. **Deferred Checkpoint Execution**:
+   - `context.checkpoint()` sets flag, does NOT create checkpoint immediately
+   - Checkpoint created by engine AFTER task completes successfully
+   - Task that requested checkpoint is marked as completed
+6. **Queue State Persistence**:
+   - InMemoryTaskQueue: Pending TaskSpecs saved to checkpoint and re-queued on resume
    - RedisTaskQueue: Queue already persisted in Redis, no re-queuing needed
-5. **Start Node Only**: No `__workflow_state__` in channel (simpler design)
-6. **Backend Support**: Works with both MemoryChannel and RedisChannel
+7. **Schema Versioning**: `schema_version` field for compatibility validation
+8. **Atomic Write**: tmpfile + atomic rename for local backend (Phase 1)
+9. **Storage Abstraction**: Path-based backend inference, extensible to Redis/S3 (Phase 2)
+10. **Backend Support**: Works with both MemoryChannel and RedisChannel
 
 ---
 
@@ -47,9 +82,10 @@ This document describes Graflow's checkpoint/resume functionality for workflow s
 6. [API Design](#api-design)
 7. [Implementation Details](#implementation-details)
 8. [Backend Support](#backend-support)
-9. [Usage Examples](#usage-examples)
-10. [Edge Cases and Limitations](#edge-cases-and-limitations)
-11. [Future Enhancements](#future-enhancements)
+9. [Resume Execution Flow](#resume-execution-flow)
+10. [Usage Examples](#usage-examples)
+11. [Edge Cases and Limitations](#edge-cases-and-limitations)
+12. [Future Enhancements](#future-enhancements)
 
 ---
 
@@ -202,11 +238,24 @@ class CheckpointMetadata:
     """Checkpoint metadata."""
     checkpoint_id: str
     session_id: str
-    created_at: datetime
+    created_at: str  # ISO 8601 format (e.g., "2025-01-23T10:30:00Z")
     steps: int
     start_node: str
     backend: dict[str, str]  # {"queue": "memory", "channel": "memory"}
     user_metadata: dict[str, Any]  # User-defined metadata
+
+    @classmethod
+    def create(cls, checkpoint_id, session_id, steps, start_node, backend, user_metadata=None):
+        """Create metadata with ISO 8601 timestamp."""
+        return cls(
+            checkpoint_id=checkpoint_id,
+            session_id=session_id,
+            created_at=datetime.now(timezone.utc).isoformat(),
+            steps=steps,
+            start_node=start_node,
+            backend=backend,
+            user_metadata=user_metadata or {}
+        )
 
 class CheckpointManager:
     """Manages checkpoint creation and restoration with storage backend abstraction.
@@ -285,20 +334,31 @@ class ExecutionContext:
     # New attributes
     completed_tasks: set[str]           # Tracks completed task IDs
     checkpoint_metadata: dict[str, Any] # Last checkpoint metadata
+    checkpoint_requested: bool = False  # Flag for deferred checkpoint
+    checkpoint_request_metadata: Optional[dict] = None  # User metadata for checkpoint
 
     # New methods
     def mark_task_completed(self, task_id: str) -> None:
         """Mark task as completed for checkpoint tracking."""
         self.completed_tasks.add(task_id)
 
+    def request_checkpoint(self, metadata: Optional[dict] = None) -> None:
+        """Request checkpoint creation (deferred to engine)."""
+        self.checkpoint_requested = True
+        self.checkpoint_request_metadata = metadata
+
     def get_checkpoint_state(self) -> dict[str, Any]:
         """Get current state for checkpointing.
 
         Returns:
             Dictionary containing all necessary state:
-            - session_id, start_node, graph
+            - schema_version, session_id, start_node, graph
             - steps, completed_tasks, cycle_counts
-            - pending_tasks (from queue)
+            - pending_tasks (full TaskSpec list from queue)
+
+        Note:
+            No current_task_spec needed - checkpoint created after task completes,
+            so all tasks are either completed or in pending_tasks queue.
         """
 ```
 
@@ -306,23 +366,24 @@ class ExecutionContext:
 
 ```python
 class TaskExecutionContext:
-    def checkpoint(
-        self,
-        path: Optional[str] = None,
-        metadata: Optional[dict] = None
-    ) -> tuple[str, CheckpointMetadata]:
-        """Create checkpoint from within task.
+    def checkpoint(self, metadata: Optional[dict] = None) -> None:
+        """Request checkpoint creation (executed after task completes).
 
         Args:
-            path: Checkpoint path (auto-generated if None)
-                  Storage backend inferred from path format
             metadata: User-defined metadata
 
-        Returns:
-            (checkpoint_path, metadata)
-
         Note:
-            Automatically includes task_id, cycle_count, elapsed_time in metadata
+            - Does NOT create checkpoint immediately
+            - Sets checkpoint_requested flag in ExecutionContext
+            - Actual checkpoint created by engine after task execution completes
+            - Automatically includes task_id, cycle_count, elapsed_time in metadata
+
+        Example:
+            @task(inject_context=True)
+            def my_task(context):
+                do_work()
+                context.checkpoint(metadata={"stage": "completed"})
+                # Task continues, checkpoint created after return
         """
 ```
 
@@ -331,14 +392,72 @@ class TaskExecutionContext:
 ```python
 class WorkflowEngine:
     def execute(self, context: ExecutionContext, start_task_id: Optional[str] = None):
-        # After each task execution
-        context.mark_task_completed(task_id)  # NEW: Track completion
-        context.increment_step()
+        """Execute workflow from context.
+
+        Args:
+            context: ExecutionContext with graph and queue
+            start_task_id: Optional task ID to start from
+                          - If None: use context.get_next_task() (auto-resume from queue)
+                          - If specified: start from that specific task
+
+        Usage for checkpoint/resume:
+            # Auto-resume (recommended)
+            engine.execute(context)  # Gets next task from restored queue
+
+            # Manual override
+            engine.execute(context, start_task_id=metadata.start_node)
+        """
+        while task_id is not None and context.steps < context.max_steps:
+            # Reset checkpoint flag
+            context.checkpoint_requested = False
+
+            # Execute task
+            task = graph.get_node(task_id)
+            with context.executing_task(task):
+                self._execute_task(task, context)
+
+            # Track completion
+            context.mark_task_completed(task_id)
+            context.increment_step()
+
+            # Handle deferred checkpoint (NEW)
+            if context.checkpoint_requested:
+                path, metadata = CheckpointManager.create_checkpoint(
+                    context,
+                    metadata=context.checkpoint_request_metadata
+                )
+                print(f"Checkpoint created: {path}")
+                context.checkpoint_requested = False
+                context.checkpoint_request_metadata = None
+
+            # Schedule successors
+            # ...
+
+            # Get next task
+            task_id = context.get_next_task()
 ```
 
 ---
 
 ## Implementation Details
+
+### TaskExecutionContext.checkpoint() Implementation
+
+```python
+class TaskExecutionContext:
+    def checkpoint(self, metadata: Optional[dict] = None) -> None:
+        """Request checkpoint creation (deferred to engine)."""
+        # Enrich metadata with task-specific info
+        enriched_metadata = metadata or {}
+        enriched_metadata.update({
+            "task_id": self.task_id,
+            "cycle_count": self.execution_context.cycle_controller.get_count(self.task_id),
+            "elapsed_time": time.time() - self.start_time,
+        })
+
+        # Set flag for engine to create checkpoint after task completes
+        self.execution_context.request_checkpoint(enriched_metadata)
+```
 
 ### CheckpointManager Implementation
 
@@ -354,37 +473,32 @@ class CheckpointManager:
 
         # 2. Collect checkpoint state
         checkpoint_state = {
+            "schema_version": "1.0",
             "session_id": context.session_id,
             "start_node": context.start_node,
             "steps": context.steps,
             "completed_tasks": list(context.completed_tasks),
             "cycle_counts": dict(context.cycle_controller.cycle_counts),
-            "pending_tasks": cls._get_pending_tasks(context),
+            "pending_tasks": cls._get_pending_task_specs(context),  # Full TaskSpec
             "backend": {
                 "queue": context._queue_backend_type,
                 "channel": context._channel_backend_type
             }
         }
+        # Note: No current_task_spec - checkpoint created after task completes
 
-        # 3. Create metadata
-        metadata_obj = CheckpointMetadata(
+        # 3. Create metadata with ISO 8601 timestamp
+        metadata_obj = CheckpointMetadata.create(
             checkpoint_id=checkpoint_id,
             session_id=context.session_id,
-            created_at=datetime.now(),
             steps=context.steps,
             start_node=context.start_node,
             backend=checkpoint_state["backend"],
             user_metadata=metadata or {}
         )
 
-        # 4. Save context (includes graph, channel data for Memory)
-        context.save(path)
-
-        # 5. Save checkpoint state separately
-        cls._save_checkpoint_state(path, checkpoint_state, backend)
-
-        # 6. Save metadata
-        cls._save_metadata(path, metadata_obj, backend)
+        # 4. Save to storage (atomic write for local backend)
+        cls._atomic_save(context, path, checkpoint_state, metadata_obj, backend)
 
         return path, metadata_obj
 
@@ -396,28 +510,37 @@ class CheckpointManager:
         # 2. Load checkpoint state
         checkpoint_state = cls._load_checkpoint_state(checkpoint_path, backend)
 
-        # 3. Load context from pickle
+        # 3. Validate schema version
+        cls._validate_schema_version(checkpoint_state.get("schema_version", "1.0"))
+
+        # 4. Load context from pickle
         context = ExecutionContext.load(checkpoint_path)
 
-        # 4. Restore pending tasks to queue (backend-specific)
-        # InMemoryTaskQueue: Re-queue tasks (queue state was lost)
+        # 5. Restore pending tasks to queue (backend-specific)
+        # InMemoryTaskQueue: Re-queue TaskSpecs (queue state was lost)
         # RedisTaskQueue: Skip re-queuing (queue already persisted in Redis)
         if context._queue_backend_type != "redis":
-            for task_id in checkpoint_state["pending_tasks"]:
-                task = context.graph.get_node(task_id)
-                context.add_to_queue(task)
+            # Restore pending tasks from TaskSpec
+            for task_spec_dict in checkpoint_state["pending_tasks"]:
+                task_spec = cls._deserialize_task_spec(task_spec_dict)
+                context.task_queue.enqueue(task_spec)
         # For Redis: Queue state already exists, no re-queuing needed
+        # Note: No current_task_spec to restore - all tasks in completed or pending
 
-        # 5. Restore completed tasks tracking
+        # 6. Restore completed tasks tracking
         context.completed_tasks = set(checkpoint_state["completed_tasks"])
 
-        # 6. Restore cycle counts
+        # 7. Restore cycle counts
         context.cycle_controller.cycle_counts.update(
             checkpoint_state["cycle_counts"]
         )
 
-        # 7. Load metadata
+        # 8. Load metadata
         metadata = cls._load_metadata(checkpoint_path, backend)
+
+        # 9. Set context start_node for resumption
+        # Note: Caller should use engine.execute(context, start_task_id=None)
+        # which will automatically use context.get_next_task() to resume from queue
 
         return context, metadata
 
@@ -433,12 +556,135 @@ class CheckpointManager:
         return "local"
 
     @classmethod
-    def _get_pending_tasks(cls, context: ExecutionContext) -> list[str]:
-        """Extract pending tasks from queue."""
-        if hasattr(context.task_queue, 'get_pending_tasks'):
-            return context.task_queue.get_pending_tasks()
+    def _get_pending_task_specs(cls, context: ExecutionContext) -> list[dict]:
+        """Extract full TaskSpec from queue (not just IDs)."""
+        if hasattr(context.task_queue, 'get_pending_task_specs'):
+            task_specs = context.task_queue.get_pending_task_specs()
+            return [cls._serialize_task_spec(spec) for spec in task_specs]
         return []
+
+    @classmethod
+    def _serialize_task_spec(cls, task_spec) -> dict:
+        """Serialize TaskSpec to dict for JSON storage."""
+        return {
+            "task_id": task_spec.task_id,
+            "task_data": task_spec.task_data,  # Already serialized
+            "status": task_spec.status,
+            "priority": task_spec.priority,
+            "retry_count": task_spec.retry_count,
+            "max_retries": task_spec.max_retries,
+            "execution_strategy": task_spec.execution_strategy,
+            # Add other fields as needed
+        }
+
+    @classmethod
+    def _deserialize_task_spec(cls, task_spec_dict: dict):
+        """Deserialize TaskSpec from dict."""
+        from graflow.queue.base import TaskSpec
+        return TaskSpec(
+            task_id=task_spec_dict["task_id"],
+            task_data=task_spec_dict["task_data"],
+            status=task_spec_dict.get("status", "pending"),
+            priority=task_spec_dict.get("priority", 0),
+            retry_count=task_spec_dict.get("retry_count", 0),
+            max_retries=task_spec_dict.get("max_retries", 3),
+            execution_strategy=task_spec_dict.get("execution_strategy", "direct"),
+        )
+
+    @classmethod
+    def _validate_schema_version(cls, version: str) -> None:
+        """Validate checkpoint schema version."""
+        supported_versions = ["1.0"]
+        if version not in supported_versions:
+            raise ValueError(
+                f"Unsupported checkpoint schema version: {version}. "
+                f"Supported: {supported_versions}"
+            )
+
+    @classmethod
+    def _atomic_save(cls, context, path, checkpoint_state, metadata_obj, backend):
+        """Atomically save checkpoint files.
+
+        For local backend: Use temporary files and atomic rename.
+        For remote backends: Implementation depends on backend capabilities.
+        """
+        if backend == "local":
+            import tempfile
+            import os
+            import shutil
+
+            # Create temp directory
+            temp_dir = tempfile.mkdtemp(prefix="checkpoint_")
+            try:
+                # Save to temp files
+                base_path = cls._get_base_path(path)
+                temp_pkl = os.path.join(temp_dir, os.path.basename(base_path) + ".pkl")
+                temp_state = os.path.join(temp_dir, os.path.basename(base_path) + ".state.json")
+                temp_meta = os.path.join(temp_dir, os.path.basename(base_path) + ".meta.json")
+
+                context.save(temp_pkl)
+                cls._save_checkpoint_state(temp_state, checkpoint_state, backend)
+                cls._save_metadata(temp_meta, metadata_obj, backend)
+
+                # Atomic rename to final location
+                os.rename(temp_pkl, base_path + ".pkl")
+                os.rename(temp_state, base_path + ".state.json")
+                os.rename(temp_meta, base_path + ".meta.json")
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+        else:
+            # For redis/s3: implementation TBD in Phase 2
+            raise NotImplementedError(f"Backend {backend} not yet implemented")
+
+    @classmethod
+    def _get_base_path(cls, path: str) -> str:
+        """Get base path without extension for multi-file checkpoint.
+
+        Examples:
+            "checkpoints/session_123.pkl" -> "checkpoints/session_123"
+            "checkpoints/session_123" -> "checkpoints/session_123"
+        """
+        if path.endswith(".pkl"):
+            return path[:-4]
+        return path
 ```
+
+### Storage Abstraction Design (Phase 2)
+
+**Problem**: `context.save(path)` uses `open(path, "wb")`, which fails for `redis://` or `s3://` paths.
+
+**Solution**: Introduce storage abstraction layer.
+
+```python
+class StorageBackend:
+    """Abstract storage backend."""
+    @abstractmethod
+    def save_pickle(self, path: str, obj: Any) -> None: ...
+    @abstractmethod
+    def load_pickle(self, path: str) -> Any: ...
+    @abstractmethod
+    def save_json(self, path: str, data: dict) -> None: ...
+    @abstractmethod
+    def load_json(self, path: str) -> dict: ...
+
+class LocalStorage(StorageBackend):
+    """Local filesystem storage."""
+    def save_pickle(self, path, obj):
+        with open(path, "wb") as f:
+            cloudpickle.dump(obj, f)
+
+class RedisStorage(StorageBackend):
+    """Redis storage (Phase 2)."""
+    def save_pickle(self, path, obj):
+        # path = "redis://session_123"
+        key = path.replace("redis://", "")
+        self.redis_client.set(key, cloudpickle.dumps(obj))
+```
+
+**Implementation Plan**:
+- Phase 1: Local only, direct file I/O
+- Phase 2: Add StorageBackend abstraction
+- Phase 3: Implement RedisStorage, S3Storage
 
 ### State Persistence Strategy
 
@@ -472,10 +718,11 @@ __setstate__():
 
 ### Checkpoint State Schema
 
-Saved separately from ExecutionContext pickle:
+Saved separately from ExecutionContext pickle as JSON:
 
 ```python
 {
+    "schema_version": "1.0",                        # Schema version for compatibility
     "session_id": "12345",                           # Session identifier
     "start_node": "my_task",                        # Entry point for execution
     "steps": 42,                                    # Total steps executed
@@ -484,13 +731,31 @@ Saved separately from ExecutionContext pickle:
         "task1": 3,
         "task2": 1
     },
-    "pending_tasks": ["task4", "task5"],           # Tasks in queue (NEW)
+    "pending_tasks": [                              # Full TaskSpec, not just IDs
+        {
+            "task_id": "task4",
+            "task_data": "...",                     # Serialized task
+            "status": "pending",
+            "priority": 0,
+            "retry_count": 0,
+            "max_retries": 3,
+            "execution_strategy": "direct"
+        },
+        {
+            "task_id": "task5",
+            "task_data": "...",
+            "status": "pending",
+            # ...
+        }
+    ],
     "backend": {
         "queue": "memory",
         "channel": "memory"
     }
 }
 ```
+
+**Note**: No `current_task_spec` field - checkpoint created after task completes, so all tasks are either in `completed_tasks` or `pending_tasks`.
 
 ### Checkpoint Metadata Schema
 
@@ -655,13 +920,16 @@ def _get_pending_tasks(self, context: ExecutionContext) -> list[str]:
 - `_channel_data`: Channel data (MemoryChannel only)
 
 **Checkpoint State** (`{path}.state.json`):
+- `schema_version`: Schema version (e.g., "1.0") for future compatibility
 - `session_id`: Session identifier
 - `start_node`: Entry point for resume
 - `steps`: Total steps executed
 - `completed_tasks`: List of completed task IDs
 - `cycle_counts`: Per-task cycle execution counts
-- `pending_tasks`: Tasks in queue at checkpoint time
+- `pending_tasks`: List of TaskSpec dictionaries (full task state, not just IDs)
 - `backend`: Queue and channel backend types
+
+**Note**: No `current_task_spec` - checkpoint created after task completes
 
 **Metadata** (`{path}.meta.json`):
 - `checkpoint_id`: Unique checkpoint identifier
@@ -676,6 +944,58 @@ def _get_pending_tasks(self, context: ExecutionContext) -> list[str]:
 - Task-specific state: Stored in channel by user
 - Results: Stored in channel with `{task_id}.__result__` key
 - Custom workflow data: User stores in channel
+
+---
+
+## Resume Execution Flow
+
+### How Resume Works
+
+```
+1. Load Checkpoint
+   CheckpointManager.resume_from_checkpoint(path)
+   ↓
+   - Load ExecutionContext from pickle
+   - Load checkpoint state from .state.json
+   - Restore pending_tasks to queue (InMemoryTaskQueue only)
+   - Restore completed_tasks, cycle_counts
+   ↓
+   Return (context, metadata)
+
+2. Resume Execution
+   engine.execute(context)  # No start_task_id specified
+   ↓
+   - context.get_next_task() retrieves from restored queue
+   - Executes pending tasks in queue order
+   ↓
+   Workflow continues from checkpoint point
+
+3. Manual Start Point (Optional)
+   engine.execute(context, start_task_id="specific_task")
+   ↓
+   - Ignores queue, starts from specified task
+   - Use case: Override resume behavior for debugging/testing
+```
+
+### Key Points
+
+1. **Auto-resume (Recommended)**:
+   ```python
+   context, metadata = CheckpointManager.resume_from_checkpoint(path)
+   engine.execute(context)  # Automatically resumes from queue
+   ```
+
+2. **Manual start_task_id**:
+   ```python
+   context, metadata = CheckpointManager.resume_from_checkpoint(path)
+   engine.execute(context, start_task_id=metadata.start_node)  # Override
+   ```
+
+3. **Task re-execution**: Tasks checkpoint mid-execution restart from beginning (use channel state)
+
+4. **Queue backends**:
+   - InMemoryTaskQueue: pending_tasks re-queued on resume
+   - RedisTaskQueue: queue already in Redis, no re-queueing
 
 ---
 
@@ -749,7 +1069,11 @@ context, metadata = CheckpointManager.resume_from_checkpoint(
 print(f"Resuming from step {metadata.steps}, stage: {metadata.user_metadata.get('stage')}")
 
 engine = WorkflowEngine()
-engine.execute(context)  # Continues from VALIDATED state
+# Option 1: Auto-resume from queue (pending_tasks already enqueued)
+engine.execute(context)  # Automatically gets next task from queue
+
+# Option 2: Explicit start_task_id (if you want to override)
+# engine.execute(context, start_task_id=metadata.start_node)
 ```
 
 ### Example 2: ML Training with Periodic Checkpoints
@@ -803,6 +1127,7 @@ context, metadata = CheckpointManager.resume_from_checkpoint(
 print(f"Resuming from epoch {metadata.user_metadata.get('epoch')}")
 
 engine = WorkflowEngine()
+# Auto-resume: pending_tasks (including current_task_spec) already in queue
 engine.execute(context)  # Continues from epoch 30
 ```
 
@@ -856,6 +1181,8 @@ context, metadata = CheckpointManager.resume_from_checkpoint(
 print(f"Worker 2 resuming session {metadata.session_id} from step {metadata.steps}")
 
 engine = WorkflowEngine()
+# RedisTaskQueue: Queue already persisted, no re-queueing happened
+# RedisChannel: Data already in Redis at session_12345:*
 engine.execute(context)  # Continues where Worker 1 left off
 ```
 
@@ -880,9 +1207,54 @@ engine.execute(context)  # Continues where Worker 1 left off
    - Graph structure saved in checkpoint must match current code
 
 4. **Queue state** (RESOLVED):
-   - Pending tasks ARE now saved in checkpoint state
+   - Pending tasks ARE now saved as full TaskSpec in checkpoint state
+   - Includes task_data, retry_count, execution_strategy, etc.
    - Restored to queue on resume
    - Execution continues with pending tasks
+
+5. **Checkpoint timing** (RESOLVED):
+   - `context.checkpoint()` **sets a flag**, does NOT create checkpoint immediately
+   - Checkpoint created by engine **after task completes successfully**
+   - **Task that requested checkpoint is marked as completed**
+   - On resume: Execution continues from **next pending task in queue**
+
+   Example:
+   ```python
+   @task(inject_context=True)
+   def process_task(context):
+       do_work()
+       context.checkpoint(metadata={"stage": "completed"})
+       # Task continues to completion
+       # Checkpoint created AFTER task returns
+   ```
+
+   On resume:
+   - `process_task` is already completed (in `completed_tasks`)
+   - Execution continues from next task in queue
+   - If task crashed before completion, checkpoint was not created
+
+6. **Idempotency for iterative tasks**:
+   - For tasks using `next_iteration()`, use channel-based state machine
+
+   Example:
+   ```python
+   @task(inject_context=True)
+   def iterative_task(context):
+       channel = context.get_channel()
+       state = channel.get("state", default="STEP1")
+
+       if state == "STEP1":
+           do_step1()
+           channel.set("state", "STEP2")
+           context.checkpoint()
+           context.next_iteration()  # Re-queue self
+       elif state == "STEP2":
+           do_step2()
+           context.checkpoint()
+           # Done
+   ```
+
+   On resume: Task re-executes but skips to STEP2 via channel state
 
 ### Limitations
 
@@ -892,9 +1264,9 @@ engine.execute(context)  # Continues where Worker 1 left off
 - **Impact**: Checkpoint files accumulate over time
 - **Workaround**: User must manually delete old checkpoints
 
-**L3**: No checkpoint versioning
-- **Impact**: Cannot compare or merge checkpoints
-- **Workaround**: Use metadata to track checkpoint relationships
+**L3**: ~~No checkpoint versioning~~ (RESOLVED: schema_version field added to state.json)
+- Schema version "1.0" validates compatibility on resume
+- Future format changes will increment version
 
 **L4**: MemoryChannel checkpoints are not portable across workers
 - **Impact**: Cannot resume on different worker with MemoryChannel
@@ -903,6 +1275,11 @@ engine.execute(context)  # Continues where Worker 1 left off
 **L5**: Graph structure must remain consistent
 - **Impact**: Code changes between checkpoint and resume may fail
 - **Workaround**: Maintain backward compatibility in workflow code
+
+**L6**: Atomic write for local backend only (Phase 1)
+- **Current**: tmpfile + atomic rename for local filesystem
+- **Impact**: Remote backends (Redis/S3) not yet implemented
+- **Phase 2**: Add StorageBackend abstraction with atomic guarantees
 
 ---
 
@@ -970,27 +1347,41 @@ class ExecutionContext:
 
 - [x] Add `completed_tasks` and `checkpoint_metadata` to `ExecutionContext.__init__`
 - [x] Implement `ExecutionContext.mark_task_completed()`
+- [ ] Add `checkpoint_requested` and `checkpoint_request_metadata` to `ExecutionContext`
+- [ ] Implement `ExecutionContext.request_checkpoint(metadata)`
 - [ ] Create `graflow/checkpoint.py` module
 - [ ] Implement `CheckpointMetadata` dataclass
-- [ ] Implement `CheckpointManager` class
-  - [ ] `__init__(storage_backend)`
+  - [ ] ISO 8601 timestamp for `created_at`
+  - [ ] `create()` class method for timestamp generation
+- [ ] Implement `CheckpointManager` class (all class methods)
   - [ ] `create_checkpoint(context, path, metadata)`
-  - [ ] `resume_from_checkpoint(checkpoint_path, ...)`
-  - [ ] `_get_pending_tasks(context)`
-  - [ ] `_save_checkpoint_state(path, state)`
-  - [ ] `_load_checkpoint_state(path)`
-  - [ ] `_save_metadata(path, metadata)`
-  - [ ] `_load_metadata(path)`
+  - [ ] `resume_from_checkpoint(checkpoint_path)`
+  - [ ] `_infer_backend_from_path(path)`
+  - [ ] `_get_pending_task_specs(context)` - Full TaskSpec, not just IDs
+  - [ ] `_serialize_task_spec(task_spec)`
+  - [ ] `_deserialize_task_spec(task_spec_dict)`
+  - [ ] `_validate_schema_version(version)`
+  - [ ] `_atomic_save(context, path, state, metadata, backend)` - Atomic write with tmp files
+  - [ ] `_get_base_path(path)` - Handle multi-file naming
+  - [ ] `_save_checkpoint_state(path, state, backend)`
+  - [ ] `_load_checkpoint_state(path, backend)`
+  - [ ] `_save_metadata(path, metadata, backend)`
+  - [ ] `_load_metadata(path, backend)`
 - [ ] Implement `ExecutionContext.get_checkpoint_state()`
-- [ ] Implement `TaskExecutionContext.checkpoint()`
-- [ ] Add `get_pending_tasks()` to TaskQueue interface
-  - [ ] Implement for MemoryTaskQueue
-  - [ ] Implement for RedisTaskQueue
-- [ ] Modify `WorkflowEngine.execute()` to call `mark_task_completed()`
+- [ ] Implement `TaskExecutionContext.checkpoint()` - Sets flag, does NOT create checkpoint
+- [ ] Add `get_pending_task_specs()` to TaskQueue interface
+  - [ ] Implement for MemoryTaskQueue (return full TaskSpec list)
+  - [ ] Implement for RedisTaskQueue (no-op, already persisted)
+- [ ] Modify `WorkflowEngine.execute()` to:
+  - [ ] Call `mark_task_completed(task_id)` after each task
+  - [ ] Check `context.checkpoint_requested` after task execution
+  - [ ] Create checkpoint if flag is set (deferred checkpoint)
+- [ ] Schema versioning in checkpoint state ("schema_version": "1.0")
 - [ ] Write unit tests for CheckpointManager
 - [ ] Write unit tests for MemoryChannel checkpoint/resume
 - [ ] Write unit tests for RedisChannel checkpoint/resume
 - [ ] Write integration tests for state machine workflows
+- [ ] Test deferred checkpoint (flag set during task, created after)
 - [ ] Update documentation and examples
 
 ### Phase 2: Testing and Validation
