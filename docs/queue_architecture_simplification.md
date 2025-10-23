@@ -60,15 +60,17 @@ This yields a clean separation:
 
 ### Redis Task Flow
 
-- `RedisCoordinator` constructs its own `RedisTaskQueue` using supplied Redis client + prefix.
-- `TaskWorker` initialisation is simplified:
-  - Accept Redis connection details instead of an arbitrary `TaskQueue`.
-  - Internally create `RedisTaskQueue` and manage its lifecycle.
+- `RedisCoordinator` creates its own `RedisTaskQueue` from `backend_config` supplied by `GroupExecutor`.
+- `TaskWorker` receives a `RedisTaskQueue` directly (e.g., instantiated in `graflow/worker/main.py` from Redis settings).
+- The execution context’s in-memory queue is used only for local scheduling and checkpoint restore; it is never shared with distributed components.
 
 ### Executor (`graflow/coordination/executor.py`)
 
-- Ensure that when a `ParallelGroup` selects the Redis backend, the executor passes the proper Redis configuration to both `RedisCoordinator` and worker processes.
-- ExecutionContext’s queue (`InMemoryTaskQueue`) is used only for scheduling tasks until they are handed off to the coordinator.
+- `GroupExecutor` becomes stateless and builds the necessary coordinator on each `execute_parallel_group` call.
+- `ParallelGroup.with_execution(backend=..., backend_config=...)` explicitly selects the backend; `threading` remains the default when unspecified.
+- For Redis execution, `backend_config` carries Redis connection details (host/port/db, key prefix, optional `redis_client`). `GroupExecutor` uses this to instantiate a dedicated `RedisTaskQueue` for the coordinator.
+- Worker processes are started by the user and must be configured with the same Redis settings to consume tasks from the queues created by the coordinator.
+- The `ExecutionContext` queue (`InMemoryTaskQueue`) remains responsible only for local scheduling and checkpoint reconstruction.
 
 ---
 
@@ -77,7 +79,7 @@ This yields a clean separation:
 | Area | Impact |
 |------|--------|
 | **API** | `ExecutionContext.create` signature change (no `queue_backend` argument). |
-| **Workers** | TaskWorker CLI / constructor must shift to Redis-only and accept Redis config inputs. |
+| **Workers** | TaskWorker CLI / constructor assumes Redis queues only; the CLI instantiates a RedisTaskQueue from connection settings and passes it in. |
 | **Testing** | Simplifies most tests (only in-memory queues), but distributed tests need explicit Redis setup through coordinator/worker APIs. |
 | **Documentation** | Update queue/worker docs to reflect new separation. |
 | **Checkpoints** | Simplifies checkpoint state (always in-memory queue). Need migration notes for existing checkpoints that stored Redis queue metadata. |
@@ -89,6 +91,7 @@ This yields a clean separation:
 1. **Phase 1 – Code Refactor**
    - Implement ExecutionContext change.
    - Adjust TaskWorker/RedisCoordinator/executor wiring.
+   - Simplify `GroupExecutor` to be stateless with default threading backend.
    - Update tests to work with the new defaults.
 2. **Phase 2 – Documentation**
    - Refresh worker guides, distributed execution docs, and feature comparison.

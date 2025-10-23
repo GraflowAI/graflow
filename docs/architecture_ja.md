@@ -429,7 +429,7 @@ graph TB
 ## 主要な設計パターン
 
 ### 1. ファクトリーパターン
-- `TaskQueueFactory`: バックエンドに応じたTaskQueue実装を生成
+- `TaskQueueFactory`: （ワーカー/コーディネータ向けに）バックエンド別TaskQueue実装を生成
 - `ChannelFactory`: バックエンドに応じたChannel実装を生成
 
 ### 2. 抽象基底クラスパターン
@@ -463,7 +463,6 @@ graph TB
 context = ExecutionContext.create(
     graph=task_graph,
     start_node="start",
-    queue_backend=QueueBackend.IN_MEMORY,
     channel_backend="memory"
 )
 ```
@@ -479,10 +478,12 @@ redis_config = {
 context = ExecutionContext.create(
     graph=task_graph,
     start_node="start", 
-    queue_backend=QueueBackend.REDIS,
     channel_backend="redis",
     config=redis_config
 )
+
+from graflow.queue.redis import RedisTaskQueue
+redis_queue = RedisTaskQueue(context, **redis_config)
 ```
 
 ## エラー処理と信頼性
