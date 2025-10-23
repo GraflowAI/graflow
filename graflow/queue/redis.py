@@ -159,6 +159,10 @@ class RedisTaskQueue(TaskQueue):
         queue_items = cast(list, self.redis_client.lrange(self.queue_key, 0, -1))
         return [str(item) for item in queue_items]
 
+    def get_pending_task_specs(self) -> list[TaskSpec]:
+        """Return TaskSpecs for pending tasks (not required for Redis checkpoints)."""
+        return []
+
     def notify_task_completion(
         self,
         task_id: str,

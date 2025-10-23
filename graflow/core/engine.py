@@ -113,10 +113,25 @@ class WorkflowEngine:
                     self._execute_task(task, context)
             except Exception as e:
                 # Exception already stored by handler, just re-raise
-                raise exceptions.as_runtime_error(e) # noqa: B904
+                raise exceptions.as_runtime_error(e)  # noqa: B904
 
-            # Step increment for all executed tasks
+            # Track completion and step count
+            context.mark_task_completed(task_id)
             context.increment_step()
+
+            # Handle deferred checkpoint requests
+            if context.checkpoint_requested:
+                from graflow.checkpoint import CheckpointManager
+
+                checkpoint_path, checkpoint_metadata = CheckpointManager.create_checkpoint(
+                    context,
+                    path=context.checkpoint_request_path,
+                    metadata=context.checkpoint_request_metadata,
+                )
+                print(f"Checkpoint created: {checkpoint_path}")
+                context.checkpoint_metadata = checkpoint_metadata.to_dict()
+                context.last_checkpoint_path = checkpoint_path
+                context.clear_checkpoint_request()
 
             # Handle successor scheduling
             if context.goto_called:

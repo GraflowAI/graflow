@@ -70,6 +70,10 @@ class InMemoryTaskQueue(TaskQueue):
         """Get list of node IDs in queue order."""
         return [task_spec.task_id for task_spec in self._queue]
 
+    def get_pending_task_specs(self) -> list[TaskSpec]:
+        """Return pending TaskSpec objects (shallow copy)."""
+        return list(self._queue)
+
     # === Phase 3: Advanced features ===
     def retry_failed_task(self, task_spec: TaskSpec) -> bool:
         """Re-enqueue a failed task for retry."""
