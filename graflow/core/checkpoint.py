@@ -37,7 +37,7 @@ class CheckpointMetadata:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "CheckpointMetadata":
+    def from_dict(cls, data: Dict[str, Any]) -> CheckpointMetadata:
         return cls(
             checkpoint_id=data["checkpoint_id"],
             session_id=data["session_id"],
@@ -58,7 +58,7 @@ class CheckpointMetadata:
         start_node: Optional[str],
         backend: Dict[str, str],
         user_metadata: Dict[str, Any],
-    ) -> "CheckpointMetadata":
+    ) -> CheckpointMetadata:
         created_at = datetime.now(timezone.utc).isoformat()
         return cls(
             checkpoint_id=checkpoint_id,
@@ -85,19 +85,25 @@ class CheckpointManager:
     ) -> Tuple[str, CheckpointMetadata]:
         """Create a checkpoint for the provided execution context."""
 
+        # 1. Determine target storage backend from the supplied path.
         backend = cls._infer_backend_from_path(path)
         if backend != "local":
             raise NotImplementedError(f"Checkpoint backend '{backend}' is not implemented yet")
 
+        # 2. Resolve the base output path (auto-generate if no path supplied).
         base_path = cls._resolve_base_path(context, path)
         cls._ensure_directory(os.path.dirname(base_path) or ".")
 
+        # 3. Gather pending tasks, optionally adding the currently running task for
+        #    immediate checkpoints so resume restarts from the same task.
         pending_specs = cls._get_pending_task_specs(context)
         if include_current_task is not None:
             pending_specs.insert(0, include_current_task)
 
+        # 4. Serialize TaskSpec data for JSON persistence.
         serialized_specs = [cls._serialize_task_spec(spec) for spec in pending_specs]
 
+        # 5. Collect base context state and attach queue snapshot information.
         state = context.get_checkpoint_state()
         state.update(
             {
@@ -106,6 +112,7 @@ class CheckpointManager:
             }
         )
 
+        # 6. Create metadata (timestamped) for the checkpoint artifact set.
         checkpoint_id = cls._generate_checkpoint_id(context)
         metadata_obj = CheckpointMetadata.create(
             checkpoint_id=checkpoint_id,
@@ -116,15 +123,16 @@ class CheckpointManager:
             user_metadata=dict(metadata) if metadata else {},
         )
 
+        # 7. Persist context pickle, state JSON, and metadata JSON.
         pickle_path = f"{base_path}.pkl"
         state_path = f"{base_path}.state.json"
         meta_path = f"{base_path}.meta.json"
 
-        # Persist context and checkpoint metadata
         context.save(pickle_path)
         cls._save_json(state_path, state)
         cls._save_json(meta_path, metadata_obj.to_dict())
 
+        # 8. Update in-memory tracking for recently generated checkpoint.
         context.checkpoint_metadata = metadata_obj.to_dict()
         context.last_checkpoint_path = pickle_path
 
@@ -136,24 +144,29 @@ class CheckpointManager:
     ) -> Tuple[ExecutionContext, CheckpointMetadata]:
         """Restore execution context and metadata from a checkpoint."""
 
+        # 1. Identify storage backend based on checkpoint path.
         backend = cls._infer_backend_from_path(checkpoint_path)
         if backend != "local":
             raise NotImplementedError(f"Checkpoint backend '{backend}' is not implemented yet")
 
+        # 2. Locate companion files (.pkl/.state.json/.meta.json).
         base_path = cls._get_base_path(checkpoint_path)
         pickle_path = f"{base_path}.pkl"
         state_path = f"{base_path}.state.json"
         meta_path = f"{base_path}.meta.json"
 
+        # 3. Load core execution context and auxiliary state artifacts.
         context = ExecutionContext.load(pickle_path)
         state = cls._load_json(state_path)
         metadata = CheckpointMetadata.from_dict(cls._load_json(meta_path))
 
+        # 4. Restore bookkeeping (completed tasks, cycle counts, metadata).
         context.completed_tasks = set(state.get("completed_tasks", []))
         context.cycle_controller.cycle_counts.update(state.get("cycle_counts", {}))
         context.checkpoint_metadata = metadata.to_dict()
         context.last_checkpoint_path = pickle_path
 
+        # 5. Rebuild queue state for in-memory backends by enqueuing TaskSpecs.
         pending_specs = state.get("pending_tasks", [])
         if context._queue_backend_type != "redis":
             # Reset queue state reconstructed during deserialization
@@ -162,6 +175,7 @@ class CheckpointManager:
                 task_spec = cls._deserialize_task_spec(spec_data, context)
                 context.task_queue.enqueue(task_spec)
 
+        # 6. Reset any outstanding checkpoint request flags after restore.
         context.clear_checkpoint_request()
         return context, metadata
 
@@ -207,7 +221,7 @@ class CheckpointManager:
 
     @staticmethod
     def _load_json(path: str) -> Dict[str, Any]:
-        with open(path, "r", encoding="utf-8") as handle:
+        with open(path, encoding="utf-8") as handle:
             return json.load(handle)
 
     @staticmethod

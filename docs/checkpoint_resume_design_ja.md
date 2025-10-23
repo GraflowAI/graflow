@@ -638,7 +638,7 @@ def _get_pending_tasks(self, context: ExecutionContext) -> list[str]:
 ```python
 from graflow.core.decorators import task
 from graflow.core.workflow import workflow
-from graflow.checkpoint import CheckpointManager
+from graflow.core.checkpoint import CheckpointManager
 
 with workflow("order_processing") as ctx:
 
@@ -707,7 +707,7 @@ engine.execute(context)  # VALIDATED 状態から続行
 ### 例2: 周期的にチェックポイントを取る ML 学習
 
 ```python
-from graflow.checkpoint import CheckpointManager
+from graflow.core.checkpoint import CheckpointManager
 
 @task(inject_context=True)
 def ml_training(context):
@@ -763,7 +763,7 @@ engine.execute(context)  # エポック30から再開
 ```python
 # ワーカー1: 実行開始
 import redis
-from graflow.checkpoint import CheckpointManager
+from graflow.core.checkpoint import CheckpointManager
 
 redis_client = redis.Redis(host='localhost', port=6379, db=0)
 
@@ -921,7 +921,7 @@ class ExecutionContext:
 
 - [x] `ExecutionContext.__init__` に `completed_tasks` と `checkpoint_metadata` を追加
 - [x] `ExecutionContext.mark_task_completed()` を実装
-- [ ] `graflow/checkpoint.py` モジュールを作成
+- [ ] `graflow/core/checkpoint.py` モジュールを作成
 - [ ] `CheckpointMetadata` データクラスを実装
 - [ ] `CheckpointManager` クラスを実装
   - [ ] `__init__(storage_backend)`

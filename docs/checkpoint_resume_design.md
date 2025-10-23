@@ -1006,7 +1006,7 @@ def _get_pending_tasks(self, context: ExecutionContext) -> list[str]:
 ```python
 from graflow.core.decorators import task
 from graflow.core.workflow import workflow
-from graflow.checkpoint import CheckpointManager
+from graflow.core.checkpoint import CheckpointManager
 
 with workflow("order_processing") as ctx:
 
@@ -1079,7 +1079,7 @@ engine.execute(context)  # Automatically gets next task from queue
 ### Example 2: ML Training with Periodic Checkpoints
 
 ```python
-from graflow.checkpoint import CheckpointManager
+from graflow.core.checkpoint import CheckpointManager
 
 @task(inject_context=True)
 def ml_training(context):
@@ -1136,7 +1136,7 @@ engine.execute(context)  # Continues from epoch 30
 ```python
 # Worker 1: Start execution
 import redis
-from graflow.checkpoint import CheckpointManager
+from graflow.core.checkpoint import CheckpointManager
 
 redis_client = redis.Redis(host='localhost', port=6379, db=0)
 
@@ -1349,7 +1349,7 @@ class ExecutionContext:
 - [x] Implement `ExecutionContext.mark_task_completed()`
 - [ ] Add `checkpoint_requested` and `checkpoint_request_metadata` to `ExecutionContext`
 - [ ] Implement `ExecutionContext.request_checkpoint(metadata)`
-- [ ] Create `graflow/checkpoint.py` module
+- [ ] Create `graflow/core/checkpoint.py` module
 - [ ] Implement `CheckpointMetadata` dataclass
   - [ ] ISO 8601 timestamp for `created_at`
   - [ ] `create()` class method for timestamp generation
