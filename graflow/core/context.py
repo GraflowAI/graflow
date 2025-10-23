@@ -289,7 +289,7 @@ class ExecutionContext:
         return
 
     @classmethod
-    def create(cls, graph: TaskGraph, start_node: str, max_steps: int = 10,
+    def create(cls, graph: TaskGraph, start_node: Optional[str] = None, max_steps: int = 10,
                default_max_cycles: int = 10, default_max_retries: int = 3,
                queue_backend: Union[QueueBackend, str] = QueueBackend.IN_MEMORY,
                channel_backend: str = "memory",
@@ -297,6 +297,11 @@ class ExecutionContext:
         """Create a new execution context with configurable queue and channel backends.
 
         Args:
+            graph: Task graph defining the workflow
+            start_node: Optional starting task node (can be None for checkpoint scenarios)
+            max_steps: Maximum execution steps
+            default_max_cycles: Default maximum cycles for tasks
+            default_max_retries: Default maximum retry attempts
             queue_backend: Backend for task queue (default: IN_MEMORY)
             channel_backend: Backend for inter-task communication (default: memory)
             config: Configuration applied to both queue and channel (e.g., redis_client, key_prefix)
