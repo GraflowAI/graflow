@@ -81,6 +81,7 @@ ignore = [
     "PLC0415",  # https://docs.astral.sh/ruff/rules/import-outside-top-level/
     "PLR0915",  # https://docs.astral.sh/ruff/rules/too-many-statements/
     "E501",     # https://docs.astral.sh/ruff/rules/line-too-long/
+    "B904",     # https://docs.astral.sh/ruff/rules/raise-without-from-inside-except/
 
 ]
 
