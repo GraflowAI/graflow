@@ -304,6 +304,13 @@ class Task(Executable):
         """Initialize a task."""
         super().__init__()
         self._task_id = task_id
+
+        # Add serialization attributes required for checkpoint/resume
+        # These attributes allow Task objects to be serialized using the reference strategy
+        self.__name__ = task_id
+        self.__module__ = self.__class__.__module__
+        self.__qualname__ = f"{self.__class__.__name__}.{task_id}"
+
         # Register to current workflow context
         if register_to_context:
             self._register_to_context()
@@ -622,6 +629,14 @@ class TaskWrapper(Executable):
         self._task_id = task_id
         self.func = func
         self.inject_context = inject_context
+
+        # Add serialization attributes required for checkpoint/resume
+        # These may be overwritten by @task decorator if used
+        self.__name__ = getattr(func, '__name__', task_id)
+        self.__module__ = getattr(func, '__module__', self.__class__.__module__)
+        self.__qualname__ = getattr(func, '__qualname__', task_id)
+        self.__doc__ = getattr(func, '__doc__', None)
+
         # Set handler_type attribute (from Executable base class)
         if handler_type is not None:
             self.handler_type = handler_type
