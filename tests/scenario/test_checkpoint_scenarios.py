@@ -171,7 +171,7 @@ class TestStateBasedCheckpointScenarios:
         def training_loop_func(task_ctx):
             """Training loop with periodic checkpoints."""
             channel = task_ctx.execution_context.channel
-            iteration = channel.get("iteration") if channel.get("iteration") is not None else 0
+            iteration = channel.get("iteration", 0)
             max_iterations = 10
 
             # Training step
