@@ -519,7 +519,7 @@ class TestComplexWorkflowCheckpointScenarios:
         def cyclic_task_func(task_ctx):
             """Task that uses cycles and checkpoints."""
             channel = task_ctx.execution_context.channel
-            count = channel.get("count") if channel.get("count") is not None else 0
+            count = channel.get("count", 0)
 
             channel.set("count", count + 1)
 
