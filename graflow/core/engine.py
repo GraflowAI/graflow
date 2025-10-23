@@ -115,24 +115,6 @@ class WorkflowEngine:
                 # Exception already stored by handler, just re-raise
                 raise exceptions.as_runtime_error(e)  # noqa: B904
 
-            # Track completion and step count
-            context.mark_task_completed(task_id)
-            context.increment_step()
-
-            # Handle deferred checkpoint requests
-            if context.checkpoint_requested:
-                from graflow.checkpoint import CheckpointManager
-
-                checkpoint_path, checkpoint_metadata = CheckpointManager.create_checkpoint(
-                    context,
-                    path=context.checkpoint_request_path,
-                    metadata=context.checkpoint_request_metadata,
-                )
-                print(f"Checkpoint created: {checkpoint_path}")
-                context.checkpoint_metadata = checkpoint_metadata.to_dict()
-                context.last_checkpoint_path = checkpoint_path
-                context.clear_checkpoint_request()
-
             # Handle successor scheduling
             if context.goto_called:
                 print(f"🚫 Goto called in {task_id}, skipping successors")
@@ -149,6 +131,24 @@ class WorkflowEngine:
                 for succ in successors:
                     succ_task = graph.get_node(succ)
                     context.add_to_queue(succ_task)
+
+            # Track completion and step count after scheduling
+            context.mark_task_completed(task_id)
+            context.increment_step()
+
+            # Handle deferred checkpoint requests after queue updates
+            if context.checkpoint_requested:
+                from graflow.core.checkpoint import CheckpointManager
+
+                checkpoint_path, checkpoint_metadata = CheckpointManager.create_checkpoint(
+                    context,
+                    path=context.checkpoint_request_path,
+                    metadata=context.checkpoint_request_metadata,
+                )
+                print(f"Checkpoint created: {checkpoint_path}")
+                context.checkpoint_metadata = checkpoint_metadata.to_dict()
+                context.last_checkpoint_path = checkpoint_path
+                context.clear_checkpoint_request()
 
             task_id = context.get_next_task()
 
