@@ -54,7 +54,7 @@ class TestStateBasedCheckpointScenarios:
             """Process order through different states with checkpoints."""
             # Get channel and current state
             channel = task_ctx.execution_context.channel
-            state = channel.get("order_state") if channel.get("order_state") else "NEW"
+            state = channel.get("order_state", "NEW")
             order_data = channel.get("order_data")
 
             if state == "NEW":
