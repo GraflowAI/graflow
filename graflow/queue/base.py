@@ -140,12 +140,6 @@ class TaskQueue(ABC):
         """Get TaskSpec by task ID."""
         return self._task_specs.get(task_id)
 
-    # === Checkpoint support helpers ===
-
-    def get_pending_tasks(self) -> list[str]:
-        """Return pending task IDs in queue order (checkpoint helper)."""
-        return self.to_list()
-
     def get_pending_task_specs(self) -> List[TaskSpec]:
         """Return TaskSpec objects for pending tasks (checkpoint helper)."""
         return []
