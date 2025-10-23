@@ -721,7 +721,7 @@ class TestCheckpointMetadataScenarios:
         def progressive_task_func(task_ctx):
             """Task that checkpoints multiple times with progress tracking."""
             channel = task_ctx.execution_context.channel
-            progress = channel.get("progress") if channel.get("progress") is not None else 0
+            progress = channel.get("progress", 0)
 
             progress += 25
             channel.set("progress", progress)
