@@ -16,6 +16,7 @@ class TestTaskSpec:
 
     def test_task_spec_creation(self):
         """Test TaskSpec creation and properties."""
+
         def test_func():
             return "test_result"
 
@@ -31,6 +32,7 @@ class TestTaskSpec:
 
     def test_task_spec_default_kwargs(self):
         """Test TaskSpec with default kwargs."""
+
         def test_func():
             pass
 
@@ -44,58 +46,23 @@ class TestTaskSpec:
 class TestGroupExecutor:
     """Test cases for GroupExecutor class."""
 
-    @pytest.fixture
-    def mock_coordinator(self, mocker):
-        """Create mock coordinator."""
-        return mocker.Mock(spec=TaskCoordinator)
-
-    def test_group_executor_default_backend(self):
-        """Test GroupExecutor with default threading backend."""
+    def test_resolve_backend_defaults_to_threading(self):
+        """Ensure the default backend resolves to THREADING."""
         executor = GroupExecutor()
+        assert executor._resolve_backend(None) == CoordinationBackend.THREADING
 
-        assert executor.backend == CoordinationBackend.THREADING
-
-    def test_group_executor_direct_backend(self):
-        """Test GroupExecutor with direct backend."""
-        executor = GroupExecutor(CoordinationBackend.DIRECT)
-
-        assert executor.backend == CoordinationBackend.DIRECT
-
-    def test_group_executor_redis_backend(self, mocker):
-        """Test GroupExecutor with Redis backend."""
-        mock_redis = mocker.patch('graflow.coordination.executor.redis')
-        mock_redis_coord = mocker.patch('graflow.coordination.executor.RedisCoordinator')
-
-        mock_redis_client = mocker.Mock()
-        mock_redis.Redis.return_value = mock_redis_client
-
-        executor = GroupExecutor(
-            CoordinationBackend.REDIS,
-            {"host": "test-host", "port": 1234, "db": 1}
-        )
-
-        assert executor.backend == CoordinationBackend.REDIS
-        mock_redis.Redis.assert_called_once_with(host="test-host", port=1234, db=1)
-        mock_redis_coord.assert_called_once_with(mock_redis_client)
-
-    def test_group_executor_redis_with_client(self, mocker):
-        """Test GroupExecutor with existing Redis client."""
-        mock_redis_coord = mocker.patch('graflow.coordination.executor.RedisCoordinator')
-        mock_redis_client = mocker.Mock()
-
-        _executor = GroupExecutor(
-            CoordinationBackend.REDIS,
-            {"redis_client": mock_redis_client}
-        )
-
-        mock_redis_coord.assert_called_once_with(mock_redis_client)
+    def test_resolve_backend_accepts_string(self):
+        """Ensure string backend names resolve to CoordinationBackend members."""
+        executor = GroupExecutor()
+        assert executor._resolve_backend("redis") == CoordinationBackend.REDIS
+        assert executor._resolve_backend("DIRECT") == CoordinationBackend.DIRECT
 
     def test_execute_parallel_group_direct(self, mocker):
         """Test direct execution without coordination."""
         from graflow.core.decorators import task
         from graflow.core.task import Executable
 
-        executor = GroupExecutor(CoordinationBackend.DIRECT)
+        executor = GroupExecutor()
         graph = TaskGraph()
         exec_context = ExecutionContext(graph)
 
@@ -114,7 +81,7 @@ class TestGroupExecutor:
         tasks = cast(List[Executable], [task1, task2])
 
         mock_print = mocker.patch('builtins.print')
-        executor.execute_parallel_group("test_group", tasks, exec_context)
+        executor.execute_parallel_group("test_group", tasks, exec_context, backend="direct")
 
         # Verify tasks were executed
         assert "task1" in results
@@ -130,7 +97,7 @@ class TestGroupExecutor:
         from graflow.core.decorators import task
         from graflow.core.task import Executable
 
-        executor = GroupExecutor(CoordinationBackend.DIRECT)
+        executor = GroupExecutor()
         graph = TaskGraph()
         exec_context = ExecutionContext(graph)
 
@@ -144,7 +111,7 @@ class TestGroupExecutor:
 
         tasks = cast(List[Executable], [task1])
 
-        executor.execute_parallel_group("test_group", tasks, exec_context)
+        executor.execute_parallel_group("test_group", tasks, exec_context, backend=CoordinationBackend.DIRECT)
 
         assert results == [("a", "b", "c")]
 
@@ -153,45 +120,83 @@ class TestGroupExecutor:
         from graflow.core.decorators import task
         from graflow.core.task import Executable
 
-        executor = GroupExecutor(CoordinationBackend.THREADING)
+        executor = GroupExecutor()
         graph = TaskGraph()
         exec_context = ExecutionContext(graph)
 
-        results = []
-
         @task
         def task1():
-            results.append("task1")
             return "result_task1"
 
         @task
         def task2():
-            results.append("task2")
             return "result_task2"
 
         tasks = cast(List[Executable], [task1, task2])
 
-        # Execute should not raise
-        executor.execute_parallel_group("test_group", tasks, exec_context)
+        coordinator_mock = mocker.Mock(spec=TaskCoordinator)
+        mocker.patch('graflow.coordination.executor.ThreadingCoordinator', return_value=coordinator_mock)
 
-        # Verify both tasks executed
-        assert "task1" in results
-        assert "task2" in results
+        # Execute should not raise and should delegate to coordinator
+        executor.execute_parallel_group("test_group", tasks, exec_context, backend="threading")
+
+        coordinator_mock.execute_group.assert_called_once()
+
+    def test_execute_parallel_group_redis(self, mocker):
+        """Ensure Redis backend initializes the queue and coordinator."""
+        from graflow.core.decorators import task
+        from graflow.core.task import Executable
+
+        executor = GroupExecutor()
+        graph = TaskGraph()
+        exec_context = ExecutionContext(graph)
+
+        @task
+        def task1():
+            return "ok"
+
+        tasks = cast(List[Executable], [task1])
+
+        queue_mock = mocker.Mock()
+        coordinator_mock = mocker.Mock(spec=TaskCoordinator)
+
+        mocker.patch('graflow.coordination.executor.RedisTaskQueue', return_value=queue_mock)
+        mocker.patch('graflow.coordination.executor.RedisCoordinator', return_value=coordinator_mock)
+
+        executor.execute_parallel_group(
+            "test_group",
+            tasks,
+            exec_context,
+            backend="redis",
+            backend_config={"host": "test-host", "port": 1234, "db": 2, "key_prefix": "prefix"}
+        )
+
+        coordinator_mock.execute_group.assert_called_once_with("test_group", tasks, exec_context, mocker.ANY)
+
+    def test_execute_parallel_group_invalid_backend(self):
+        executor = GroupExecutor()
+        graph = TaskGraph()
+        exec_context = ExecutionContext(graph)
+
+        with pytest.raises(ValueError):
+            executor.execute_parallel_group("group", [], exec_context, backend="unsupported")
 
 
 class TestGroupExecutorIntegration:
     """Integration tests for GroupExecutor."""
 
-    def test_threading_backend_creation(self):
-        """Test threading backend coordinator creation."""
-        executor = GroupExecutor(
+    def test_create_threading_coordinator(self):
+        executor = GroupExecutor()
+        graph = TaskGraph()
+        exec_context = ExecutionContext(graph)
+
+        coordinator = executor._create_coordinator(
             CoordinationBackend.THREADING,
-            {"thread_count": 4}
+            {"thread_count": 4},
+            exec_context
         )
 
-        # Verify executor was configured correctly
-        assert executor.backend == CoordinationBackend.THREADING
-        assert executor.backend_config["thread_count"] == 4
+        assert isinstance(coordinator, TaskCoordinator)
 
     def test_redis_import_error_handling(self, mocker):
         """Test Redis import error handling."""
@@ -199,9 +204,9 @@ class TestGroupExecutorIntegration:
         from graflow.core.task import Executable
 
         # Mock RedisCoordinator to simulate import error
-        mocker.patch('graflow.coordination.executor.RedisCoordinator', side_effect=ImportError("No module named 'redis'"))
+        mocker.patch('graflow.coordination.executor.RedisTaskQueue', side_effect=ImportError("redis missing"))
 
-        executor = GroupExecutor(CoordinationBackend.REDIS)
+        executor = GroupExecutor()
         graph = TaskGraph()
         exec_context = ExecutionContext(graph)
 
@@ -213,4 +218,4 @@ class TestGroupExecutorIntegration:
 
         # Error should occur when trying to create coordinator
         with pytest.raises(ImportError, match="Redis backend requires 'redis' package"):
-            executor.execute_parallel_group("test_group", tasks, exec_context)
+            executor.execute_parallel_group("test_group", tasks, exec_context, backend="redis")

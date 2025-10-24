@@ -9,8 +9,8 @@ import sys
 import time
 from typing import Any, Dict
 
-from graflow.queue.base import TaskQueue
-from graflow.queue.factory import QueueBackend, TaskQueueFactory
+from graflow.core.task_registry import TaskResolver
+from graflow.queue.redis import RedisTaskQueue
 
 # Setup logging
 logging.basicConfig(
@@ -20,8 +20,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def create_redis_queue(redis_config: Dict[str, Any]) -> TaskQueue:
-    """Create Redis TaskQueue connection using factory."""
+def create_redis_queue(redis_config: Dict[str, Any]) -> RedisTaskQueue:
+    """RedisTaskQueue factory from configuration."""
     try:
         import redis
 
@@ -39,15 +39,14 @@ def create_redis_queue(redis_config: Dict[str, Any]) -> TaskQueue:
 
         # Create dummy ExecutionContext
         class DummyContext:
-            def __init__(self, session_id: str):
-                self.session_id = session_id
+            def __init__(self):
+                self.session_id = "worker_session"
+                self.task_resolver = TaskResolver()
 
-        dummy_context = DummyContext(redis_config.get('session_id', 'default_session'))
+        dummy_context = DummyContext()
 
-        # Use factory to create Redis queue
-        return TaskQueueFactory.create(
-            backend=QueueBackend.REDIS,
-            execution_context=dummy_context,
+        return RedisTaskQueue(
+            dummy_context,
             redis_client=redis_client,
             key_prefix=redis_config.get('key_prefix', 'graflow')
         )
@@ -57,25 +56,6 @@ def create_redis_queue(redis_config: Dict[str, Any]) -> TaskQueue:
         sys.exit(1)
     except Exception as e:
         logger.error(f"Failed to connect to Redis: {e}")
-        sys.exit(1)
-
-
-def create_memory_queue() -> TaskQueue:
-    """Create InMemory TaskQueue using factory."""
-    try:
-        # Create dummy ExecutionContext
-        class DummyContext:
-            def __init__(self):
-                self.session_id = 'memory_session'
-
-        # Use factory to create in-memory queue
-        return TaskQueueFactory.create(
-            backend=QueueBackend.IN_MEMORY,
-            execution_context=DummyContext()
-        )
-
-    except ImportError as e:
-        logger.error(f"Failed to import InMemoryTaskQueue: {e}")
         sys.exit(1)
 
 
@@ -105,14 +85,6 @@ def parse_arguments():
         help='Polling interval in seconds'
     )
 
-    # Queue configuration
-    parser.add_argument(
-        '--queue-type',
-        choices=['redis', 'memory'],
-        default=os.environ.get('QUEUE_TYPE', 'redis'),
-        help='Task queue type'
-    )
-
     # Redis configuration
     parser.add_argument(
         '--redis-host',
@@ -132,9 +104,9 @@ def parse_arguments():
         help='Redis database number'
     )
     parser.add_argument(
-        '--session-id',
-        default=os.environ.get('SESSION_ID', 'default_session'),
-        help='Session ID for queue'
+        '--redis-key-prefix',
+        default=os.environ.get('REDIS_KEY_PREFIX', 'graflow'),
+        help='Redis key prefix used for queue keys'
     )
 
     # Logging
@@ -170,19 +142,21 @@ def main():
         logging.getLogger().setLevel(getattr(logging, args.log_level))
 
         logger.info(f"Starting TaskWorker: {args.worker_id}")
-        logger.info(f"Configuration: queue={args.queue_type}")
+        logger.info(
+            "Configuration: redis=%s:%s db=%s prefix=%s",
+            args.redis_host,
+            args.redis_port,
+            args.redis_db,
+            args.redis_key_prefix,
+        )
 
-        # Create task queue
-        if args.queue_type == 'redis':
-            redis_config = {
-                'host': args.redis_host,
-                'port': args.redis_port,
-                'db': args.redis_db,
-                'session_id': args.session_id
-            }
-            queue = create_redis_queue(redis_config)
-        else:  # memory
-            queue = create_memory_queue()
+        redis_config = {
+            'host': args.redis_host,
+            'port': args.redis_port,
+            'db': args.redis_db,
+            'key_prefix': args.redis_key_prefix,
+        }
+        queue = create_redis_queue(redis_config)
 
         # Create TaskWorker
         from graflow.worker.worker import TaskWorker

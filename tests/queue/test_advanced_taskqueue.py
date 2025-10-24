@@ -7,7 +7,6 @@ from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
 from graflow.core.task import Task
 from graflow.queue.base import TaskSpec, TaskStatus
-from graflow.queue.factory import QueueBackend
 from graflow.queue.memory import InMemoryTaskQueue
 
 
@@ -275,14 +274,9 @@ class TestExecutionContextAdvancedFeatures:
         context = ExecutionContext.create(
             graph,
             "start",
-            queue_backend=QueueBackend.IN_MEMORY,
-            config={
-                'enable_retry': True,
-                'enable_metrics': True
-            }
         )
 
-        # Configure queue if config is provided
+        # Configure queue for advanced features
         if hasattr(context.task_queue, 'configure'):
             context.task_queue.configure(
                 enable_retry=True,

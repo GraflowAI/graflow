@@ -23,7 +23,6 @@ from graflow.core.context import ExecutionContext
 from graflow.core.decorators import task
 from graflow.core.graph import TaskGraph
 from graflow.core.task import Task
-from graflow.queue.factory import QueueBackend
 
 
 # Global functions for testing function manager serialization
@@ -295,25 +294,15 @@ class TestExecutionContextSerialization:
             assert loaded_context.cycle_controller.cycle_counts["sample_task"] == 2
             assert loaded_context.cycle_controller.get_max_cycles_for_node("sample_task") == 5
 
-    def test_queue_backend_preservation(self):
-        """Test that queue backend configuration is preserved during serialization.
-
-        This test ensures that:
-        - TaskQueue backend selection (in-memory, Redis) survives serialization
-        - Queue state and pending tasks are properly maintained
-        - Queue functionality remains operational after deserialization
-        - Backend-specific configuration is preserved and restored
-        - Task scheduling and queue operations work correctly after reload
-        """
+    def test_queue_state_preservation(self):
+        """Ensure the in-memory queue state persists after serialization."""
         graph = TaskGraph()
         graph.add_node(Task("test_task", register_to_context=False), "test_task")
 
-        # Test with IN_MEMORY backend only to avoid task serialization complexity
         context = ExecutionContext.create(
             graph=graph,
             start_node="test_task",
             max_steps=10,
-            queue_backend=QueueBackend.IN_MEMORY,
             channel_backend="memory"
         )
 
@@ -436,7 +425,7 @@ class TestExecutionContextSerialization:
         lambda_task = TaskWrapper("lambda_task", lambda x: x * 2)
         graph.add_node(lambda_task, "lambda_task")
 
-        context = ExecutionContext.create(graph, "start", queue_backend="in_memory")
+        context = ExecutionContext.create(graph, "start")
 
         # Serialize using cloudpickle
         pickled = dumps(context)
@@ -475,7 +464,7 @@ class TestExecutionContextSerialization:
         closure_task = TaskWrapper("closure_task", create_task())
         graph.add_node(closure_task, "closure_task")
 
-        context = ExecutionContext.create(graph, "start", queue_backend="in_memory")
+        context = ExecutionContext.create(graph, "start")
 
         # Serialize using cloudpickle
         pickled = dumps(context)

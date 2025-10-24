@@ -433,12 +433,7 @@ class ParallelGroup(Executable):
         """Execute all tasks in this parallel group."""
         context = self.get_execution_context()
 
-        # Use context.group_executor if backend is None and it exists
-        # Otherwise, use configured executor
-        if self._execution_config["backend"] is None and context.group_executor:
-            executor = context.group_executor
-        else:
-            executor = self._create_configured_executor()
+        executor = context.group_executor or GroupExecutor()
 
         for task in self.tasks:
             # Set execution context for each task
@@ -446,28 +441,17 @@ class ParallelGroup(Executable):
 
         # Extract policy configuration
         policy = self._execution_config.get("policy", "strict")
+        backend = self._execution_config.get("backend")
+        backend_config = self._execution_config.get("backend_config", {})
 
         executor.execute_parallel_group(
             self.task_id,
             self.tasks,
             context,
+            backend=backend,
+            backend_config=backend_config,
             policy=policy,
         )
-
-    def _create_configured_executor(self) -> GroupExecutor:
-        """Create GroupExecutor based on execution configuration.
-
-        Returns:
-            Configured GroupExecutor instance
-        """
-        backend = self._execution_config["backend"]
-        backend_config = self._execution_config["backend_config"]
-
-        # If backend is None, return default GroupExecutor
-        if backend is None:
-            return GroupExecutor()
-        else:
-            return GroupExecutor(backend, backend_config)
 
     def __rshift__(self, other: Executable) -> SequentialTask:
         """Create dependency from parallel group to other.

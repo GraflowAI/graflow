@@ -481,7 +481,6 @@ class CheckpointManager:
             "cycle_counts": dict(context.cycle_controller.cycle_counts),
             "pending_tasks": cls._get_pending_task_specs(context),  # Full TaskSpec
             "backend": {
-                "queue": context._queue_backend_type,
                 "channel": context._channel_backend_type
             }
         }
@@ -516,15 +515,10 @@ class CheckpointManager:
         # 4. Load context from pickle
         context = ExecutionContext.load(checkpoint_path)
 
-        # 5. Restore pending tasks to queue (backend-specific)
-        # InMemoryTaskQueue: Re-queue TaskSpecs (queue state was lost)
-        # RedisTaskQueue: Skip re-queuing (queue already persisted in Redis)
-        if context._queue_backend_type != "redis":
-            # Restore pending tasks from TaskSpec
-            for task_spec_dict in checkpoint_state["pending_tasks"]:
-                task_spec = cls._deserialize_task_spec(task_spec_dict)
-                context.task_queue.enqueue(task_spec)
-        # For Redis: Queue state already exists, no re-queuing needed
+        # 5. Restore pending tasks to queue (in-memory)
+        for task_spec_dict in checkpoint_state["pending_tasks"]:
+            task_spec = cls._deserialize_task_spec(task_spec_dict)
+            context.task_queue.enqueue(task_spec)
         # Note: No current_task_spec to restore - all tasks in completed or pending
 
         # 6. Restore completed tasks tracking

@@ -223,6 +223,8 @@ def loop(context):
 | `a | b` | 並列分岐 |
 | `(a | b) >> c` | ファンイン |
 | `next_iteration()` | 同一タスクの次サイクルをキューに投入 |
+| `context.next_task(executable)` | 新しいタスクを生成しキューに追加 |
+| `context.next_task(existing, goto=True)` | 既存タスクへジャンプ（後続をスキップ） |
 
 **ポイント**: GraflowはDAGだけでなく、状態機械のループもDSLで表現できます。
 
@@ -230,11 +232,20 @@ def loop(context):
 
 ### 7. シームレスなローカル/分散切替 🔁
 
-`ExecutionContext.create(..., queue_backend="redis", channel_backend="redis")` のように設定するだけで、ローカル実行と分散実行を切り替えられます。
+Graflow では ExecutionContext のキューは常にインメモリですが、並列・分散実行が必要な `ParallelGroup`（例: `(task_a | task_b)`）に対しては `GroupExecutor` を通じてバックエンドを切り替えます。
 
-- ローカル検証 → Redisバックエンドへ移行 → 本番運用、と段階的にスケール
-- InMemoryキュー/チャンネルとRedis実装は同一インターフェース
-- CLIフラグによる設定切替をサポート
+```python
+parallel = (task_a | task_b | task_c).with_execution(
+    backend=CoordinationBackend.REDIS,
+    backend_config={"redis_client": redis_client, "key_prefix": "graflow:prod"}
+)
+parallel.run()
+```
+
+- Sequential（直列）タスクは常にローカル実行（in-memory queue）で処理される
+- `(task_a | task_b)` のような ParallelGroup 実行時にのみ、THREADING や REDIS バックエンドを選択可能
+- REDIS バックエンドの場合、`GroupExecutor` が Redis キューへタスクを発行し、`TaskWorker` がそれを消費する（キープレフィックスを合わせること）
+- ParallelGroup の実行モデルは Bulk Synchronous Parallel (BSP) に準拠しており、並列タスク完了後にバリア同期を行ってから次段へ進む
 
 ---
 
@@ -380,7 +391,15 @@ with workflow("etl_pipeline") as wf:
 3. **分散ワークフローのフェイルオーバー**
 
 ```python
-context = ExecutionContext.create(graph, "start", queue_backend="redis")
+from graflow.queue.redis import RedisTaskQueue
+
+context = ExecutionContext.create(
+    graph,
+    "start",
+    channel_backend="redis",
+    config={"redis_client": redis_client, "key_prefix": "graflow:etl"}
+)
+redis_queue = RedisTaskQueue(context, redis_client=redis_client, key_prefix="graflow:etl")
 
 @task(inject_context=True)
 def distributed_step(context):

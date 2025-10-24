@@ -116,7 +116,7 @@ def test_redis_backend():
     from graflow.core.context import ExecutionContext
     from graflow.core.decorators import task
     from graflow.core.graph import TaskGraph
-    from graflow.queue.factory import QueueBackend
+    from graflow.queue.redis import RedisTaskQueue
 
     # Create Redis client
     redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
@@ -130,22 +130,22 @@ def test_redis_backend():
 
     graph.add_node(test_task, "test_task")
 
-    # Create ExecutionContext with Redis backends
+    # Create ExecutionContext with Redis channel backend (queue remains in-memory)
     context = ExecutionContext.create(
         graph,
         "test_task",
-        queue_backend=QueueBackend.REDIS,
         channel_backend="redis",
         config={"redis_client": redis_client}
     )
 
-    print("✅ ExecutionContext created with Redis queue backend")
-    print("✅ ExecutionContext created with Redis channel backend")
+    redis_queue = RedisTaskQueue(context, redis_client=redis_client)
+
+    print("✅ ExecutionContext created (in-memory queue, Redis channel)")
+    print("✅ RedisTaskQueue ready for distributed workers")
     print(f"   Session ID: {context.session_id}")
-    print("   Queue backend: redis")
     print("   Channel backend: redis")
 
-    return context
+    return context, redis_queue
 
 
 def test_basic_workflow():
@@ -157,7 +157,6 @@ def test_basic_workflow():
     from graflow.core.context import ExecutionContext
     from graflow.core.decorators import task
     from graflow.core.workflow import workflow
-    from graflow.queue.factory import QueueBackend
 
     # Create Redis client
     redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
@@ -173,7 +172,6 @@ def test_basic_workflow():
         exec_context = ExecutionContext.create(
             ctx.graph,
             "test_task",
-            queue_backend=QueueBackend.REDIS,
             channel_backend="redis",
             config={"redis_client": redis_client}
         )
@@ -233,7 +231,7 @@ def main():
     print("=== Summary ===")
     print("✅ Redis connection working")
     print("✅ Redis operations functional")
-    print("✅ ExecutionContext with Redis backend ready")
+    print("✅ ExecutionContext with Redis channel ready")
     print("✅ Ready for distributed execution!")
     print("\nNext steps:")
     print("- Start worker processes (see redis_worker.py)")

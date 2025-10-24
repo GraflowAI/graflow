@@ -1103,25 +1103,6 @@ def process(context):
 
 Most orchestration tools require infrastructure for distributed execution, making local development difficult.
 
-#### Graflow's Solution: Backend Switching
-
-```python
-# Development: Local execution (no infrastructure)
-context = ExecutionContext.create(
-    graph,
-    queue_backend=QueueBackend.MEMORY,
-    channel_backend="memory"
-)
-
-# Production: Distributed execution (same code!)
-context = ExecutionContext.create(
-    graph,
-    queue_backend=QueueBackend.REDIS,
-    channel_backend="redis",
-    config={"redis_client": redis_client}
-)
-```
-
 #### Coordination Backends
 
 ```python
@@ -1130,25 +1111,34 @@ parallel = (task_a | task_b | task_c).with_execution(
     backend=CoordinationBackend.DIRECT        # Sequential (debugging)
     # backend=CoordinationBackend.THREADING   # Thread-based parallelism
     # backend=CoordinationBackend.MULTIPROCESSING  # Process-based parallelism
-    # backend=CoordinationBackend.REDIS       # Distributed workers
+    # backend=CoordinationBackend.REDIS       # Distributed via TaskWorker
 )
 ```
+
+> **Note:** Distributed execution is only available for `ParallelGroup` expressions (e.g., `(task_a | task_b)`), where the `GroupExecutor` publishes tasks to Redis queues that `TaskWorker` instances consume. Sequential pipelines (`task_a >> task_b`) always run in-process without TaskWorker distribution. ParallelGroup stages follow the Bulk Synchronous Parallel (BSP) model: all parallel branches complete, synchronize via a barrier, and only then advance to downstream tasks.
 
 #### Environment-based Configuration
 
 ```python
 import os
+from graflow.queue.redis import RedisTaskQueue
 
-backend = QueueBackend.REDIS if os.getenv("ENV") == "production" else QueueBackend.MEMORY
+context = ExecutionContext.create(
+    graph,
+    channel_backend="redis" if os.getenv("ENV") == "production" else "memory",
+    config={"redis_client": redis_client} if os.getenv("ENV") == "production" else None,
+)
 
-context = ExecutionContext.create(graph, queue_backend=backend)
+redis_queue = None
+if os.getenv("ENV") == "production":
+    redis_queue = RedisTaskQueue(context, redis_client=redis_client)
 ```
 
 #### Comparison with Competitors
 
 | Tool | Local Execution | Distributed Execution | Switching |
 |------|-----------------|----------------------|-----------|
-| **Graflow** | ✅ MEMORY backend | ✅ REDIS backend | ✅ 1 line |
+| **Graflow** | ✅ In-memory queue | ✅ Redis queue (専用インスタンス) | ✅ 数行で切替 |
 | **Celery** | ❌ Always requires broker | ✅ | ❌ |
 | **LangGraph** | ✅ In-memory | ❌ Requires external tools | ❌ |
 | **Airflow** | ❌ Always requires DB | ✅ | ❌ |

@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 from graflow.coordination.coordinator import CoordinationBackend, TaskCoordinator
 from graflow.coordination.redis import RedisCoordinator
 from graflow.coordination.threading import ThreadingCoordinator
-from graflow.queue.base import TaskQueue
 from graflow.queue.redis import RedisTaskQueue
 
 if TYPE_CHECKING:
@@ -14,31 +13,61 @@ if TYPE_CHECKING:
     from graflow.core.handlers.group_policy import GroupExecutionPolicy
     from graflow.core.task import Executable
 
+
 class GroupExecutor:
-    """Unified executor for parallel task groups supporting multiple backends."""
+    """Unified executor for parallel task groups supporting multiple backends.
 
-    def __init__(self, backend: CoordinationBackend = CoordinationBackend.THREADING,
-                 backend_config: Optional[Dict[str, Any]] = None):
-        self.backend: CoordinationBackend = backend
-        self.backend_config: Dict[str, Any] = backend_config or {}
+    This executor is stateless. It creates appropriate coordinators per execution
+    request based on the specified backend and configuration.
+    """
 
-    def _create_coordinator(self, backend: CoordinationBackend, config: Dict[str, Any], exec_context: 'ExecutionContext') -> TaskCoordinator:
+    DEFAULT_BACKEND: CoordinationBackend = CoordinationBackend.THREADING
+
+    @staticmethod
+    def _resolve_backend(backend: Optional[Union[str, CoordinationBackend]]) -> CoordinationBackend:
+        if backend is None:
+            return GroupExecutor.DEFAULT_BACKEND
+        if isinstance(backend, CoordinationBackend):
+            return backend
+        if isinstance(backend, str):
+            normalized = backend.lower()
+            for candidate in CoordinationBackend:
+                if candidate.value == normalized or candidate.name.lower() == normalized:
+                    return candidate
+        raise ValueError(f"Unsupported coordination backend: {backend}")
+
+    @staticmethod
+    def _create_coordinator(
+        backend: CoordinationBackend,
+        config: Dict[str, Any],
+        exec_context: 'ExecutionContext'
+    ) -> TaskCoordinator:
         """Create appropriate coordinator based on backend."""
         if backend == CoordinationBackend.REDIS:
+            redis_kwargs: Dict[str, Any] = {}
+            if "redis_client" in config:
+                redis_kwargs["redis_client"] = config["redis_client"]
+            else:
+                redis_kwargs["host"] = config.get("host", "localhost")
+                redis_kwargs["port"] = config.get("port", 6379)
+                redis_kwargs["db"] = config.get("db", 0)
+            redis_kwargs["key_prefix"] = config.get("key_prefix", "graflow")
+
             try:
-                task_queue: TaskQueue = exec_context.queue
-                if not isinstance(task_queue, RedisTaskQueue):
-                    raise ValueError(f"Execution context must provide a valid RedisTaskQueue for Redis backend: {type(task_queue)}")
-                return RedisCoordinator(task_queue)
+                task_queue = RedisTaskQueue(exec_context, **redis_kwargs)
             except ImportError as e:
                 raise ImportError("Redis backend requires 'redis' package") from e
 
-        elif backend == CoordinationBackend.THREADING:
+            return RedisCoordinator(task_queue)
+
+        if backend == CoordinationBackend.THREADING:
             thread_count = config.get("thread_count")
             return ThreadingCoordinator(thread_count)
 
-        else:
-            raise ValueError(f"Unsupported backend: {backend}")
+        if backend == CoordinationBackend.DIRECT:
+            raise ValueError("DIRECT backend should be handled separately")
+
+        raise ValueError(f"Unsupported backend: {backend}")
 
     def execute_parallel_group(
         self,
@@ -46,6 +75,8 @@ class GroupExecutor:
         tasks: List['Executable'],
         exec_context: 'ExecutionContext',
         *,
+        backend: Optional[Union[str, CoordinationBackend]] = None,
+        backend_config: Optional[Dict[str, Any]] = None,
         policy: Union[str, 'GroupExecutionPolicy'] = "strict",
     ) -> None:
         """Execute parallel group with a configurable group policy.
@@ -54,6 +85,8 @@ class GroupExecutor:
             group_id: Parallel group identifier
             tasks: List of tasks to execute
             exec_context: Execution context
+            backend: Coordination backend (name or CoordinationBackend)
+            backend_config: Backend-specific configuration
             policy: Group execution policy (name or instance)
         """
         from graflow.core.handlers.direct import DirectTaskHandler
@@ -64,12 +97,14 @@ class GroupExecutor:
         handler = DirectTaskHandler()
         handler.set_group_policy(policy_instance)
 
-        # Execute with appropriate backend
-        if self.backend == CoordinationBackend.DIRECT:
+        resolved_backend = self._resolve_backend(backend)
+        config = dict(backend_config or {})
+
+        if resolved_backend == CoordinationBackend.DIRECT:
             return self.direct_execute(group_id, tasks, exec_context, handler)
-        else:
-            coordinator = self._create_coordinator(self.backend, self.backend_config, exec_context)
-            return coordinator.execute_group(group_id, tasks, exec_context, handler)
+
+        coordinator = self._create_coordinator(resolved_backend, config, exec_context)
+        coordinator.execute_group(group_id, tasks, exec_context, handler)
 
     def direct_execute(
         self,
@@ -78,14 +113,7 @@ class GroupExecutor:
         execution_context: 'ExecutionContext',
         handler: 'TaskHandler'
     ) -> None:
-        """Execute tasks using unified WorkflowEngine for consistency.
-
-        Args:
-            group_id: Parallel group identifier
-            tasks: List of tasks to execute
-            execution_context: Execution context
-            handler: TaskHandler instance for group policy
-        """
+        """Execute tasks using unified WorkflowEngine for consistency."""
         import time
 
         from graflow.core.handler import TaskResult
@@ -95,9 +123,8 @@ class GroupExecutor:
 
         # Use unified WorkflowEngine for each task
         from graflow.core.engine import WorkflowEngine
-        engine = WorkflowEngine()
 
-        # Collect results
+        engine = WorkflowEngine()
         results: Dict[str, TaskResult] = {}
 
         for task in tasks:
@@ -112,9 +139,7 @@ class GroupExecutor:
                 print(f"    Task {task.task_id} failed: {e}")
                 success = False
                 error_message = str(e)
-                # Continue with other tasks in the group
 
-            # Record result
             results[task.task_id] = TaskResult(
                 task_id=task.task_id,
                 success=success,
@@ -125,5 +150,4 @@ class GroupExecutor:
 
         print(f"  Direct group {group_id} completed")
 
-        # Apply handler (can raise ParallelGroupError)
         handler.on_group_finished(group_id, tasks, results, execution_context)

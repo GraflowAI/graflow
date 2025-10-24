@@ -39,11 +39,10 @@ class RedisTaskQueue(TaskQueue):
             self.redis_client = redis.Redis(host=host, port=port, db=db, decode_responses=True)
 
         self.key_prefix = key_prefix
-        self.session_id = execution_context.session_id
 
-        # Redis keys
-        self.queue_key = f"{key_prefix}:queue:{self.session_id}"
-        self.specs_key = f"{key_prefix}:specs:{self.session_id}"
+        # Redis keys (prefix-only namespace)
+        self.queue_key = f"{key_prefix}:queue"
+        self.specs_key = f"{key_prefix}:specs"
 
     def enqueue(self, task_spec: TaskSpec) -> bool:
         """Add TaskSpec to Redis queue (FIFO)."""

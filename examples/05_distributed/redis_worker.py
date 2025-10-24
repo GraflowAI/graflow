@@ -27,8 +27,8 @@ How to Run:
 # Terminal 1: Start Redis
 docker run -p 6379:6379 redis:7.2
 
-# Terminal 2: Start worker using CLI
-python -m graflow.worker.main --worker-id worker-1
+# Terminal 2: Start worker using CLI (prefix must match demo)
+python -m graflow.worker.main --worker-id worker-1 --redis-key-prefix graflow:worker_demo
 
 # Terminal 3: Run this example to demonstrate worker usage
 python examples/05_distributed/redis_worker.py
@@ -98,22 +98,23 @@ def demonstrate_cli_worker():
     print("="*60)
 
     print("\nTo start a worker as a separate process:")
-    print("\n  python -m graflow.worker.main --worker-id worker-1")
+    print("\n  python -m graflow.worker.main --worker-id worker-1 --redis-key-prefix graflow:worker_demo")
     print("\nWith custom configuration:")
     print("\n  python -m graflow.worker.main \\")
     print("    --worker-id worker-1 \\")
     print("    --redis-host localhost \\")
     print("    --redis-port 6379 \\")
+    print("    --redis-key-prefix graflow:worker_demo \\")
     print("    --max-concurrent-tasks 4 \\")
     print("    --poll-interval 0.1")
 
     print("\nMultiple workers:")
     print("\n  # Terminal 1")
-    print("  python -m graflow.worker.main --worker-id worker-1")
+    print("  python -m graflow.worker.main --worker-id worker-1 --redis-key-prefix graflow:worker_demo")
     print("\n  # Terminal 2")
-    print("  python -m graflow.worker.main --worker-id worker-2")
+    print("  python -m graflow.worker.main --worker-id worker-2 --redis-key-prefix graflow:worker_demo")
     print("\n  # Terminal 3")
-    print("  python -m graflow.worker.main --worker-id worker-3")
+    print("  python -m graflow.worker.main --worker-id worker-3 --redis-key-prefix graflow:worker_demo")
 
 
 def demonstrate_programmatic_worker(redis_client):
@@ -125,7 +126,7 @@ def demonstrate_programmatic_worker(redis_client):
     from graflow.core.decorators import task
     from graflow.core.graph import TaskGraph
     from graflow.queue.base import TaskSpec
-    from graflow.queue.factory import QueueBackend
+    from graflow.queue.redis import RedisTaskQueue
     from graflow.worker.worker import TaskWorker
 
     # Build task graph
@@ -163,12 +164,15 @@ def demonstrate_programmatic_worker(redis_client):
     context = ExecutionContext.create(
         graph,
         "task_1",
-        queue_backend=QueueBackend.REDIS,
         channel_backend="redis",
         config={"redis_client": redis_client, "key_prefix": "graflow:worker_demo"}
     )
 
-    queue = context.task_queue
+    queue = RedisTaskQueue(
+        context,
+        redis_client=redis_client,
+        key_prefix="graflow:worker_demo"
+    )
     queue.cleanup()
     context.channel.clear()
 

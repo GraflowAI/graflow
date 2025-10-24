@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 import uuid
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any, Dict, Optional, Type, TypeVar, Union
+from typing import TYPE_CHECKING, Any, Dict, Optional, Type, TypeVar
 
 from graflow.channels.base import Channel
 from graflow.channels.factory import ChannelFactory
@@ -17,7 +17,7 @@ from graflow.core.graph import TaskGraph
 from graflow.core.task_registry import TaskResolver
 from graflow.exceptions import CycleLimitExceededError
 from graflow.queue.base import TaskQueue, TaskSpec
-from graflow.queue.factory import QueueBackend, TaskQueueFactory
+from graflow.queue.memory import InMemoryTaskQueue
 
 if TYPE_CHECKING:
     from graflow.core.task import Executable
@@ -185,8 +185,6 @@ class ExecutionContext:
         default_max_cycles: int = 10,
         default_max_retries: int = 3,
         steps: int = 0,
-        # Backend configuration
-        queue_backend: Union[QueueBackend, str] = QueueBackend.IN_MEMORY,
         channel_backend: str = "memory",
         config: Optional[Dict[str, Any]] = None,
         parent_context: Optional[ExecutionContext] = None,
@@ -203,17 +201,8 @@ class ExecutionContext:
 
         # Preserve original config (without runtime additions)
         base_config: Dict[str, Any] = dict(config) if config else {}
-        queue_config: Dict[str, Any] = dict(base_config)
-        if start_node:
-            queue_config['start_node'] = start_node
 
-        # Phase 1: Abstract TaskQueue implementation
-        if isinstance(queue_backend, str):
-            queue_backend = QueueBackend(queue_backend)
-
-        self.task_queue: TaskQueue = TaskQueueFactory.create(
-            queue_backend, self, **queue_config
-        )
+        self.task_queue: TaskQueue = InMemoryTaskQueue(self, start_node)
 
         self.cycle_controller = CycleController(default_max_cycles)
 
@@ -239,13 +228,12 @@ class ExecutionContext:
         self._task_contexts: dict[str, TaskExecutionContext] = {}
 
         # Group execution
-        self.group_executor: Optional[GroupExecutor] = parent_context.group_executor if parent_context else None
+        self.group_executor: GroupExecutor = parent_context.group_executor if parent_context else GroupExecutor()
 
         # Track if goto (jump to existing task) was called in current task execution
         self._goto_called_in_current_task: bool = False
 
         # Save backend configuration for serialization
-        self._queue_backend_type = queue_backend.value if isinstance(queue_backend, QueueBackend) else queue_backend
         self._channel_backend_type = channel_backend
         self._original_config = base_config
 
@@ -266,7 +254,6 @@ class ExecutionContext:
             max_steps=self.max_steps,
             default_max_cycles=self.cycle_controller.default_max_cycles,
             default_max_retries=self.default_max_retries,
-            queue_backend=self._queue_backend_type,
             channel_backend=self._channel_backend_type,
             config=self._original_config,
             parent_context=self,
@@ -289,12 +276,17 @@ class ExecutionContext:
         return
 
     @classmethod
-    def create(cls, graph: TaskGraph, start_node: Optional[str] = None, max_steps: int = 10,
-               default_max_cycles: int = 10, default_max_retries: int = 3,
-               queue_backend: Union[QueueBackend, str] = QueueBackend.IN_MEMORY,
-               channel_backend: str = "memory",
-               config: Optional[Dict[str, Any]] = None) -> ExecutionContext:
-        """Create a new execution context with configurable queue and channel backends.
+    def create(
+        cls,
+        graph: TaskGraph,
+        start_node: Optional[str] = None,
+        max_steps: int = 10,
+        default_max_cycles: int = 10,
+        default_max_retries: int = 3,
+        channel_backend: str = "memory",
+        config: Optional[Dict[str, Any]] = None
+    ) -> ExecutionContext:
+        """Create a new execution context with configurable channel backend.
 
         Args:
             graph: Task graph defining the workflow
@@ -302,7 +294,6 @@ class ExecutionContext:
             max_steps: Maximum execution steps
             default_max_cycles: Default maximum cycles for tasks
             default_max_retries: Default maximum retry attempts
-            queue_backend: Backend for task queue (default: IN_MEMORY)
             channel_backend: Backend for inter-task communication (default: memory)
             config: Configuration applied to both queue and channel (e.g., redis_client, key_prefix)
         """
@@ -312,7 +303,6 @@ class ExecutionContext:
             max_steps=max_steps,
             default_max_cycles=default_max_cycles,
             default_max_retries=default_max_retries,
-            queue_backend=queue_backend,
             channel_backend=channel_backend,
             config=config,
         )
@@ -420,7 +410,6 @@ class ExecutionContext:
             "completed_tasks": list(self.completed_tasks),
             "cycle_counts": dict(self.cycle_controller.cycle_counts),
             "backend": {
-                "queue": self._queue_backend_type,
                 "channel": self._channel_backend_type,
             },
         }
@@ -605,8 +594,6 @@ class ExecutionContext:
         state.pop('_task_resolver', None)
 
         # Ensure backend config is saved (should already be set in __init__)
-        if '_queue_backend_type' not in state:
-            state['_queue_backend_type'] = 'memory'
         if '_channel_backend_type' not in state:
             state['_channel_backend_type'] = 'memory'
         if '_original_config' not in state:
@@ -647,7 +634,6 @@ class ExecutionContext:
         self.__dict__.update(state)
 
         # Get backend configuration
-        queue_backend_type = state.get('_queue_backend_type', 'memory')
         channel_backend_type = state.get('_channel_backend_type', 'memory')
         config = state.get('_original_config', {})
 
@@ -655,19 +641,12 @@ class ExecutionContext:
         if self.start_node:
             config = {**config, 'start_node': self.start_node}
 
-        # Reconstruct TaskQueue
+        # Reconstruct TaskQueue (always in-memory after simplification)
         from graflow.channels.factory import ChannelFactory
         from graflow.core.task_registry import TaskResolver
-        from graflow.queue.factory import QueueBackend, TaskQueueFactory
 
-        if isinstance(queue_backend_type, str):
-            queue_backend = QueueBackend(queue_backend_type)
-        else:
-            queue_backend = queue_backend_type
-
-        self.task_queue = TaskQueueFactory.create(
-            queue_backend, self, **config
-        )
+        queue_start_node = config.get('start_node')
+        self.task_queue = InMemoryTaskQueue(self, queue_start_node)
 
         # Reconstruct Channel
         self.channel = ChannelFactory.create_channel(
@@ -686,9 +665,9 @@ class ExecutionContext:
         # Reconstruct TaskResolver
         self._task_resolver = TaskResolver()
 
-        # GroupExecutor is left as None (can be reset if needed)
+        # Ensure GroupExecutor exists for older checkpoints
         if not hasattr(self, 'group_executor'):
-            self.group_executor = None
+            self.group_executor = GroupExecutor()
 
         # Ensure checkpoint attributes exist for older checkpoints
         if not hasattr(self, 'completed_tasks') or self.completed_tasks is None:

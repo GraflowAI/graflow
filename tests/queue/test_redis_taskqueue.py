@@ -10,7 +10,6 @@ from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
 from graflow.core.task import Executable
 from graflow.queue.base import TaskSpec, TaskStatus
-from graflow.queue.factory import QueueBackend
 from graflow.queue.redis import RedisTaskQueue
 
 
@@ -87,13 +86,8 @@ class TestRedisTaskQueue:
         assert queue.execution_context == execution_context
         assert queue.redis_client == mock_redis_client
         assert queue.key_prefix == "graflow"
-        assert queue.session_id == execution_context.session_id
-
-        # Check Redis keys format
-        expected_queue_key = f"graflow:queue:{execution_context.session_id}"
-        expected_specs_key = f"graflow:specs:{execution_context.session_id}"
-        assert queue.queue_key == expected_queue_key
-        assert queue.specs_key == expected_specs_key
+        assert queue.queue_key == "graflow:queue"
+        assert queue.specs_key == "graflow:specs"
 
         mock_redis_module.Redis.assert_called_once_with(
             host='localhost', port=6379, db=0, decode_responses=True
@@ -106,8 +100,8 @@ class TestRedisTaskQueue:
 
             assert queue.redis_client == mock_redis
             assert queue.key_prefix == "test_prefix"
-            assert queue.queue_key.startswith("test_prefix:queue:")
-            assert queue.specs_key.startswith("test_prefix:specs:")
+            assert queue.queue_key == "test_prefix:queue"
+            assert queue.specs_key == "test_prefix:specs"
 
     def test_enqueue(self, mock_redis, execution_context):
         """Test enqueuing TaskSpec to Redis."""
@@ -259,39 +253,27 @@ class TestRedisTaskQueue:
 class TestRedisTaskQueueIntegration:
     """Integration tests for Redis TaskQueue with ExecutionContext."""
 
-    def test_execution_context_with_redis_backend(self, mock_redis):
-        """Test ExecutionContext integration with Redis backend."""
+    def test_execution_context_with_separate_redis_queue(self, mock_redis):
+        """Ensure ExecutionContext uses the in-memory queue while allowing a separate RedisTaskQueue."""
         graph = TaskGraph()
 
         with patch('graflow.queue.redis.redis'):
-            # Test Redis backend creation
             context = ExecutionContext(
                 graph,
                 start_node="start",
-                queue_backend=QueueBackend.REDIS,
                 config={
                     'redis_client': mock_redis,
                     'key_prefix': 'test'
                 }
             )
 
-            assert isinstance(context.task_queue, RedisTaskQueue)
-            assert context.task_queue.redis_client == mock_redis
-            assert context.task_queue.key_prefix == 'test'
+            assert context.task_queue.__class__.__name__ == "InMemoryTaskQueue"
 
-    def test_execution_context_redis_string_backend(self, mock_redis):
-        """Test ExecutionContext with redis string backend."""
-        graph = TaskGraph()
+            queue = RedisTaskQueue(context, redis_client=mock_redis, key_prefix="test")
 
-        with patch('graflow.queue.redis.redis'):
-            context = ExecutionContext(
-                graph,
-                start_node="start",
-                queue_backend="redis",
-                config={'redis_client': mock_redis}
-            )
-
-            assert isinstance(context.task_queue, RedisTaskQueue)
+            assert isinstance(queue, RedisTaskQueue)
+            assert queue.redis_client == mock_redis
+            assert queue.key_prefix == 'test'
 
     def test_redis_backend_compatibility_methods(self, mock_redis):
         """Test that Redis backend maintains compatibility with ExecutionContext."""
@@ -309,15 +291,18 @@ class TestRedisTaskQueueIntegration:
             context = ExecutionContext(
                 graph,
                 start_node="start",
-                queue_backend=QueueBackend.REDIS,
                 config={'redis_client': mock_redis}
             )
 
+            queue = RedisTaskQueue(context, redis_client=mock_redis)
+
             # Test compatibility methods - create simple tasks
+            task_start = create_registered_task(context, "start")
             task1 = create_registered_task(context, "task1")
             task2 = create_registered_task(context, "task2")
-            context.add_to_queue(task1)
-            context.add_to_queue(task2)
+            queue.enqueue(TaskSpec(executable=task_start, execution_context=context))
+            queue.enqueue(TaskSpec(executable=task1, execution_context=context))
+            queue.enqueue(TaskSpec(executable=task2, execution_context=context))
 
             # Mock dequeue responses - lpop returns node_ids, hget returns spec data
             mock_redis.lpop.side_effect = ["start", "task1", "task2", None]
@@ -333,10 +318,10 @@ class TestRedisTaskQueueIntegration:
             mock_redis.hget.side_effect = mock_hget
 
             # Test getting nodes
-            node1 = context.get_next_task()
-            node2 = context.get_next_task()
-            node3 = context.get_next_task()
-            node4 = context.get_next_task()
+            node1 = queue.get_next_task()
+            node2 = queue.get_next_task()
+            node3 = queue.get_next_task()
+            node4 = queue.get_next_task()
 
             assert node1 == "start"
             assert node2 == "task1"
@@ -345,4 +330,4 @@ class TestRedisTaskQueueIntegration:
 
             # Test is_completed
             mock_redis.llen.return_value = 0
-            assert context.is_completed() is True
+            assert queue.is_empty() is True
