@@ -168,12 +168,11 @@ class CheckpointManager:
 
         # 5. Rebuild queue state for in-memory backends by enqueuing TaskSpecs.
         pending_specs = state.get("pending_tasks", [])
-        if context._queue_backend_type != "redis":
-            # Reset queue state reconstructed during deserialization
-            context.task_queue.cleanup()
-            for spec_data in pending_specs:
-                task_spec = cls._deserialize_task_spec(spec_data, context)
-                context.task_queue.enqueue(task_spec)
+        # Reset queue state reconstructed during deserialization
+        context.task_queue.cleanup()
+        for spec_data in pending_specs:
+            task_spec = cls._deserialize_task_spec(spec_data, context)
+            context.task_queue.enqueue(task_spec)
 
         # 6. Reset any outstanding checkpoint request flags after restore.
         context.clear_checkpoint_request()
