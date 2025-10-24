@@ -87,7 +87,7 @@ def main():
     from graflow.core.context import ExecutionContext
     from graflow.core.decorators import task
     from graflow.core.workflow import workflow
-    from graflow.queue.factory import QueueBackend
+    from graflow.queue.redis import RedisTaskQueue
 
     # Create workflow
     with workflow("distributed_etl") as ctx:
@@ -140,13 +140,18 @@ def main():
         exec_context = ExecutionContext.create(
             ctx.graph,
             "extract_source_1",
-            queue_backend=QueueBackend.REDIS,
             channel_backend="redis",
             max_steps=20,
             config={"redis_client": redis_client}
         )
 
-        exec_context.task_queue.cleanup()
+        redis_queue = RedisTaskQueue(
+            exec_context,
+            redis_client=redis_client,
+            key_prefix="graflow:distributed_demo"
+        )
+
+        redis_queue.cleanup()
         exec_context.channel.clear()
 
         # Submit tasks to Redis queue
@@ -166,13 +171,13 @@ def main():
                 execution_context=exec_context,
                 strategy="pickle"
             )
-            exec_context.task_queue.enqueue(task_spec)
+            redis_queue.enqueue(task_spec)
 
         print("✅ Workflow submitted")
         print("✅ Workers will process tasks...")
-        print("\n⚠️  Make sure workers are running:")
-        print("   python -m graflow.worker.main --worker-id worker-1")
-        print("   python -m graflow.worker.main --worker-id worker-2")
+        print("\n⚠️  Make sure workers are running with matching prefix:")
+        print("   python -m graflow.worker.main --worker-id worker-1 --redis-key-prefix graflow:distributed_demo")
+        print("   python -m graflow.worker.main --worker-id worker-2 --redis-key-prefix graflow:distributed_demo")
 
         # Step 3: Monitor execution
         print("\nStep 3: Monitoring execution (this may take 10-15 seconds)")
@@ -205,10 +210,11 @@ def main():
             execution_context=exec_context,
             strategy="pickle"
         )
-        exec_context.task_queue.enqueue(agg_spec)
+        print("✅ Extraction phase complete, enqueuing aggregation task")
+        redis_queue.enqueue(agg_spec)
 
         # Wait for aggregation
-        for _ in range(10):
+        for _ in range(30):
             time.sleep(1)
             agg_result = exec_context.get_result("aggregate_results")
             if agg_result is not None:
