@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Dict, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Dict, Optional, Sequence
 
 from graflow.core.context import ExecutionContext
 from graflow.core.task import Executable
@@ -75,14 +75,19 @@ class TaskHandler(ABC):
         return self.__class__.__name__
 
     @abstractmethod
-    def execute_task(self, task: Executable, context: ExecutionContext) -> None:
-        """Execute single task and store result in context.
+    def execute_task(self, task: Executable, context: ExecutionContext) -> Any:
+        """Execute single task, store result in context, and return it when available.
 
         Abstract method - all handlers must implement execution strategy.
 
         Args:
             task: Executable task to execute
             context: Execution context
+
+        Returns:
+            Any result value produced by the task, when available. Handlers may
+            return ``None`` when the underlying execution does not yield a value
+            or when result retrieval is deferred.
 
         Usage Context:
             - Called by WorkflowEngine for individual task execution
@@ -98,7 +103,7 @@ class TaskHandler(ABC):
             For policy handlers: Inherit from DirectTaskHandler instead.
             For execution handlers: Implement custom execution logic.
         """
-        pass
+        raise NotImplementedError
 
     def set_group_policy(self, policy: 'GroupExecutionPolicy') -> None:
         """Assign a custom group execution policy for this handler."""

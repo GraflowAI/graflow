@@ -91,10 +91,11 @@ from abc import ABC, abstractmethod
 from graflow.core.handler import TaskHandler
 
 class MyHandler(TaskHandler):
-    def execute_task(self, task: Executable, context: ExecutionContext) -> None:
+    def execute_task(self, task: Executable, context: ExecutionContext) -> Any:
         # Execute task and store result
         result = task.run()
         context.set_result(task.task_id, result)
+        return result
 ```
 
 ### Handler Selection

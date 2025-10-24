@@ -15,19 +15,21 @@ def test_custom_handler_workflow_execution():
         def __init__(self) -> None:
             self.executed: list[str] = []
 
-        def execute_task(self, task: Executable, context: ExecutionContext) -> None:
+        def execute_task(self, task: Executable, context: ExecutionContext):
             self.executed.append(task.task_id)
             result = task.run()
             context.set_result(task.task_id, result)
+            return result
 
     class RecordingTimingHandler(TaskHandler):
         def __init__(self) -> None:
             self.executed: list[str] = []
 
-        def execute_task(self, task: Executable, context: ExecutionContext) -> None:
+        def execute_task(self, task: Executable, context: ExecutionContext):
             self.executed.append(task.task_id)
             result = task.run()
             context.set_result(task.task_id, result)
+            return result
 
     logging_handler = RecordingLoggingHandler()
     timing_handler = RecordingTimingHandler()

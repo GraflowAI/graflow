@@ -1,6 +1,7 @@
 """Direct task execution handler."""
 
 import logging
+from typing import Any
 
 from graflow.core.context import ExecutionContext
 from graflow.core.handler import TaskHandler
@@ -28,7 +29,7 @@ class DirectTaskHandler(TaskHandler):
         """Return handler name."""
         return "direct"
 
-    def execute_task(self, task: Executable, context: ExecutionContext) -> None:
+    def execute_task(self, task: Executable, context: ExecutionContext) -> Any:
         """Execute task and store result in context.
 
         Args:
@@ -41,10 +42,10 @@ class DirectTaskHandler(TaskHandler):
         try:
             # Execute task
             result = task.run()
-            # Store result in context
-            if result is not None:
-               context.set_result(task_id, result)
+            # Store result in context (including None)
+            context.set_result(task_id, result)
             logger.debug(f"[DirectTaskHandler] Task {task_id} completed successfully")
+            return result
         except Exception as e:
             # Store exception in context
             context.set_result(task_id, e)

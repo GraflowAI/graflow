@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from graflow import exceptions
 from graflow.core.graph import TaskGraph
@@ -57,7 +57,7 @@ class WorkflowEngine:
         """
         self._handlers[handler_type] = handler
 
-    def _execute_task(self, task: Executable, context: ExecutionContext) -> None:
+    def _execute_task(self, task: Executable, context: ExecutionContext) -> Any:
         """Execute task using appropriate handler.
 
         Args:
@@ -68,7 +68,7 @@ class WorkflowEngine:
             Handler is responsible for calling context.set_result()
         """
         handler = self._get_handler(task)
-        handler.execute_task(task, context)
+        return handler.execute_task(task, context)
 
     def execute(self, context: ExecutionContext, start_task_id: Optional[str] = None) -> None:
         """Execute workflow or single task using the provided context.

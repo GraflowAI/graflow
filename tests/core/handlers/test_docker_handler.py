@@ -41,9 +41,10 @@ class TestDockerTaskHandler:
         simple_task.set_execution_context(context)
 
         handler = DockerTaskHandler(image="python:3.11-slim")
-        handler.execute_task(simple_task, context)
+        result = handler.execute_task(simple_task, context)
 
         assert context.get_result("simple_task") == "hello from docker"
+        assert result == "hello from docker"
 
     @pytest.mark.skipif(not DOCKER_AVAILABLE, reason="Docker daemon not available")
     def test_docker_task_handler_with_computation(self):
@@ -59,9 +60,10 @@ class TestDockerTaskHandler:
         calc_task.set_execution_context(context)
 
         handler = DockerTaskHandler(image="python:3.11-slim")
-        handler.execute_task(calc_task, context)
+        result = handler.execute_task(calc_task, context)
 
         assert context.get_result("calc_task") == 4950
+        assert result == 4950
 
     def test_docker_task_handler_custom_image(self):
         """Test with custom Docker image."""

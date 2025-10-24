@@ -571,9 +571,9 @@ def game_loop(context):
 # Handler Interface
 class TaskHandler(ABC):
     @abstractmethod
-    def execute_task(self, task: Executable, context: ExecutionContext) -> None:
-        """Implement custom execution logic."""
-        pass
+    def execute_task(self, task: Executable, context: ExecutionContext) -> Any:
+        """Implement custom execution logic and return the task result when available."""
+        raise NotImplementedError
 
 # Custom Implementation
 class GPUHandler(TaskHandler):
@@ -581,6 +581,7 @@ class GPUHandler(TaskHandler):
         with gpu_lock:
             result = task.run()  # Execute on GPU
         context.set_result(task.task_id, result)
+        return result
 
 # Registration
 engine = WorkflowEngine()
@@ -605,7 +606,7 @@ class RetryHandler(TaskHandler):
             try:
                 result = task.run()
                 context.set_result(task.task_id, result)
-                return
+                return result
             except Exception as e:
                 if attempt == self.max_retries - 1:
                     raise
