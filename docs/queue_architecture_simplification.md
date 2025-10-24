@@ -8,7 +8,7 @@
 
 ## Background
 
-Graflow currently supports multiple task queue backends through `TaskQueueFactory`:
+Graflow historically supported multiple task queue backends through a `TaskQueueFactory` helper:
 
 - `ExecutionContext` instantiates either `InMemoryTaskQueue` or `RedisTaskQueue` based on configuration.
 - `TaskWorker` accepts any `TaskQueue` implementation, and the Redis-backed queue is typically used for distributed workers.
@@ -28,7 +28,7 @@ Simplify queue responsibilities by **specialising backends**:
 
 1. **ExecutionContext always uses `InMemoryTaskQueue`.**
    - Remove `queue_backend` from `ExecutionContext.create`.
-   - `TaskQueueFactory` is still available for other components but no longer used by `ExecutionContext`.
+   - Directly instantiate in-memory queues where needed; distributed components explicitly create Redis queues.
    - All in-process and checkpoint scenarios rely on a predictable, serialisable queue.
 
 2. **`RedisTaskQueue` is dedicated to distributed coordination.**
@@ -52,11 +52,6 @@ This yields a clean separation:
   - `ExecutionContext.create_branch_context`
 - Instantiate `InMemoryTaskQueue` directly with the start node.
 - Update checkpoint serialization to drop Redis queue assumptions.
-
-### TaskQueueFactory
-
-- Keep for external use, but mark Redis branch as “for coordinator/workers”.
-- Consider `TaskQueueFactory` helpers that return in-memory queues for tests.
 
 - `RedisCoordinator` creates its own `RedisTaskQueue` from `backend_config` supplied by `GroupExecutor`.
 - `TaskWorker` receives a `RedisTaskQueue` directly (e.g., instantiated in `graflow/worker/main.py` from Redis settings).
