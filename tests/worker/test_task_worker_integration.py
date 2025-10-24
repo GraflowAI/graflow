@@ -1,17 +1,16 @@
-"""Basic integration test for TaskWorker functionality."""
+"""Tests for TaskWorker behavior."""
 
-import logging
 import time
 from typing import Any, Optional
+
+import pytest
 
 from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
 from graflow.core.task import TaskWrapper
 from graflow.queue.base import TaskQueue, TaskSpec
-
-# Setup logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from graflow.queue.redis import RedisTaskQueue
+from graflow.worker.worker import TaskWorker
 
 
 def _create_execution_context() -> ExecutionContext:
@@ -43,186 +42,71 @@ def _create_task_spec(execution_context: ExecutionContext, task_id: str) -> Task
 
 
 class MockTaskQueue(TaskQueue):
-    """Mock TaskQueue for testing that extends AbstractTaskQueue."""
+    """Simple in-memory queue for negative-path testing."""
 
     def __init__(self, execution_context: ExecutionContext):
         super().__init__(execution_context)
         self.tasks: list[TaskSpec] = []
-        self.dequeue_count = 0
 
     def enqueue(self, task_spec: TaskSpec) -> bool:
-        """Add a task to the queue."""
         self.tasks.append(task_spec)
-        logger.info(f"Enqueued task: {task_spec.task_id}")
         return True
 
     def dequeue(self) -> Optional[TaskSpec]:
-        """Get a task from the queue."""
-        self.dequeue_count += 1
         if self.tasks:
-            task = self.tasks.pop(0)
-            logger.info(f"Dequeued task: {task.task_id}")
-            return task
+            return self.tasks.pop(0)
         return None
 
     def is_empty(self) -> bool:
-        """Check if queue is empty."""
-        return len(self.tasks) == 0
+        return not self.tasks
 
     def cleanup(self) -> None:
-        """Cleanup resources."""
         self.tasks.clear()
 
     def to_list(self) -> list[str]:
-        """Get list of node IDs in queue order."""
         return [task.task_id for task in self.tasks]
 
 
-def test_basic_task_execution():
-    """Test basic TaskWorker functionality."""
-    print("=== Testing Basic TaskWorker Functionality ===")
+def test_task_worker_rejects_non_redis_queue():
+    """Ensure TaskWorker rejects queues that are not RedisTaskQueue."""
+    execution_context = _create_execution_context()
+    queue = MockTaskQueue(execution_context)
+
+    with pytest.raises(ValueError, match="RedisTaskQueue"):
+        TaskWorker(queue=queue, worker_id="invalid")
+
+
+def test_task_worker_processes_tasks_with_redis_queue(clean_redis: Any):
+    """Verify TaskWorker processes tasks correctly when using RedisTaskQueue."""
+    execution_context = _create_execution_context()
+    queue = RedisTaskQueue(execution_context, clean_redis, "test_worker_queue")
+    queue.cleanup()
 
     try:
-        from graflow.worker.worker import TaskWorker
+        # Enqueue a few tasks
+        for idx in range(3):
+            queue.enqueue(_create_task_spec(execution_context, f"task_{idx}"))
 
-        # Create mock queue and add some tasks
-        execution_context = _create_execution_context()
-        queue = MockTaskQueue(execution_context)
-        queue.enqueue(_create_task_spec(execution_context, "task_1"))
-        queue.enqueue(_create_task_spec(execution_context, "task_2"))
-        queue.enqueue(_create_task_spec(execution_context, "task_3"))
-
-        # Create worker with concurrent execution
         worker = TaskWorker(
             queue=queue,
-            worker_id="test_worker",
+            worker_id="redis_worker",
             max_concurrent_tasks=2,
             poll_interval=0.05
         )
 
-        # Start worker
         worker.start()
 
-        # Wait for tasks to be processed
-        print("Waiting for tasks to be processed...")
-        time.sleep(2.0)
+        # Wait until the queue is drained
+        timeout = time.time() + 10.0
+        while queue.size() > 0 and time.time() < timeout:
+            time.sleep(0.1)
 
-        # Check intermediate metrics
-        metrics = worker.get_metrics()
-        print(f"Intermediate metrics: {metrics['tasks_processed']} processed, {metrics['active_tasks']} active")
-
-        # Wait a bit more
-        time.sleep(1.0)
-
-        # Stop worker
         worker.stop()
 
-        # Check final metrics
         metrics = worker.get_metrics()
-        print("\nWorker Metrics:")
-        for key, value in metrics.items():
-            print(f"  {key}: {value}")
+        assert metrics["tasks_processed"] == 3
+        assert metrics["tasks_failed"] == 0
+        assert metrics["active_tasks"] == 0
 
-        # Verify tasks were processed
-        assert metrics["tasks_processed"] > 0, "No tasks were processed"
-        assert queue.is_empty(), "Not all tasks were processed"
-        assert metrics["active_tasks"] == 0, "Some tasks still active after shutdown"
-
-        print("\n✅ Basic TaskWorker test passed!")
-
-    except ImportError as e:
-        print(f"❌ Import error: {e}")
-        print("Make sure PYTHONPATH includes the graflow directory")
-    except Exception as e:
-        print(f"❌ Test failed: {e}")
-        import traceback
-        traceback.print_exc()
-
-
-def test_concurrent_task_execution():
-    """Test concurrent task execution."""
-    print("\n=== Testing Concurrent Task Execution ===")
-
-    try:
-        from graflow.worker.worker import TaskWorker
-
-        # Create mock queue with more tasks
-        execution_context = _create_execution_context()
-        queue = MockTaskQueue(execution_context)
-        for i in range(10):
-            queue.enqueue(_create_task_spec(execution_context, f"concurrent_task_{i}"))
-
-        # Create worker with higher concurrency
-        worker = TaskWorker(
-            queue=queue,
-            worker_id="concurrent_worker",
-            max_concurrent_tasks=5,
-            poll_interval=0.01
-        )
-
-        # Start worker
-        worker.start()
-
-        # Monitor execution
-        start_time = time.time()
-        while not queue.is_empty() and time.time() - start_time < 10.0:
-            metrics = worker.get_metrics()
-            print(f"Progress: {metrics['tasks_processed']} processed, {metrics['active_tasks']} active")
-            time.sleep(0.5)
-
-        # Stop worker
-        worker.stop()
-
-        # Final metrics
-        metrics = worker.get_metrics()
-        print("\nConcurrent Execution Metrics:")
-        for key, value in metrics.items():
-            print(f"  {key}: {value}")
-
-        # Verify all tasks processed
-        assert metrics["tasks_processed"] == 10, f"Expected 10 tasks, got {metrics['tasks_processed']}"
-        assert metrics["active_tasks"] == 0, "Tasks still active after shutdown"
-
-        print("✅ Concurrent task execution test passed!")
-
-    except Exception as e:
-        print(f"❌ Concurrent test failed: {e}")
-        import traceback
-        traceback.print_exc()
-
-
-def test_redis_coordinator_dispatch(clean_redis: Any):
-    """Test RedisCoordinator dispatch_task functionality."""
-    print("\n=== Testing RedisCoordinator dispatch_task ===")
-
-    try:
-        from graflow.coordination.redis import RedisCoordinator
-
-        # This would normally require Redis, so we'll just test the method exists
-        coordinator = RedisCoordinator(clean_redis)  # Will fail, but we can test the interface
-
-        # Test that the method exists and has the right signature
-        assert hasattr(coordinator, 'dispatch_task'), "dispatch_task method not found"
-        assert hasattr(coordinator, '_serialize_execution_context'), "serialization method not found"
-
-        print("✅ RedisCoordinator interface test passed!")
-
-    except ImportError as e:
-        print(f"❌ Import error: {e}")
-    except Exception as e:
-        # Expected since we're not providing real Redis client
-        print(f"⚠️  RedisCoordinator test skipped (expected without Redis): {e}")
-
-
-if __name__ == "__main__":
-    print("Starting TaskWorker Integration Tests...\n")
-
-    test_basic_task_execution()
-    test_concurrent_task_execution()
-
-    from tests.conftest import clean_redis, redis_server
-    redis_server = redis_server()
-    clean_redis = clean_redis(redis_server)
-    test_redis_coordinator_dispatch(clean_redis)
-
-    print("\n🎉 Integration tests completed!")
+    finally:
+        queue.cleanup()

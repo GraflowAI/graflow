@@ -36,7 +36,7 @@ class TestCheckpointMetadata:
             session_id="session_abc",
             steps=5,
             start_node="task_a",
-            backend={"queue": "memory", "channel": "memory"},
+            backend={"channel": "memory"},
             user_metadata={"project": "test_project", "version": "1.0"}
         )
 
@@ -44,7 +44,7 @@ class TestCheckpointMetadata:
         assert metadata.session_id == "session_abc"
         assert metadata.steps == 5
         assert metadata.start_node == "task_a"
-        assert metadata.backend == {"queue": "memory", "channel": "memory"}
+        assert metadata.backend == {"channel": "memory"}
         assert metadata.user_metadata == {"project": "test_project", "version": "1.0"}
         assert metadata.created_at is not None
 
@@ -55,7 +55,7 @@ class TestCheckpointMetadata:
             session_id="session_xyz",
             steps=3,
             start_node="start",
-            backend={"queue": "redis"},
+            backend={"channel": "redis"},
             user_metadata={"env": "test"}
         )
 
@@ -66,7 +66,7 @@ class TestCheckpointMetadata:
         assert metadata_dict["session_id"] == "session_xyz"
         assert metadata_dict["steps"] == 3
         assert metadata_dict["start_node"] == "start"
-        assert metadata_dict["backend"] == {"queue": "redis"}
+        assert metadata_dict["backend"] == {"channel": "redis"}
         assert metadata_dict["user_metadata"] == {"env": "test"}
         assert "created_at" in metadata_dict
 
@@ -78,7 +78,7 @@ class TestCheckpointMetadata:
             "created_at": "2025-01-01T12:00:00Z",
             "steps": 7,
             "start_node": "initial_task",
-            "backend": {"queue": "memory", "channel": "redis"},
+            "backend": {"channel": "redis"},
             "user_metadata": {"owner": "alice"}
         }
 
@@ -89,7 +89,7 @@ class TestCheckpointMetadata:
         assert metadata.created_at == "2025-01-01T12:00:00Z"
         assert metadata.steps == 7
         assert metadata.start_node == "initial_task"
-        assert metadata.backend == {"queue": "memory", "channel": "redis"}
+        assert metadata.backend == {"channel": "redis"}
         assert metadata.user_metadata == {"owner": "alice"}
 
     def test_metadata_serialization_roundtrip(self):
@@ -99,7 +99,7 @@ class TestCheckpointMetadata:
             session_id="session_roundtrip",
             steps=10,
             start_node="node_x",
-            backend={"queue": "memory"},
+            backend={"channel": "memory"},
             user_metadata={"test": "roundtrip"}
         )
 
