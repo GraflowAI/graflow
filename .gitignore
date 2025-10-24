@@ -75,3 +75,6 @@ Thumbs.db
 credentials/
 .cache/
 .serena/
+
+# Project specific
+examples/gpt_newspaper/backend/outputs/
