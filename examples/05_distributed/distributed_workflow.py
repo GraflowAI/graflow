@@ -199,7 +199,7 @@ def main():
                 break
 
         if len(completed) < 3:
-            print("\n⚠️  Not all extraction tasks completed")
+            print(f"\n⚠️  Not all extraction tasks completed. Finished tasks: {completed}")
             print("   Make sure workers are running!")
             sys.exit(1)
 
