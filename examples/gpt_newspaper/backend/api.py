@@ -20,18 +20,17 @@ POST /api/generate  - Generate newspaper from topics
 GET  /outputs/{path} - Serve generated newspaper files
 """
 
-import os
 import time
 from pathlib import Path
 from typing import List
 
+from config import Config
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
-
 from newspaper_workflow import run_newspaper_workflow
+from pydantic import BaseModel, Field
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -49,9 +48,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount static files and outputs
-app.mount("/frontend/static", StaticFiles(directory="frontend/static"), name="static")
-app.mount("/outputs", StaticFiles(directory="outputs"), name="outputs")
+# Mount static files and outputs (if available)
+frontend_static_dir = Path(__file__).parent / "frontend" / "static"
+if frontend_static_dir.exists():
+    app.mount("/frontend/static", StaticFiles(directory=frontend_static_dir), name="static")
+else:
+    print("⚠️  Warning: Frontend static assets not found; skipping /frontend/static mount")
+
+outputs_dir = Path("outputs")
+outputs_dir.mkdir(exist_ok=True)
+app.mount("/outputs", StaticFiles(directory=outputs_dir), name="outputs")
 
 
 # Pydantic Models
@@ -115,16 +121,16 @@ async def health_check():
         HealthResponse with status information
     """
     # Check for required environment variables
-    if not os.getenv("TAVILY_API_KEY"):
+    if not Config.TAVILY_API_KEY:
         return HealthResponse(
             status="warning",
             message="TAVILY_API_KEY not configured"
         )
 
-    if not os.getenv("OPENAI_API_KEY"):
+    if not Config.OPENAI_API_KEY and "api_base" not in Config.DEFAULT_MODEL_PARAMS:
         return HealthResponse(
             status="warning",
-            message="OPENAI_API_KEY not configured"
+            message="LLM credentials or API base not configured"
         )
 
     return HealthResponse(
@@ -148,17 +154,17 @@ async def generate_newspaper(request: NewspaperRequest):
         HTTPException: If generation fails
     """
     # Validate environment variables
-    if not os.getenv("TAVILY_API_KEY"):
+    if not Config.TAVILY_API_KEY:
         raise HTTPException(
             status_code=500,
             detail="TAVILY_API_KEY environment variable is required"
         )
 
-    if not os.getenv("OPENAI_API_KEY"):
+    if not Config.OPENAI_API_KEY and "api_base" not in Config.DEFAULT_MODEL_PARAMS:
         raise HTTPException(
             status_code=500,
-            detail="OPENAI_API_KEY environment variable not configured. "
-                   "Make sure your LLM provider is configured."
+            detail="LLM credentials not configured. Provide OPENAI_API_KEY or set "
+                   "GPT_NEWSPAPER_MODEL_PARAMS with connection details."
         )
 
     try:

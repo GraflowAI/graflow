@@ -1,16 +1,21 @@
 """Critique Agent - Provides feedback on articles"""
 
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
+from config import Config
 from utils.litellm import LiteLLMClient, make_message
 
 
 class CritiqueAgent:
     """Agent that provides critique feedback on written articles."""
 
-    def __init__(self, model: str = "gpt-4o-mini"):
-        self.client = LiteLLMClient(model)
+    def __init__(self, model: str | None = None, *, client_params: Dict[str, Any] | None = None):
+        self.model = model or Config.DEFAULT_MODEL
+        params = dict(Config.DEFAULT_MODEL_PARAMS)
+        if client_params:
+            params.update(client_params)
+        self.client = LiteLLMClient(self.model, **params)
 
     def critique_article(self, article: Dict) -> Optional[str]:
         """

@@ -2,16 +2,21 @@
 
 import json
 from datetime import datetime
-from typing import Dict, List
+from typing import Any, Dict, List
 
+from config import Config
 from utils.litellm import LiteLLMClient, make_message
 
 
 class CuratorAgent:
     """Agent that curates the most relevant sources for an article."""
 
-    def __init__(self, model: str = "gpt-4o-mini"):
-        self.client = LiteLLMClient(model)
+    def __init__(self, model: str | None = None, *, client_params: Dict[str, Any] | None = None):
+        self.model = model or Config.DEFAULT_MODEL
+        params = dict(Config.DEFAULT_MODEL_PARAMS)
+        if client_params:
+            params.update(client_params)
+        self.client = LiteLLMClient(self.model, **params)
 
     def curate_sources(self, query: str, sources: List[Dict]) -> List[Dict]:
         """

@@ -2,8 +2,9 @@
 
 import json
 from datetime import datetime
-from typing import Dict
+from typing import Any, Dict
 
+from config import Config
 from utils.litellm import LiteLLMClient, make_message
 
 ARTICLE_JSON_FORMAT = """
@@ -38,8 +39,48 @@ REVISE_JSON_FORMAT = """
 class WriterAgent:
     """Agent that writes and revises news articles."""
 
-    def __init__(self, model: str = "gpt-4o-mini"):
-        self.client = LiteLLMClient(model)
+    def __init__(self, model: str | None = None, *, client_params: Dict[str, Any] | None = None):
+        self.model = model or Config.DEFAULT_MODEL
+        params = dict(Config.DEFAULT_MODEL_PARAMS)
+        if client_params:
+            params.update(client_params)
+        self.client = LiteLLMClient(self.model, **params)
+
+    @staticmethod
+    def _strip_code_fence(text: str) -> str:
+        """Remove Markdown code fences from a response when present."""
+        stripped = text.strip()
+        if stripped.startswith("```"):
+            fence_end = stripped.find("\n")
+            if fence_end != -1:
+                stripped = stripped[fence_end + 1 :]
+        if stripped.endswith("```"):
+            stripped = stripped[:-3]
+        return stripped.strip()
+
+    def _parse_json_response(self, raw_text: str | None, *, context: str) -> Dict:
+        """Parse JSON content returned by the model with helpful errors."""
+        if raw_text is None:
+            raise RuntimeError(
+                f"{context}: model '{self.model}' returned no content. "
+                "Ensure the model response_format supports JSON output."
+            )
+
+        cleaned = self._strip_code_fence(raw_text)
+        if not cleaned:
+            raise RuntimeError(
+                f"{context}: model '{self.model}' returned an empty response. "
+                "Check LLM configuration or try a different model."
+            )
+
+        try:
+            return json.loads(cleaned)
+        except json.JSONDecodeError as exc:
+            preview = cleaned.strip().replace("\n", " ")[:200]
+            raise RuntimeError(
+                f"{context}: expected JSON response from model '{self.model}', "
+                f"but received: '{preview}...'"
+            ) from exc
 
     def write_article(self, query: str, sources: list) -> Dict:
         """
@@ -76,7 +117,7 @@ Please return nothing but a JSON in the following format:
             response_format={"type": "json_object"},
         )
 
-        return json.loads(response_text)
+        return self._parse_json_response(response_text, context="WriterAgent.write_article")
 
     def revise_article(self, article: Dict) -> Dict:
         """
@@ -110,7 +151,7 @@ Please return nothing but a JSON in the following format:
             response_format={"type": "json_object"},
         )
 
-        revision = json.loads(response_text)
+        revision = self._parse_json_response(response_text, context="WriterAgent.revise_article")
 
         print(f"For article: {article.get('title', 'Unknown')}")
         print(f"Writer Revision Message: {revision.get('message', '')}\n")

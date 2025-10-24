@@ -76,22 +76,32 @@ def create_article_workflow(query: str, article_id: str, output_dir: str):
             print(f"[{article_id}] ✅ Found {len(result.get('sources', []))} sources")
             return result
 
-        @task(id=f"curate_{article_id}")
-        def curate_task(article: Dict) -> Dict:
+        @task(id=f"curate_{article_id}", inject_context=True)
+        def curate_task(context: TaskExecutionContext) -> Dict:
             """Curate the most relevant sources."""
             print(f"[{article_id}] 📋 Curating sources...")
-            result = curator_agent.run(article)
+            article_data = context.get_result(f"search_{article_id}")
+            if article_data is None:
+                raise ValueError(f"Search results missing for {article_id}, cannot curate.")
+
+            result = curator_agent.run(article_data)
+            channel = context.get_channel()
+            channel.set("article", result)
+            channel.set("iteration", 0)
             print(f"[{article_id}] ✅ Selected {len(result.get('sources', []))} sources")
             return result
 
         @task(id=f"write_{article_id}", inject_context=True)
-        def write_task(context: TaskExecutionContext, article: Dict | None = None) -> Dict:
+        def write_task(context: TaskExecutionContext) -> Dict:
             """Write or revise the article."""
             # Get article from channel if not provided (for goto loop-back)
             channel = context.get_channel()
+            article = channel.get("article")
             if article is None:
-                article = channel.get("article")
-                assert article is not None, "Article data is required for writing."
+                article = context.get_result(f"curate_{article_id}")
+            if article is None:
+                article = context.get_result(f"search_{article_id}")
+            assert article is not None, "Article data is required for writing."
 
             # Get iteration count from channel
             iteration = channel.get("iteration", default=0)
@@ -111,7 +121,7 @@ def create_article_workflow(query: str, article_id: str, output_dir: str):
             return result
 
         @task(id=f"critique_{article_id}", inject_context=True)
-        def critique_task(context: TaskExecutionContext, article: Dict) -> Dict:
+        def critique_task(context: TaskExecutionContext) -> Dict:
             """
             Critique the article and decide next action.
 
@@ -119,10 +129,21 @@ def create_article_workflow(query: str, article_id: str, output_dir: str):
             When approved, naturally flows to design_task in the graph.
             """
             print(f"[{article_id}] 🔎 Critiquing article...")
-            result = critique_agent.run(article)
 
             channel = context.get_channel()
+            article = channel.get("article")
+            if article is None:
+                article = context.get_result(f"write_{article_id}")
+            if article is None:
+                article = context.get_result(f"curate_{article_id}")
+            if article is None:
+                raise ValueError("Article data is required for critique.")
+
             iteration = channel.get("iteration", default=0)
+
+            result = critique_agent.run(article)
+
+            channel.set("article", result)
 
             if result.get("critique") is not None:
                 # Critique has feedback - need revision
@@ -148,9 +169,20 @@ def create_article_workflow(query: str, article_id: str, output_dir: str):
             print(f"[{article_id}] ✅ Article approved by critique!")
             return result
 
-        @task(id=f"design_{article_id}")
-        def design_task(article: Dict) -> Dict:
+        @task(id=f"design_{article_id}", inject_context=True)
+        def design_task(context: TaskExecutionContext) -> Dict:
             """Design the article HTML layout."""
+            channel = context.get_channel()
+            article = channel.get("article")
+            if article is None:
+                article = context.get_result(f"critique_{article_id}")
+            if article is None:
+                article = context.get_result(f"write_{article_id}")
+            if article is None:
+                article = context.get_result(f"curate_{article_id}")
+            if article is None:
+                raise ValueError("Article data is required for design.")
+
             print(f"[{article_id}] 🎨 Designing article layout...")
             design_result = designer_agent.run(article)
             print(f"[{article_id}] ✅ Design complete: {design_result.get('path')}")
@@ -162,7 +194,7 @@ def create_article_workflow(query: str, article_id: str, output_dir: str):
         return wf
 
 
-def execute_article_workflow(query: str, article_id: str, output_dir: str) -> Dict | None:
+def execute_article_workflow(query: str, article_id: str, output_dir: str) -> Dict:
     """
     Execute a single article workflow.
 
@@ -185,14 +217,11 @@ def execute_article_workflow(query: str, article_id: str, output_dir: str) -> Di
         max_steps=30  # Allow multiple write-critique cycles
     )
 
-    # Get final article from workflow results
-    design_task_id = f"design_{article_id}"
-    if result and hasattr(result, 'results') and design_task_id in result.results:
-        return result.results[design_task_id]
+    if isinstance(result, dict):
+        return result
 
     # Fallback: return None if design not found
-    print(f"⚠️  Warning: Design task not found for {article_id}")
-    return None
+    raise ValueError(f"❌ Design task not found for {article_id}")
 
 
 def run_newspaper_workflow(
@@ -273,7 +302,8 @@ def main():
         return
 
     if not os.getenv("OPENAI_API_KEY"):
-        print("⚠️  Warning: OPENAI_API_KEY not found. Make sure your LLM provider is configured.")
+        print("❌ Error: OPENAI_API_KEY not found. Make sure your LLM provider is configured.")
+        return
 
     # Example queries
     queries = [
