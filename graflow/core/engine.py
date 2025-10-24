@@ -70,7 +70,11 @@ class WorkflowEngine:
         handler = self._get_handler(task)
         return handler.execute_task(task, context)
 
-    def execute(self, context: ExecutionContext, start_task_id: Optional[str] = None) -> None:
+    def execute(
+        self,
+        context: ExecutionContext,
+        start_task_id: Optional[str] = None
+    ) -> Any:
         """Execute workflow or single task using the provided context.
 
         Args:
@@ -78,6 +82,8 @@ class WorkflowEngine:
             start_task_id: Optional task ID to start execution from. If None, uses context.get_next_task()
         Raises:
             exceptions.GraflowRuntimeError: If execution fails due to a runtime error
+        Returns:
+            The result returned by the last executed handler (which may be ``None``).
         """
         assert context.graph is not None, "Graph must be set before execution"
 
@@ -88,6 +94,8 @@ class WorkflowEngine:
             task_id = start_task_id
         else:
             task_id = context.get_next_task()
+
+        last_result: Any = None
 
         # Execute tasks while we have tasks and haven't exceeded max steps
         # Note: Don't check is_completed() here as it would return True immediately
@@ -110,7 +118,7 @@ class WorkflowEngine:
                 with context.executing_task(task):
                     # Execute task using handler
                     # Handler is responsible for setting result
-                    self._execute_task(task, context)
+                    last_result = self._execute_task(task, context)
             except Exception as e:
                 # Exception already stored by handler, just re-raise
                 raise exceptions.as_runtime_error(e)
@@ -153,6 +161,7 @@ class WorkflowEngine:
             task_id = context.get_next_task()
 
         print(f"Execution completed after {context.steps} steps")
+        return last_result
 
     def execute_with_cycles(self, graph: TaskGraph, start_node: str, max_steps: int = 10) -> None:
         """Execute tasks allowing cycles from global graph.
