@@ -10,7 +10,8 @@ from typing import Any, Dict, Optional, Set
 
 from graflow.core.engine import WorkflowEngine
 from graflow.exceptions import GraflowRuntimeError
-from graflow.queue.base import TaskQueue, TaskSpec
+from graflow.queue.base import TaskSpec
+from graflow.queue.redis import RedisTaskQueue
 
 logger = logging.getLogger(__name__)
 
@@ -18,13 +19,13 @@ logger = logging.getLogger(__name__)
 class TaskWorker:
     """Worker that processes tasks from a queue using WorkflowEngine."""
 
-    def __init__(self, queue: TaskQueue, worker_id: str,
+    def __init__(self, queue: RedisTaskQueue, worker_id: str,
                  max_concurrent_tasks: int = 4, poll_interval: float = 0.1,
                  graceful_shutdown_timeout: float = 30.0):
         """Initialize TaskWorker.
 
         Args:
-            queue: TaskQueue instance to pull tasks from
+            queue: RedisTaskQueue instance to pull tasks from
             worker_id: Unique identifier for this worker
             max_concurrent_tasks: Maximum number of concurrent tasks
             poll_interval: Polling interval in seconds
@@ -308,7 +309,7 @@ class TaskWorker:
             # Update metrics
             self._update_metrics(success, duration, is_timeout)
 
-            # Notify task completion via TaskQueue for barrier synchronization
+            # Notify task completion via RedisTaskQueue for barrier synchronization
             if task_spec.group_id:
                 self.queue.notify_task_completion(
                     task_id, success, task_spec.group_id, error_message
