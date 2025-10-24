@@ -31,6 +31,9 @@ class TaskWorker:
             poll_interval: Polling interval in seconds
             graceful_shutdown_timeout: Timeout for graceful shutdown
         """
+        if not isinstance(queue, RedisTaskQueue):
+            raise ValueError("TaskWorker requires a RedisTaskQueue instance")
+
         self.queue = queue
         self.engine = WorkflowEngine()
         self.worker_id = worker_id
