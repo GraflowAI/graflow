@@ -665,8 +665,8 @@ class ExecutionContext:
         # Reconstruct TaskResolver
         self._task_resolver = TaskResolver()
 
-        # GroupExecutor is left as None (can be reset if needed)
-        if not hasattr(self, 'group_executor') or self.group_executor is None:
+        # Ensure GroupExecutor exists for older checkpoints
+        if not hasattr(self, 'group_executor'):
             self.group_executor = GroupExecutor()
 
         # Ensure checkpoint attributes exist for older checkpoints
