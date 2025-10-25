@@ -228,6 +228,7 @@ def run_newspaper_workflow(
     queries: List[str],
     layout: str = "layout_1.html",
     max_workers: int | None = None,
+    output_dir: str | None = None,
 ):
     """
     Run the complete newspaper workflow for multiple queries in parallel.
@@ -247,7 +248,7 @@ def run_newspaper_workflow(
     print("=" * 80)
 
     # Create output directory
-    output_dir = f"outputs/run_{int(time.time())}"
+    output_dir = output_dir or f"outputs/run_{int(time.time())}"
     os.makedirs(output_dir, exist_ok=True)
     print(f"\n📁 Output directory: {output_dir}\n")
 

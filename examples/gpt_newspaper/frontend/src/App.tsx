@@ -1,215 +1,127 @@
-/**
- * GPT Newspaper - Main Application Component
- * Graflow Edition with Material-UI
- */
-
-import React, { useState, useEffect } from 'react';
+import { useCallback } from "react";
 import {
+  Alert,
+  CircularProgress,
   Container,
-  Box,
-  Typography,
+  Divider,
+  List,
+  ListItem,
+  ListItemText,
   Paper,
-  Button,
-  Link,
-  Alert
-} from '@mui/material';
-import NewspaperIcon from '@mui/icons-material/Newspaper';
-import { ThemeProvider } from '@mui/material/styles';
-import CssBaseline from '@mui/material/CssBaseline';
+  Stack,
+  Typography
+} from "@mui/material";
+import Grid from "@mui/material/Grid";
+import QueryForm from "./components/QueryForm";
+import NewspaperPreview from "./components/NewspaperPreview";
+import LogConsole from "./components/LogConsole";
+import { useNewspaper } from "./hooks/useNewspaper";
 
-import { TopicInput, LayoutSelector, LoadingSpinner, ErrorMessage } from './components';
-import { apiClient } from './api';
-import { theme } from './theme';
-import type { LayoutOption } from './types';
+const getBackendUrl = (path: string): string => {
+  const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+  // Remove leading slash from path if present to avoid double slashes
+  const cleanPath = path.startsWith("/") ? path.slice(1) : path;
+  return `${baseUrl}/${cleanPath}`;
+};
 
-interface Topic {
-  id: number;
-  value: string;
-}
+const App = () => {
+  const { history, latest, loading, error, logEntries, activeRunId, generate } = useNewspaper();
 
-const MAX_TOPICS = 10;
-
-function App() {
-  const [topics, setTopics] = useState<Topic[]>([{ id: 1, value: '' }]);
-  const [selectedLayout, setSelectedLayout] = useState<LayoutOption>('layout_1.html');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [apiStatus, setApiStatus] = useState<'ok' | 'warning' | 'error'>('ok');
-
-  // Check API health on mount
-  useEffect(() => {
-    checkAPIHealth();
-  }, []);
-
-  const checkAPIHealth = async () => {
-    try {
-      const health = await apiClient.checkHealth();
-      if (health.status === 'warning') {
-        setApiStatus('warning');
-        console.warn('API Warning:', health.message);
-      } else {
-        setApiStatus('ok');
-      }
-    } catch (err) {
-      setApiStatus('error');
-      console.error('Failed to connect to API:', err);
-    }
-  };
-
-  const handleTopicChange = (id: number, value: string) => {
-    setTopics((prev) => prev.map((t) => (t.id === id ? { ...t, value } : t)));
-  };
-
-  const handleAddTopic = () => {
-    if (topics.length < MAX_TOPICS) {
-      const newId = Math.max(...topics.map((t) => t.id)) + 1;
-      setTopics((prev) => [...prev, { id: newId, value: '' }]);
-    }
-  };
-
-  const handleRemoveTopic = (id: number) => {
-    if (topics.length > 1) {
-      setTopics((prev) => prev.filter((t) => t.id !== id));
-    }
-  };
-
-  const handleProduceNewspaper = async () => {
-    // Collect non-empty topics
-    const filledTopics = topics
-      .filter((t) => t.value.trim())
-      .map((t) => t.value.trim());
-
-    if (filledTopics.length === 0) {
-      setError('Please fill in at least one topic.');
-      return;
-    }
-
-    setError(null);
-    setIsLoading(true);
-
-    try {
-      const response = await apiClient.generateNewspaper({
-        topics: filledTopics,
-        layout: selectedLayout,
-        max_workers: null,
-      });
-
-      // Redirect to the generated newspaper
-      window.location.href = response.path;
-    } catch (err) {
-      setIsLoading(false);
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError('An unexpected error occurred');
-      }
-    }
-  };
+  const handleSubmit = useCallback(
+    async (payload: Parameters<typeof generate>[0]) => {
+      await generate(payload);
+    },
+    [generate]
+  );
 
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <Container maxWidth="md" sx={{ py: 4 }}>
-        {/* Header */}
-        <Paper elevation={2} sx={{ p: 4, mb: 4, textAlign: 'center' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}>
-            <NewspaperIcon sx={{ fontSize: 48, mr: 2, color: 'primary.main' }} />
-            <Typography variant="h1" component="h1" color="primary">
-              GPT Newspaper
-            </Typography>
-          </Box>
-
-          <Typography variant="h6" color="text.secondary" gutterBottom>
-            Powered by Graflow
+    <Container maxWidth="lg" sx={{ py: 6 }}>
+      <Stack spacing={4}>
+        <Stack spacing={1}>
+          <Typography variant="h3">GPT Newspaper</Typography>
+          <Typography color="text.secondary">
+            Compose personalised newspapers by orchestrating the Graflow GPT workflow through a FastAPI backend.
           </Typography>
+        </Stack>
 
-          <Typography variant="body1" color="text.secondary" sx={{ mt: 2 }}>
-            Search powered by{' '}
-            <Link href="https://tavily.com" target="_blank" rel="noopener noreferrer">
-              Tavily
-            </Link>
-            {' | '}
-            Workflow powered by{' '}
-            <Link
-              href="https://github.com/yourusername/graflow"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Graflow
-            </Link>
-          </Typography>
-
-          <Typography variant="h6" sx={{ mt: 3, fontWeight: 500 }}>
-            Type topics of interest and get your personalized newspaper
-          </Typography>
-
-          {apiStatus === 'error' && (
-            <Alert severity="warning" sx={{ mt: 2 }}>
-              ⚠️ Warning: Unable to connect to backend API. Make sure the server is running on
-              port 8000.
-            </Alert>
-          )}
-        </Paper>
-
-        {/* Topic Selection */}
-        <Paper elevation={2} sx={{ p: 4, mb: 3 }}>
-          <Typography variant="h5" gutterBottom sx={{ mb: 3, fontWeight: 600 }}>
-            Select Topics
-          </Typography>
-
-          <Box component="form" onSubmit={(e) => e.preventDefault()}>
-            {topics.map((topic, index) => (
-              <TopicInput
-                key={topic.id}
-                id={topic.id}
-                value={topic.value}
-                onChange={handleTopicChange}
-                onAdd={handleAddTopic}
-                onRemove={handleRemoveTopic}
-                isFirst={index === 0}
-                isLast={index === topics.length - 1}
-                canAddMore={topics.length < MAX_TOPICS}
-                disabled={isLoading}
+        <Grid container spacing={4}>
+          <Grid item xs={12} md={5}>
+            <Paper elevation={1} sx={{ p: 3 }}>
+              <Stack spacing={3}>
+                <Typography variant="h5">Generate a newspaper</Typography>
+                <Typography color="text.secondary">
+                  Provide one or more topics. The backend runs the Graflow workflow and produces a fully rendered HTML
+                  file.
+                </Typography>
+                <QueryForm onSubmit={handleSubmit} disabled={loading} />
+                {loading && (
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <CircularProgress size={20} />
+                    <Typography variant="body2">Generating newspaper…</Typography>
+                  </Stack>
+                )}
+                {error && <Alert severity="error">{error}</Alert>}
+              </Stack>
+            </Paper>
+            <Paper elevation={0} sx={{ p: 3, mt: 3 }}>
+              <Typography variant="h6" gutterBottom>
+                Recent outputs
+              </Typography>
+              {history.length === 0 ? (
+                <Typography color="text.secondary">No newspapers generated yet.</Typography>
+              ) : (
+                <List dense>
+                  {history.map((item) => (
+                    <ListItem
+                      key={item.outputPath}
+                      component="a"
+                      href={getBackendUrl(item.outputPath)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      sx={{ textDecoration: "none", color: "inherit" }}
+                    >
+                      <ListItemText
+                        primary={item.filename}
+                        secondary={new Date(item.createdAt).toLocaleString()}
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              )}
+            </Paper>
+            {(activeRunId || logEntries.length > 0) && (
+              <LogConsole entries={logEntries} runId={activeRunId} loading={loading} />
+            )}
+          </Grid>
+          <Grid item xs={12} md={7}>
+            {latest ? (
+              <NewspaperPreview
+                html={latest.html}
+                outputPath={latest.outputPath}
+                createdAt={latest.createdAt}
+                queries={latest.queries}
+                layout={latest.layout}
               />
-            ))}
-          </Box>
+            ) : (
+              <Paper variant="outlined" sx={{ p: 4, height: "100%" }}>
+                <Stack spacing={2} alignItems="center" justifyContent="center" sx={{ height: "100%" }}>
+                  <Typography variant="h5">Preview</Typography>
+                  <Typography color="text.secondary" align="center">
+                    Generate a newspaper to see the HTML preview and artefact details here.
+                  </Typography>
+                </Stack>
+              </Paper>
+            )}
+          </Grid>
+        </Grid>
 
-          <Box sx={{ mt: 4, mb: 3 }}>
-            <LayoutSelector
-              selected={selectedLayout}
-              onChange={setSelectedLayout}
-              disabled={isLoading}
-            />
-          </Box>
-
-          <Button
-            variant="contained"
-            size="large"
-            fullWidth
-            onClick={handleProduceNewspaper}
-            disabled={isLoading}
-            sx={{ mt: 3, py: 1.5 }}
-            aria-label="Produce newspaper"
-          >
-            {isLoading ? 'Generating...' : 'Produce Newspaper'}
-          </Button>
-        </Paper>
-
-        {/* Loading State */}
-        {isLoading && <LoadingSpinner loading={isLoading} />}
-
-        {/* Error State */}
-        {error && (
-          <ErrorMessage
-            message={error}
-            title="Error"
-            onDismiss={() => setError(null)}
-            open={Boolean(error)}
-          />
-        )}
-      </Container>
-    </ThemeProvider>
+        <Divider />
+        <Typography variant="body2" color="text.secondary">
+          Backend API base URL: {import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000"}
+        </Typography>
+      </Stack>
+    </Container>
   );
-}
+};
 
 export default App;
