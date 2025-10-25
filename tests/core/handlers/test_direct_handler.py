@@ -22,13 +22,14 @@ class TestDirectTaskHandler:
 
         # Create handler and execute
         handler = DirectTaskHandler()
-        handler.execute_task(mock_task, mock_context)
+        result = handler.execute_task(mock_task, mock_context)
 
         # Verify task.run() was called
         mock_task.run.assert_called_once()
 
         # Verify context.set_result() was called with correct arguments
         mock_context.set_result.assert_called_once_with("test_task", "success_result")
+        assert result == "success_result"
 
     def test_direct_task_handler_with_exception(self):
         """Test task execution with exception."""
@@ -63,9 +64,10 @@ class TestDirectTaskHandler:
         mock_context = Mock()
 
         handler = DirectTaskHandler()
-        handler.execute_task(mock_task, mock_context)
+        result = handler.execute_task(mock_task, mock_context)
 
         mock_context.set_result.assert_called_once_with("none_task", None)
+        assert result is None
 
         # Test with dict result
         mock_task = Mock()
@@ -73,9 +75,10 @@ class TestDirectTaskHandler:
         mock_task.run.return_value = {"key": "value"}
         mock_context = Mock()
 
-        handler.execute_task(mock_task, mock_context)
+        result = handler.execute_task(mock_task, mock_context)
 
         mock_context.set_result.assert_called_once_with("dict_task", {"key": "value"})
+        assert result == {"key": "value"}
 
         # Test with list result
         mock_task = Mock()
@@ -83,6 +86,7 @@ class TestDirectTaskHandler:
         mock_task.run.return_value = [1, 2, 3]
         mock_context = Mock()
 
-        handler.execute_task(mock_task, mock_context)
+        result = handler.execute_task(mock_task, mock_context)
 
         mock_context.set_result.assert_called_once_with("list_task", [1, 2, 3])
+        assert result == [1, 2, 3]

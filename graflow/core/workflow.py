@@ -87,8 +87,12 @@ class WorkflowContext:
         """
         return self._redis_client
 
-    def execute(self, start_node: Optional[str] = None, max_steps: int = 10) -> None:
-        """Execute the workflow starting from the specified node."""
+    def execute(self, start_node: Optional[str] = None, max_steps: int = 10) -> Any:
+        """Execute the workflow starting from the specified node.
+
+        Returns:
+            Result from the last executed task handler (may be ``None``).
+        """
         if start_node is None:
             # Find start nodes (nodes with no predecessors)
             candidate_nodes = self.graph.get_start_nodes()
@@ -107,7 +111,7 @@ class WorkflowContext:
             exec_context.group_executor = self._group_executor
 
         engine = WorkflowEngine()
-        engine.execute(exec_context)
+        return engine.execute(exec_context)
 
     def show_info(self) -> None:
         """Display information about this workflow's graph."""

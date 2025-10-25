@@ -554,10 +554,14 @@ class ExecutionContext:
         finally:
             self.pop_task_context()
 
-    def execute(self) -> None:
-        """Execute tasks using this context."""
+    def execute(self) -> Any:
+        """Execute tasks using this context.
+
+        Returns:
+            Result from the last executed task handler (may be ``None``).
+        """
         engine = WorkflowEngine()
-        engine.execute(self)
+        return engine.execute(self)
 
     def __getstate__(self) -> dict:
         """Pickle serialization: exclude un-serializable objects.

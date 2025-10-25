@@ -220,8 +220,8 @@ def loop(context):
 | 構文 | 意味 |
 |------|------|
 | `a >> b` | aの出力がbの入力 |
-| `a | b` | 並列分岐 |
-| `(a | b) >> c` | ファンイン |
+| `a \| b` | 並列分岐 |
+| `(a \| b) >> c` | ファンイン |
 | `next_iteration()` | 同一タスクの次サイクルをキューに投入 |
 | `context.next_task(executable)` | 新しいタスクを生成しキューに追加 |
 | `context.next_task(existing, goto=True)` | 既存タスクへジャンプ（後続をスキップ） |

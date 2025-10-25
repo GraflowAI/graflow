@@ -1,0 +1,36 @@
+# General Python artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Virtual environments & tooling caches
+.venv/
+venv/
+env/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.uv-cache/
+
+# Node/Vite artifacts
+node_modules/
+**/node_modules/
+dist/
+build/
+
+# Local IDE/config files & secrets
+.DS_Store
+.vscode/
+.env
+*.env
+**/.env
+**/.env.*
+
+# Example-specific runtime data
+examples/gpt_newspaper/backend/outputs/
+
+# Git metadata should never be part of the build context
+.git/

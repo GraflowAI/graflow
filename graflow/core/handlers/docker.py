@@ -2,7 +2,7 @@
 
 import base64
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from docker.types import DeviceRequest
 
@@ -63,7 +63,7 @@ class DockerTaskHandler(TaskHandler):
         self.volumes = volumes or {}
         self.device_requests = device_requests or []
 
-    def execute_task(self, task: Executable, context: ExecutionContext) -> None:
+    def execute_task(self, task: Executable, context: ExecutionContext) -> Any:
         """Execute task inside a Docker container and store result in context.
 
         Args:
@@ -118,13 +118,12 @@ class DockerTaskHandler(TaskHandler):
         logger.debug(f"[DockerTaskHandler] Container logs:\n{logs}")
 
         # Parse updated context from logs
+        result: Any = None
         updated_context = self._parse_context_from_logs(logs)
 
-        # Update our context with the results from container
+        # Update result from container context when available
         if updated_context:
-            # Get result from container context and set it in our context
             result = updated_context.get_result(task_id)
-            context.set_result(task_id, result)
 
         # Clean up
         if self.auto_remove:
@@ -134,11 +133,16 @@ class DockerTaskHandler(TaskHandler):
         if exit_status["StatusCode"] != 0:
             error_msg = self._parse_error_from_logs(logs)
             logger.error(f"[DockerTaskHandler] Container failed: {error_msg}")
-            raise RuntimeError(
+            runtime_error = RuntimeError(
                 f"[DockerTaskHandler] Container exited with code {exit_status['StatusCode']}: {error_msg}"
             )
+            context.set_result(task_id, runtime_error)
+            raise runtime_error
 
+        # Success path: store result (may be None) for downstream tasks
+        context.set_result(task_id, result)
         logger.info(f"[DockerTaskHandler] Task {task_id} completed successfully")
+        return result
 
     def _serialize_task(self, task: Executable) -> str:
         """Serialize task function for Docker execution using cloudpickle.

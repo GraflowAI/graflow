@@ -80,7 +80,7 @@ class LoggingHandler(TaskHandler):
     - Error information
     """
 
-    def execute_task(self, task: Executable, context: ExecutionContext) -> None:
+    def execute_task(self, task: Executable, context: ExecutionContext):
         """Execute task with detailed logging.
 
         Args:
@@ -109,6 +109,7 @@ class LoggingHandler(TaskHandler):
             # Store result in context
             context.set_result(task_id, result)
             print("   [LoggingHandler] Stored result in context\n")
+            return result
 
         except Exception as e:
             # Log error
@@ -133,7 +134,7 @@ class TimingHandler(TaskHandler):
     - Useful for performance profiling
     """
 
-    def execute_task(self, task: Executable, context: ExecutionContext) -> None:
+    def execute_task(self, task: Executable, context: ExecutionContext):
         """Execute task with timing measurement.
 
         Args:
@@ -154,6 +155,7 @@ class TimingHandler(TaskHandler):
 
             # Store result
             context.set_result(task_id, result)
+            return result
 
         except Exception as e:
             # Store exception
