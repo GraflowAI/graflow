@@ -31,7 +31,6 @@ classifiers = [
 
 [dependency-groups]
 dev = [
-    "docker>=7.1.0",
     "pandas>=2.3.1",
     "pytest>=8.4.1",
     "pytest-mock>=3.14.1",
@@ -40,6 +39,8 @@ dev = [
 
 [project.optional-dependencies]
 extras = [
+    "docker>=7.1.0",
+    "langfuse>=3.8.1",
     "grandalf>=0.8",
     "pygraphviz>=1.14",
 ]
