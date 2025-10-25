@@ -18,9 +18,11 @@ from graflow.core.task_registry import TaskResolver
 from graflow.exceptions import CycleLimitExceededError
 from graflow.queue.base import TaskQueue, TaskSpec
 from graflow.queue.memory import InMemoryTaskQueue
+from graflow.trace.noop import NoopTracer
 
 if TYPE_CHECKING:
     from graflow.core.task import Executable
+    from graflow.trace.base import Tracer
 
 T = TypeVar('T')
 
@@ -188,11 +190,14 @@ class ExecutionContext:
         channel_backend: str = "memory",
         config: Optional[Dict[str, Any]] = None,
         parent_context: Optional[ExecutionContext] = None,
-        session_id: Optional[str] = None
+        session_id: Optional[str] = None,
+        tracer: Tracer = NoopTracer()
     ):
         """Initialize ExecutionContext with configurable queue backend."""
         self.parent_context = parent_context
-        self.session_id = session_id or str(uuid.uuid4().int)
+        self.session_id = session_id or uuid.uuid4().hex
+        self.tracer = tracer
+
         self.graph = graph
         self.start_node = start_node
         self.max_steps = max_steps
@@ -258,6 +263,7 @@ class ExecutionContext:
             config=self._original_config,
             parent_context=self,
             session_id=branch_session_id,
+            tracer=self.tracer,  # Propagate tracer to branch context
         )
         return branch_context
 
@@ -284,7 +290,8 @@ class ExecutionContext:
         default_max_cycles: int = 10,
         default_max_retries: int = 3,
         channel_backend: str = "memory",
-        config: Optional[Dict[str, Any]] = None
+        config: Optional[Dict[str, Any]] = None,
+        tracer: Tracer = NoopTracer()
     ) -> ExecutionContext:
         """Create a new execution context with configurable channel backend.
 
@@ -296,6 +303,7 @@ class ExecutionContext:
             default_max_retries: Default maximum retry attempts
             channel_backend: Backend for inter-task communication (default: memory)
             config: Configuration applied to both queue and channel (e.g., redis_client, key_prefix)
+            tracer: Optional tracer for workflow execution tracking (default: NoopTracer)
         """
         return cls(
             graph=graph,
@@ -305,6 +313,7 @@ class ExecutionContext:
             default_max_retries=default_max_retries,
             channel_backend=channel_backend,
             config=config,
+            tracer=tracer,
         )
 
     @property
@@ -540,6 +549,8 @@ class ExecutionContext:
     def executing_task(self, task: Executable):
         """Context manager for task execution with proper cleanup.
 
+        Calls tracer hooks for task start/end automatically.
+
         Args:
             task: The task being executed
 
@@ -548,10 +559,23 @@ class ExecutionContext:
         """
         task_ctx = self.create_task_context(task.task_id)
         self.push_task_context(task_ctx)
+
+        # Call tracer hook: task start
+        self.tracer.on_task_start(task, self)
+
+        error: Optional[Exception] = None
+
         try:
             task.set_execution_context(self)
             yield task_ctx
+            # Result will be set by handler, we don't need to retrieve it here
+        except Exception as e:
+            error = e
+            raise
         finally:
+            # Call tracer hook: task end (always called, even on error)
+            # Note: result is passed as None since it's stored in context by handler
+            self.tracer.on_task_end(task, self, result=None, error=error)
             self.pop_task_context()
 
     def execute(self) -> Any:
