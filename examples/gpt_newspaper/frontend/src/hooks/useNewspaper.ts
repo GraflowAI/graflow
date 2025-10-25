@@ -1,13 +1,20 @@
 import { AxiosError } from "axios";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GPTNewspaperClient, newspaperClient } from "../api/client";
-import type { LayoutOption, LogEvent, NewspaperResponse, NewspaperSummary } from "../api/types";
+import type {
+  LayoutOption,
+  LogEvent,
+  NewspaperResponse,
+  NewspaperSummary,
+  WorkflowOption
+} from "../api/types";
 
 export interface GeneratePayload {
   queries: string[];
   layout: LayoutOption;
   outputDir?: string;
   runId?: string;
+  workflow: WorkflowOption;
 }
 
 export interface UseNewspaperResult {

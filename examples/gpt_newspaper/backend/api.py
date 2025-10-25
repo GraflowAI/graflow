@@ -20,13 +20,15 @@ POST /api/generate  - Generate newspaper from topics
 GET  /outputs/{path} - Serve generated newspaper files
 """
 
+import asyncio
 import os
 import signal
 import sys
+import threading
 from contextlib import contextmanager, suppress
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Literal, Tuple
+from typing import Callable, Dict, List, Literal, Tuple
 from uuid import uuid4
 
 from config import Config
@@ -34,10 +36,9 @@ from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnec
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from newspaper_workflow import run_newspaper_workflow
-from pydantic import BaseModel, Field, ConfigDict
-import asyncio
-import threading
+from newspaper_workflow import run_newspaper_workflow as run_original_newspaper_workflow
+from newspaper_dynamic_workflow import run_newspaper_workflow as run_dynamic_newspaper_workflow
+from pydantic import BaseModel, ConfigDict, Field
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -64,6 +65,13 @@ app.mount("/outputs", StaticFiles(directory=outputs_dir), name="outputs")
 SUPPORTED_LAYOUTS: dict[str, str] = {
     "single": "layout_1.html",
     "two-column": "layout_2.html",
+}
+
+SupportedWorkflow = Literal["original", "dynamic"]
+DEFAULT_WORKFLOW: SupportedWorkflow = "original"
+WORKFLOW_RUNNERS: Dict[SupportedWorkflow, Callable[..., str]] = {
+    "original": run_original_newspaper_workflow,
+    "dynamic": run_dynamic_newspaper_workflow,
 }
 
 
@@ -215,6 +223,11 @@ class NewspaperRequest(BaseModel):
         min_length=1,
         max_length=100,
     )
+    workflow: SupportedWorkflow = Field(
+        default=DEFAULT_WORKFLOW,
+        description="Workflow variant to execute: 'original' (static) or 'dynamic'",
+        example=DEFAULT_WORKFLOW,
+    )
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -235,6 +248,7 @@ class NewspaperResponse(BaseModel):
     layout: str = Field(description="Layout option used to generate the newspaper")
     queries: List[str] = Field(description="Queries used to generate the newspaper")
     run_id: str = Field(alias="runId", description="Identifier for the workflow run that produced this output")
+    workflow: SupportedWorkflow = Field(description="Workflow variant that produced this newspaper")
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -288,6 +302,7 @@ def _build_newspaper_response(path: Path, request: NewspaperRequest, run_id: str
         layout=request.layout,
         queries=request.queries,
         run_id=run_id,
+        workflow=request.workflow,
     )
 
 
@@ -323,7 +338,10 @@ def _generate_newspaper_impl(request: NewspaperRequest, run_id: str) -> Newspape
     if not sanitized_queries:
         raise HTTPException(status_code=400, detail="At least one non-empty query is required.")
 
-    newspaper_path = run_newspaper_workflow(
+    workflow_choice: SupportedWorkflow = request.workflow or DEFAULT_WORKFLOW
+    workflow_runner = WORKFLOW_RUNNERS.get(workflow_choice, WORKFLOW_RUNNERS[DEFAULT_WORKFLOW])
+
+    newspaper_path = workflow_runner(
         queries=sanitized_queries,
         layout=request.resolved_layout(),
         max_workers=request.max_workers,
@@ -332,6 +350,7 @@ def _generate_newspaper_impl(request: NewspaperRequest, run_id: str) -> Newspape
     response = _build_newspaper_response(Path(newspaper_path), request, run_id=run_id)
     response.layout = request.layout
     response.queries = sanitized_queries
+    response.workflow = workflow_choice
     return response
 
 

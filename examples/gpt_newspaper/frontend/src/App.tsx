@@ -101,6 +101,7 @@ const App = () => {
                 createdAt={latest.createdAt}
                 queries={latest.queries}
                 layout={latest.layout}
+                workflow={latest.workflow}
               />
             ) : (
               <Paper variant="outlined" sx={{ p: 4, height: "100%" }}>

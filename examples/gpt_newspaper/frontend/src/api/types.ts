@@ -1,10 +1,12 @@
 export type LayoutOption = "single" | "two-column";
+export type WorkflowOption = "original" | "dynamic";
 
 export interface NewspaperRequest {
   queries: string[];
   layout: LayoutOption;
   outputDir?: string;
   runId?: string;
+  workflow?: WorkflowOption;
 }
 
 export interface NewspaperResponse {
@@ -14,6 +16,7 @@ export interface NewspaperResponse {
   layout: LayoutOption;
   queries: string[];
   runId: string;
+  workflow: WorkflowOption;
 }
 
 export interface NewspaperSummary {

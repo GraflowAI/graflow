@@ -7,6 +7,8 @@ vi.mock("./hooks/useNewspaper", () => ({
     latest: null,
     loading: false,
     error: null,
+    logEntries: [],
+    activeRunId: null,
     generate: vi.fn(),
     refreshHistory: vi.fn()
   })

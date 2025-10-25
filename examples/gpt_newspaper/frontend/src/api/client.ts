@@ -1,5 +1,11 @@
 import axios, { AxiosInstance } from "axios";
-import type { LayoutOption, NewspaperRequest, NewspaperResponse, NewspaperSummary } from "./types";
+import type {
+  LayoutOption,
+  NewspaperRequest,
+  NewspaperResponse,
+  NewspaperSummary,
+  WorkflowOption
+} from "./types";
 
 const DEFAULT_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
@@ -43,5 +49,6 @@ export class GPTNewspaperClient {
 }
 
 export const supportedLayouts: LayoutOption[] = ["single", "two-column"];
+export const supportedWorkflows: WorkflowOption[] = ["original", "dynamic"];
 
 export const newspaperClient = new GPTNewspaperClient();

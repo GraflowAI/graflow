@@ -6,6 +6,7 @@ export interface NewspaperPreviewProps {
   createdAt: string;
   queries: string[];
   layout: string;
+  workflow: string;
 }
 
 const getBackendUrl = (path: string): string => {
@@ -15,13 +16,14 @@ const getBackendUrl = (path: string): string => {
   return `${baseUrl}/${cleanPath}`;
 };
 
-const NewspaperPreview = ({ html, outputPath, createdAt, queries, layout }: NewspaperPreviewProps) => (
+const NewspaperPreview = ({ html, outputPath, createdAt, queries, layout, workflow }: NewspaperPreviewProps) => (
   <Paper elevation={3} sx={{ padding: 3 }}>
     <Stack spacing={2}>
       <Box>
         <Typography variant="h6">Latest newspaper</Typography>
         <Typography variant="body2" color="text.secondary">
-          Generated at {new Date(createdAt).toLocaleString()} using the {layout} layout for: {queries.join(", ")}
+          Generated at {new Date(createdAt).toLocaleString()} using the {layout} layout via the {workflow} workflow
+          for: {queries.join(", ")}
         </Typography>
       </Box>
       <Link href={getBackendUrl(outputPath)} target="_blank" rel="noopener noreferrer">

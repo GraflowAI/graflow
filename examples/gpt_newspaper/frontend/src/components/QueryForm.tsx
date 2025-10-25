@@ -3,19 +3,27 @@ import {
   Box,
   Button,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Link,
   Stack,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
   Typography
 } from "@mui/material";
-import { supportedLayouts } from "../api/client";
-import type { LayoutOption } from "../api/types";
+import { supportedLayouts, supportedWorkflows } from "../api/client";
+import type { LayoutOption, WorkflowOption } from "../api/types";
+import originalWorkflowImg from "../assets/original_wf.png";
+import dynamicWorkflowImg from "../assets/dynamic_wf.svg";
 
 export interface QueryFormPayload {
   queries: string[];
   layout: LayoutOption;
   outputDir?: string;
+  workflow: WorkflowOption;
 }
 
 export interface QueryFormProps {
@@ -29,6 +37,18 @@ const QueryForm = ({ onSubmit, disabled = false }: QueryFormProps) => {
   const [layout, setLayout] = useState<LayoutOption>("two-column");
   const [rawQueries, setRawQueries] = useState<string>(DEFAULT_QUERIES.join("\n"));
   const [outputDir, setOutputDir] = useState<string>("");
+  const [workflow, setWorkflow] = useState<WorkflowOption>("original");
+  const [previewWorkflow, setPreviewWorkflow] = useState<WorkflowOption | null>(null);
+
+  const workflowImages: Record<WorkflowOption, string> = {
+    original: originalWorkflowImg,
+    dynamic: dynamicWorkflowImg
+  };
+
+  const workflowTitles: Record<WorkflowOption, string> = {
+    original: "Original Workflow",
+    dynamic: "Dynamic Workflow"
+  };
 
   const queries = useMemo(
     () =>
@@ -47,6 +67,7 @@ const QueryForm = ({ onSubmit, disabled = false }: QueryFormProps) => {
     onSubmit({
       queries,
       layout,
+      workflow,
       outputDir: outputDir || undefined
     });
   };
@@ -96,6 +117,50 @@ const QueryForm = ({ onSubmit, disabled = false }: QueryFormProps) => {
           </ToggleButtonGroup>
         </Stack>
 
+        <Stack spacing={1}>
+          <Typography variant="subtitle2" component="span">
+            Workflow
+          </Typography>
+          <ToggleButtonGroup
+            value={workflow}
+            exclusive
+            onChange={(_, value: WorkflowOption | null) => {
+              if (value) {
+                setWorkflow(value);
+              }
+            }}
+            size="small"
+          >
+            {supportedWorkflows.map((item) => (
+              <ToggleButton key={item} value={item}>
+                {item}
+              </ToggleButton>
+            ))}
+          </ToggleButtonGroup>
+          <Typography variant="body2" color="text.secondary">
+            Choose between the original static flow or the new dynamic workflow with runtime branching. {" "}
+            <Link
+              component="button"
+              type="button"
+              onClick={() => setPreviewWorkflow("original")}
+              underline="hover"
+            >
+              View original flow
+            </Link>
+            {" / "}
+            <Link
+              component="button"
+              type="button"
+              onClick={() => {
+                window.open(dynamicWorkflowImg, "_blank", "noopener,noreferrer");
+              }}
+              underline="hover"
+            >
+              View dynamic flow
+            </Link>
+          </Typography>
+        </Stack>
+
         <TextField
           label="Output directory override (optional)"
           value={outputDir}
@@ -109,6 +174,32 @@ const QueryForm = ({ onSubmit, disabled = false }: QueryFormProps) => {
           </Button>
         </Box>
       </Stack>
+
+      <Dialog
+        open={previewWorkflow !== null}
+        onClose={() => setPreviewWorkflow(null)}
+        maxWidth="md"
+        fullWidth
+      >
+        {previewWorkflow && previewWorkflow === "original" && (
+          <>
+            <DialogTitle>{workflowTitles[previewWorkflow]}</DialogTitle>
+            <DialogContent>
+              <Box sx={{ display: "flex", justifyContent: "center" }}>
+                <Box
+                  component="img"
+                  src={workflowImages[previewWorkflow]}
+                  alt={`${previewWorkflow} workflow diagram`}
+                  sx={{ width: "100%", maxHeight: 500, objectFit: "contain" }}
+                />
+              </Box>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setPreviewWorkflow(null)}>Close</Button>
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
     </Box>
   );
 };
