@@ -1334,84 +1334,83 @@ class TaskSpec:
     last_error: Optional[str] = None
     group_id: Optional[str] = None
 
-    # 🔹 Trace context (新規)
+    # Trace context (新規)
     trace_id: Optional[str] = None           # トレースID (= session_id, W3C準拠32桁hex)
     parent_span_id: Optional[str] = None     # 親spanID（キューイング元タスク）
-    tracer_type: Optional[str] = None        # "noop", "console", "langfuse"
-    tracer_config: Optional[Dict[str, Any]] = None  # トレーサー設定
 ```
+
+**設計の重要な決定:**
+- TaskSpecには**トレース接続情報のみ**を含める（`trace_id`, `parent_span_id`）
+- `tracer_type`と`tracer_config`は**含めない**
+- Workerは自身の設定ファイルから共通のtracer設定を読み込む
+- 全タスクで同じトレーサー設定を使用する前提
 
 ### 12.5 トレースコンテキストの伝播
 
 #### 12.5.1 ExecutionContext.add_to_queue()の拡張
 
-タスクキューイング時にトレース情報を設定：
+タスクキューイング時にトレース接続情報のみを設定：
 
 ```python
 class ExecutionContext:
     def add_to_queue(self, task: Executable) -> None:
         """Add task to queue with trace context."""
-        # 現在のトレース情報を取得
+        # トレース接続情報を取得
         trace_id = None
         parent_span_id = None
-        tracer_type = None
-        tracer_config = None
 
         if self.tracer:
             # トレースID（ワークフロー全体のID = session_id）
+            # session_idは既に32桁hex形式でW3C準拠
             trace_id = self.session_id
 
             # 親spanID（現在実行中のタスクID）
             parent_span_id = self.current_task_id
 
-            # トレーサータイプ
-            tracer_type = self.tracer.__class__.__name__.replace('Tracer', '').lower()
-
-            # トレーサー設定（LangFuseの場合はキーを含む）
-            if hasattr(self.tracer, 'get_config'):
-                tracer_config = self.tracer.get_config()
-
-        # TaskSpecを作成
+        # TaskSpecを作成（trace_idとparent_span_idのみ）
         task_spec = TaskSpec(
             executable=task,
             execution_context=self,
             trace_id=trace_id,
             parent_span_id=parent_span_id,
-            tracer_type=tracer_type,
-            tracer_config=tracer_config,
         )
 
         self.task_queue.enqueue(task_spec)
 ```
 
-#### 12.5.2 Tracerにget_config()メソッドを追加
+#### 12.5.2 TaskWorkerのtracer設定
 
-各トレーサーがシリアライズ可能な設定を返すメソッド：
+Workerは初期化時に共通のtracer設定を受け取る：
 
 ```python
-class Tracer(ABC):
-    def get_config(self) -> Dict[str, Any]:
-        """Get serializable tracer configuration.
+class TaskWorker:
+    def __init__(
+        self,
+        queue: RedisTaskQueue,
+        worker_id: str,
+        max_concurrent_tasks: int = 4,
+        tracer_type: Optional[str] = None,        # 設定ファイルから読み込む
+        tracer_config: Optional[Dict[str, Any]] = None,  # 設定ファイルから読み込む
+    ):
+        """Initialize TaskWorker.
 
-        Returns:
-            Dictionary containing tracer configuration that can be
-            used to recreate the tracer in a different process.
+        Args:
+            queue: RedisTaskQueue instance
+            worker_id: Unique worker identifier
+            max_concurrent_tasks: Maximum concurrent task count
+            tracer_type: Tracer type ("noop", "console", "langfuse")
+            tracer_config: Tracer configuration dict
         """
-        return {
-            "enable_runtime_graph": self.enable_runtime_graph,
-        }
-
-class LangFuseTracer(Tracer):
-    def get_config(self) -> Dict[str, Any]:
-        """Get LangFuse tracer configuration."""
-        config = super().get_config()
-        config.update({
-            "enabled": self.enabled,
-            # 環境変数から読み込むため、キーは含めない
-            # .envファイルがWorkerプロセスでも読み込まれる前提
-        })
-        return config
+        self.queue = queue
+        self.worker_id = worker_id
+        self.tracer_type = tracer_type
+        self.tracer_config = tracer_config or {}
 ```
+
+**重要な設計決定:**
+- Workerでは**runtime graphのtrackingは不要**
+- デフォルトで`enable_runtime_graph=False`を使用
+- LangFuseTracerの場合、API keyは`.env`ファイルから読み込む
 
 ### 12.6 TaskWorkerでのトレース初期化
 
@@ -1419,60 +1418,54 @@ TaskWorkerがタスクを実行する際に親トレースに接続：
 
 ```python
 class TaskWorker:
-    def _execute_task(self, task_spec: TaskSpec) -> None:
+    def _process_task_wrapper(self, task_spec: TaskSpec) -> Dict[str, Any]:
         """Execute task with trace context."""
-        # 🔹 トレーサーを初期化（TaskSpecから）
-        tracer = self._create_tracer_from_spec(task_spec)
+        # Get execution context from task spec
+        execution_context = task_spec.execution_context
 
-        # ExecutionContextのtracerを設定
-        task_spec.execution_context.tracer = tracer
+        # Tracer initialization from worker configuration
+        tracer = self._create_tracer()
+        if tracer:
+            # Set tracer on ExecutionContext
+            execution_context.tracer = tracer
 
-        # 🔹 親トレースに接続（既に開始されているトレースに参加）
-        if task_spec.trace_id and tracer:
-            tracer.attach_to_trace(task_spec.trace_id)
+            # Attach to parent trace for distributed tracing
+            if task_spec.trace_id:
+                tracer.attach_to_trace(
+                    trace_id=task_spec.trace_id,
+                    parent_span_id=task_spec.parent_span_id
+                )
 
-        # タスク実行
-        task = task_spec.executable
-        try:
-            with task_spec.execution_context.executing_task(task):
-                result = self.engine._execute_task(task, task_spec.execution_context)
-                task_spec.status = TaskStatus.SUCCESS
-        except Exception as e:
-            task_spec.status = TaskStatus.ERROR
-            raise
-        finally:
-            # トレーサーをflush
-            if tracer:
-                tracer.flush()
+        # Execute task...
+        # (task execution logic)
 
-    def _create_tracer_from_spec(self, task_spec: TaskSpec) -> Optional[Tracer]:
-        """Create tracer from TaskSpec configuration.
+        # Flush tracer to ensure data is sent
+        if tracer and hasattr(tracer, 'shutdown'):
+            tracer.shutdown()
 
-        Args:
-            task_spec: TaskSpec containing trace configuration
+    def _create_tracer(self) -> Optional[Tracer]:
+        """Create tracer from worker configuration.
 
         Returns:
             Tracer instance or None
         """
-        if not task_spec.tracer_type:
-            from graflow.trace.noop import NoopTracer
-            return NoopTracer()
+        if not self.tracer_type:
+            return None
 
-        tracer_type = task_spec.tracer_type.lower()
-        config = task_spec.tracer_config or {}
+        tracer_type = self.tracer_type.lower()
 
         if tracer_type == "noop":
             from graflow.trace.noop import NoopTracer
-            return NoopTracer(**config)
+            return NoopTracer(**self.tracer_config)
 
         elif tracer_type == "console":
             from graflow.trace.console import ConsoleTracer
-            return ConsoleTracer(**config)
+            return ConsoleTracer(**self.tracer_config)
 
         elif tracer_type == "langfuse":
             from graflow.trace.langfuse import LangFuseTracer
-            # LangFuseは.envから自動読み込み
-            return LangFuseTracer(**config)
+            # LangFuseは.envからAPI keyを自動読み込み
+            return LangFuseTracer(**self.tracer_config)
 
         else:
             logger.warning(f"Unknown tracer type: {tracer_type}, using NoopTracer")
@@ -1480,29 +1473,24 @@ class TaskWorker:
             return NoopTracer()
 ```
 
+**注意:** Workerでは`enable_runtime_graph=False`をtracer_configに含めることを推奨
+```
+
 ### 12.7 LangFuseでの親トレース接続
 
-LangFuseTracerに`attach_to_trace()`メソッドを追加：
+LangFuseTracer（セクション 4.4 の実装を参照）に `attach_to_trace()` を追加して、既存トレースへワーカーが合流できるようにする。
 
 ```python
-class LangFuseTracer(Tracer):
-    def attach_to_trace(self, trace_id: str) -> None:
-        """Attach to an existing trace.
+def attach_to_trace(self, trace_id: str) -> None:
+    """既存のトレースへ合流する（TaskWorker から呼び出す）。"""
+    if not self.enabled:
+        return
 
-        This is used by TaskWorker to connect to the parent process's trace.
+    # session_id (= trace_id) を LangFuse のトレース名として採用
+    self._trace_name = trace_id
 
-        Args:
-            trace_id: Trace ID to attach to
-        """
-        if not self.enabled:
-            return
-
-        # session_idをトレースIDとして使用
-        self._trace_name = trace_id  # trace_id = ExecutionContext.session_id
-
-        # Note: LangFuseのAPIでは、同じtrace_idを使ってspanを作成すると
-        # 自動的に同じトレースグループに含まれる
-        # これにより、メインプロセスとWorkerプロセスのトレースが統合される
+    # LangFuse API は同じ trace_id の span をグルーピングするため
+    # メインプロセスと Worker のトレースが統合される
 ```
 
 ### 12.8 使用例：分散実行でのトレース
@@ -1702,9 +1690,10 @@ Trace: distributed_workflow (session_id: wf_1234567890abcdef)
    - ワークフロー終了イベント（`on_workflow_end()`）: Line 172
    - ワークフロー名の決定ロジック（graph.nameまたはsession_id prefix）
 
-4. **動的タスク生成への統合** ⏳ 未実装
-   - `ExecutionContext.next_task()` - 未実装
-   - `ExecutionContext.next_iteration()` - 未実装
+4. **動的タスク生成への統合** ✅ 完了
+   - `ExecutionContext.next_task()` - 完了（タスクIDパターンから`is_iteration`を自動判別）
+   - `ExecutionContext.next_iteration()` - 完了（`next_task()`経由で自動的にトレース）
+   - **実装の改善**: `is_iteration`パラメータを削除し、タスクID（`_cycle_\d+_[0-9a-f]+$`）から自動判別
 
 ### 14.2 設計時からの重要な変更
 
@@ -1715,28 +1704,8 @@ Trace: distributed_workflow (session_id: wf_1234567890abcdef)
 - 実装時に、コードの重複を避けるためTemplate Method パターンを採用
 
 **実装の詳細**:
-```python
-# 基底クラス (Tracer)
-class Tracer(ABC):
-    # 具象メソッド - Runtime graph trackingを含む
-    def span_start(self, name, parent_name, metadata):
-        # Runtime graphにノード追加（自動）
-        if self.enable_runtime_graph:
-            self._add_node_to_runtime_graph(...)
-
-        # サブクラスの出力メソッドを呼び出し
-        self._output_span_start(name, parent_name, metadata)
-
-    # 抽象メソッド - サブクラスで実装
-    @abstractmethod
-    def _output_span_start(self, name, parent_name, metadata):
-        pass
-
-# サブクラス (NoopTracer, ConsoleTracer, LangFuseTracer)
-class NoopTracer(Tracer):
-    def _output_span_start(self, name, parent_name, metadata):
-        pass  # 何もしない
-```
+- `Tracer` 基底クラス側で runtime graph への記録や共通前処理／後処理を実装し、最後に `_output_*` 系フックを呼び出す
+- サブクラスは `_output_*` フックのみを実装すればよく、詳細コードはセクション 4.2（NoopTracer）、4.3（ConsoleTracer）、4.4（LangFuseTracer）を参照
 
 **効果**:
 - NoopTracer: ~230行 → ~90行（約60%削減）
@@ -1778,21 +1747,28 @@ class Tracer(ABC):
 
 **実装予定箇所**: `graflow/core/context.py`
 
-#### Phase 3 残り: 分散実行（TaskWorker）との統合
+#### Phase 3 残り: 分散実行（TaskWorker）との統合 ✅ 完了
 
-- ❌ `TaskSpec` へのトレースコンテキストフィールド追加
-  - `trace_id`, `parent_span_id`, `tracer_type`, `tracer_config`
-- ❌ `ExecutionContext.add_to_queue()` でのトレース情報設定
-- ❌ `Tracer.get_config()` メソッド実装（全トレーサー）
-- ❌ `TaskWorker._execute_task()` でのトレーサー初期化
-- ❌ `TaskWorker._create_tracer_from_spec()` 実装
-- ❌ `LangFuseTracer.attach_to_trace()` 実装
+- ✅ `TaskSpec` へのトレース接続情報フィールド追加
+  - `trace_id`, `parent_span_id` のみ（tracer_typeとtracer_configは含めない）
+- ✅ `ExecutionContext.add_to_queue()` でのトレース接続情報設定
+- ✅ `TaskWorker.__init__()` にtracer設定パラメータ追加
+- ✅ `TaskWorker._process_task_wrapper()` でのトレーサー初期化
+- ✅ `TaskWorker._create_tracer()` 実装（worker configから生成）
+- ✅ `Tracer.attach_to_trace()` 実装（base.pyで抽象メソッド定義済み）
 
-**実装予定箇所**:
-- `graflow/queue/base.py` (TaskSpec)
-- `graflow/core/context.py` (add_to_queue)
-- `graflow/trace/base.py` (get_config)
-- `graflow/worker/worker.py` (TaskWorker)
+**実装完了箇所**:
+- `graflow/queue/base.py` (TaskSpec: trace_id, parent_span_id)
+- `graflow/core/context.py` (add_to_queue: トレース接続情報設定)
+- `graflow/trace/base.py` (attach_to_trace抽象メソッド)
+- `graflow/trace/langfuse.py` (_output_attach_to_trace実装)
+- `graflow/worker/worker.py` (TaskWorker: tracer_type/tracer_config, _create_tracer, tracer initialization)
+
+**重要な設計変更**:
+- TaskSpecには**トレース接続情報のみ**（trace_id, parent_span_id）
+- Workerは**自身の設定から**tracer_typeとtracer_configを読み込む
+- 全タスクで同じtracer設定を共有する前提
+- Workerでは**runtime graph tracking無効**（enable_runtime_graph=False推奨）
 
 #### Phase 4: テストと文書化
 
@@ -1856,26 +1832,25 @@ class Tracer(ABC):
 
 ### 14.6 次のステップ
 
+**Phase 3 完了状態:**
+- ✅ LangFuse統合 - 完了
+- ✅ 動的タスク生成への統合 - 完了（`is_iteration`自動判別機能追加）
+- ✅ 分散実行（TaskWorker）との統合 - 完了
+
 **優先順位順:**
 
 1. **Phase 4のテスト実装** (重要度: 高)
    - 既存の実装を安定化させるため
-   - 各トレーサーの単体テスト
+   - 各トレーサーの単体テスト（NoopTracer, ConsoleTracer, LangFuseTracer）
    - Runtime graph機能の統合テスト
+   - 動的タスク生成のトレーステスト
+   - 分散実行（TaskWorker）のトレーステスト
 
-2. **Phase 3残り: 動的タスク生成への統合** (重要度: 中)
-   - `next_task()` / `next_iteration()` でのトレーサーフック
-   - 動的タスクの可視化
-
-3. **Phase 3残り: 分散実行との統合** (重要度: 中)
-   - TaskSpec拡張
-   - TaskWorkerでのトレーサー再作成
-   - 分散トレースの統合
-
-4. **例とドキュメント** (重要度: 中)
+2. **例とドキュメント** (重要度: 中)
    - `examples/12_tracing/` の作成
    - 各トレーサーの使用例
    - Runtime graph分析例
+   - 分散トレーシングの使用例
 
 ### 14.7 実装の品質指標
 
