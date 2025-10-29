@@ -614,11 +614,10 @@ class ExecutionContext:
     def __init__(
         self,
         ...
-        tracer: Optional[Tracer] = None,
+        tracer: Tracer = NoopTracer(),
     ):
-        # デフォルトはNoopTracer（runtime graph有効）
-        from graflow.trace.noop import NoopTracer
-        self.tracer = tracer or NoopTracer(enable_runtime_graph=True)
+        # デフォルトはNoopTracerインスタンス（runtime graph有効）
+        self.tracer = tracer
 
 # Note: runtime graphはtracer経由でアクセス
 # context.tracer.get_runtime_graph() -> nx.DiGraph
