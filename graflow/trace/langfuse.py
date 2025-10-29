@@ -99,6 +99,7 @@ class LangFuseTracer(Tracer):
             self.client = None
             self._trace_client = None
             self._span_stack: List[StatefulSpanClient] = []
+            self._parent_span_id: Optional[str] = None
             return
 
         # Load environment variables from .env file
@@ -126,6 +127,8 @@ class LangFuseTracer(Tracer):
         # Track current trace and span stack
         self._trace_client: Optional[StatefulTraceClient] = None
         self._span_stack: List[StatefulSpanClient] = []
+        # Track parent span ID for distributed tracing (set by attach_to_trace)
+        self._parent_span_id: Optional[str] = None
 
     # === Output methods (implement LangFuse output) ===
 
@@ -187,11 +190,23 @@ class LangFuseTracer(Tracer):
                 metadata=metadata or {}
             )
         else:
-            # Top-level span
-            span = self._trace_client.span(
-                name=name,
-                metadata=metadata or {}
-            )
+            # Top-level span (or first span in worker process)
+            # If parent_span_id is set (from attach_to_trace), use it
+            # to connect this span to the parent task in distributed tracing
+            if self._parent_span_id:
+                span = self._trace_client.span(
+                    name=name,
+                    parent_observation_id=self._parent_span_id,
+                    metadata=metadata or {}
+                )
+                # Clear parent span ID after first span creation
+                # (subsequent spans will use normal nesting via span stack)
+                self._parent_span_id = None
+            else:
+                span = self._trace_client.span(
+                    name=name,
+                    metadata=metadata or {}
+                )
 
         # Push to stack
         self._span_stack.append(span)
@@ -250,7 +265,13 @@ class LangFuseTracer(Tracer):
         trace_id: str,
         parent_span_id: Optional[str]
     ) -> None:
-        """Output attach to trace to LangFuse."""
+        """Output attach to trace to LangFuse.
+
+        Args:
+            trace_id: Trace ID to attach to
+            parent_span_id: Parent span ID for distributed tracing.
+                           The first span created will be a child of this span.
+        """
         if not self.enabled or not self.client:
             return
 
@@ -261,6 +282,10 @@ class LangFuseTracer(Tracer):
             id=trace_id,
             name=f"worker_trace_{trace_id[:8]}"
         )
+
+        # Store parent span ID for the first span to be created
+        # This ensures distributed task spans are children of their parent task
+        self._parent_span_id = parent_span_id
 
     # === Overridden hooks for LangFuse-specific behavior ===
 
