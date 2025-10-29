@@ -303,6 +303,24 @@ class LangFuseTracer(Tracer):
             }
         )
 
+    def on_dynamic_task_added(
+        self,
+        task_id: str,
+        parent_task_id: Optional[str] = None,
+        is_iteration: bool = False,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """Dynamic task added hook (override to add event output)."""
+        event_metadata = metadata or {}
+        event_metadata.update({
+            "task_id": task_id,
+            "parent_task_id": parent_task_id,
+            "is_iteration": is_iteration
+        })
+        
+        event_name = "task_iteration_added" if is_iteration else "dynamic_task_added"
+        self.event(event_name, metadata=event_metadata)
+
     def on_parallel_group_start(
         self,
         group_id: str,

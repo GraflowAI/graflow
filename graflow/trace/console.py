@@ -259,3 +259,22 @@ class ConsoleTracer(Tracer):
             f"parallel_group_end: {group_id}",
             metadata={"completed": success_count, "total": len(member_ids)}
         )
+
+    def on_dynamic_task_added(
+        self,
+        task_id: str,
+        parent_task_id: Optional[str] = None,
+        is_iteration: bool = False,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """Override to print dynamic task addition event."""
+        task_type = "iteration" if is_iteration else "dynamic"
+        parent_info = f" (parent: {parent_task_id})" if parent_task_id else ""
+        
+        self._print(
+            "event",
+            self._colorize(f"+ {task_type.upper()} TASK: {task_id}{parent_info}", "yellow")
+        )
+        
+        if self.show_metadata and metadata:
+            self._print("", f"  {self._format_metadata(metadata)}")
