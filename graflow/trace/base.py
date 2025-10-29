@@ -398,6 +398,25 @@ class Tracer(ABC):
         """
         pass  # Default: no-op (intentional, not abstract)
 
+    def on_dynamic_task_added(
+        self,
+        task_id: str,
+        parent_task_id: Optional[str] = None,
+        is_iteration: bool = False,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """Called when a dynamic task is added to the workflow.
+
+        Default implementation: no-op (can be overridden).
+
+        Args:
+            task_id: Task ID of the dynamically added task
+            parent_task_id: Task ID that triggered the dynamic task creation
+            is_iteration: True if this is an iteration task (from next_iteration)
+            metadata: Optional task metadata
+        """
+        pass  # Default: no-op (intentional, not abstract)
+
     # === Distributed execution support (concrete implementation) ===
 
     def attach_to_trace(
@@ -425,6 +444,18 @@ class Tracer(ABC):
     ) -> None:
         """Output attach to trace (subclass implements output logic)."""
         pass
+
+    def shutdown(self) -> None:
+        """Flush remaining traces and cleanup resources.
+
+        Default implementation: no-op (can be overridden by subclasses).
+
+        Subclasses should override this method to:
+        - Flush any buffered trace data
+        - Close connections to external tracing services
+        - Release any held resources
+        """
+        pass  # Default: no-op (intentional, not abstract)
 
     # === Public utility methods ===
 

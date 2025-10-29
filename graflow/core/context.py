@@ -327,10 +327,19 @@ class ExecutionContext:
         return self._task_resolver
 
     def add_to_queue(self, executable: Executable) -> None:
-        """Add executable to execution queue."""
+        """Add executable to execution queue with trace context."""
+        # Always set trace context for distributed tracing
+        # Trace ID (workflow-wide ID = session_id)
+        trace_id = self.session_id
+
+        # Parent span ID (currently executing task ID)
+        parent_span_id = self.current_task_id if hasattr(self, 'current_task_id') else None
+
         task_spec = TaskSpec(
             executable=executable,
-            execution_context=self
+            execution_context=self,
+            trace_id=trace_id,
+            parent_span_id=parent_span_id,
         )
         self.task_queue.enqueue(task_spec)
 
@@ -432,8 +441,14 @@ class ExecutionContext:
         """Reset goto flag for next task execution."""
         self._goto_called_in_current_task = False
 
-    def next_task(self, executable: Executable, goto: bool = False) -> str:
+    def next_task(
+        self,
+        executable: Executable,
+        goto: bool = False
+    ) -> str:
         """Generate a new task or jump to existing task node.
+
+        For iteration/cycle tasks, use next_iteration() instead.
 
         Args:
             executable: Executable object to execute as the new task
@@ -468,6 +483,20 @@ class ExecutionContext:
             self.graph.add_node(executable, task_id)
             self.add_to_queue(executable)
             # Note: _goto_called_in_current_task remains False for normal processing
+
+            # Tracer: Dynamic task added
+            # Auto-detect if this is an iteration task by checking the task_id pattern
+            if self.tracer:
+                import re
+                # Iteration tasks have pattern: {base_id}_cycle_{count}_{uuid}
+                is_iteration = bool(re.search(r'_cycle_\d+_[0-9a-f]+$', task_id))
+                current_task_id = self.current_task_id if hasattr(self, 'current_task_id') else None
+                self.tracer.on_dynamic_task_added(
+                    task_id=task_id,
+                    parent_task_id=current_task_id,
+                    is_iteration=is_iteration,
+                    metadata={"task_type": type(executable).__name__}
+                )
 
         return task_id
 
@@ -735,10 +764,23 @@ class ExecutionContext:
         with open(path, "rb") as f:
             return load(f)
 
-def create_execution_context(start_node: str = "ROOT", max_steps: int = 10) -> ExecutionContext:
-    """Create an initial execution context with a single root node."""
+def create_execution_context(
+    start_node: str = "ROOT",
+    max_steps: int = 10,
+    tracer: Optional[Tracer] = None
+) -> ExecutionContext:
+    """Create an initial execution context with a single root node.
+
+    Args:
+        start_node: Starting task node
+        max_steps: Maximum execution steps
+        tracer: Optional tracer for workflow execution tracking
+    """
+    from graflow.trace.noop import NoopTracer
+    if tracer is None:
+        tracer = NoopTracer()
     graph = TaskGraph()
-    return ExecutionContext.create(graph, start_node, max_steps=max_steps)
+    return ExecutionContext.create(graph, start_node, max_steps=max_steps, tracer=tracer)
 
 def execute_with_cycles(graph: TaskGraph, start_node: str, max_steps: int = 10) -> None:
     """Execute tasks allowing cycles from global graph."""

@@ -6,12 +6,15 @@ import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
-from typing import Any, Dict, Optional, Set
+from typing import TYPE_CHECKING, Any, Dict, Optional, Set
 
 from graflow.core.engine import WorkflowEngine
 from graflow.exceptions import GraflowRuntimeError
 from graflow.queue.base import TaskSpec
 from graflow.queue.redis import RedisTaskQueue
+
+if TYPE_CHECKING:
+    from graflow.trace.base import Tracer
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +24,8 @@ class TaskWorker:
 
     def __init__(self, queue: RedisTaskQueue, worker_id: str,
                  max_concurrent_tasks: int = 4, poll_interval: float = 0.1,
-                 graceful_shutdown_timeout: float = 30.0):
+                 graceful_shutdown_timeout: float = 30.0,
+                 tracer_config: Optional[Dict[str, Any]] = None):
         """Initialize TaskWorker.
 
         Args:
@@ -30,6 +34,8 @@ class TaskWorker:
             max_concurrent_tasks: Maximum number of concurrent tasks
             poll_interval: Polling interval in seconds
             graceful_shutdown_timeout: Timeout for graceful shutdown
+            tracer_config: Tracer configuration dict with "type" key
+                          {"type": "langfuse", "enable_runtime_graph": False, ...}
         """
         if not isinstance(queue, RedisTaskQueue):
             raise ValueError("TaskWorker requires a RedisTaskQueue instance")
@@ -40,6 +46,9 @@ class TaskWorker:
         self.max_concurrent_tasks = max_concurrent_tasks
         self.poll_interval = poll_interval
         self.graceful_shutdown_timeout = graceful_shutdown_timeout
+
+        # Tracer configuration
+        self.tracer_config = tracer_config or {}
 
         # Worker state
         self.is_running = False
@@ -222,6 +231,39 @@ class TaskWorker:
 
         logger.debug(f"Task submitted: {task_id}")
 
+    def _create_tracer(self) -> 'Tracer':
+        """Create tracer from worker configuration.
+
+        Returns:
+            Initialized tracer instance (defaults to NoopTracer)
+        """
+        # Default to noop tracer if type not specified
+        tracer_type = self.tracer_config.get("type", "noop")
+        tracer_type = tracer_type.lower()
+
+        # Extract config without "type" key
+        config = {k: v for k, v in self.tracer_config.items() if k != "type"}
+
+        try:
+            if tracer_type == "noop":
+                from graflow.trace.noop import NoopTracer
+                return NoopTracer(**config)
+            elif tracer_type == "console":
+                from graflow.trace.console import ConsoleTracer
+                return ConsoleTracer(**config)
+            elif tracer_type == "langfuse":
+                from graflow.trace.langfuse import LangFuseTracer
+                # LangFuseTracer loads API keys from .env in worker process
+                return LangFuseTracer(**config)
+            else:
+                logger.warning(f"Unknown tracer type: {tracer_type}, using NoopTracer")
+                from graflow.trace.noop import NoopTracer
+                return NoopTracer()
+        except Exception as e:
+            logger.error(f"Failed to create tracer {tracer_type}: {e}")
+            from graflow.trace.noop import NoopTracer
+            return NoopTracer()
+
     def _process_task_wrapper(self, task_spec: TaskSpec) -> Dict[str, Any]:
         """Wrapper for task processing with timeout and error handling.
 
@@ -243,6 +285,19 @@ class TaskWorker:
             # Get execution context from task spec
             execution_context = task_spec.execution_context
 
+            # Tracer initialization from worker configuration
+            tracer = self._create_tracer()
+
+            # Set tracer on ExecutionContext
+            execution_context.tracer = tracer
+
+            # Attach to parent trace for distributed tracing
+            if task_spec.trace_id:
+                tracer.attach_to_trace(
+                    trace_id=task_spec.trace_id,
+                    parent_span_id=task_spec.parent_span_id
+                )
+
             # Create TaskWrapper from the function
             from graflow.core.task import TaskWrapper
             task_wrapper = TaskWrapper(task_id, task_func, register_to_context=False)
@@ -252,6 +307,9 @@ class TaskWorker:
 
             # Use WorkflowEngine to execute the task
             self.engine.execute(execution_context, start_task_id=task_id)
+
+            # Flush tracer to ensure data is sent
+            tracer.shutdown()
 
             duration = time.time() - start_time
 

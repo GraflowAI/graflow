@@ -1389,7 +1389,6 @@ class TaskWorker:
         queue: RedisTaskQueue,
         worker_id: str,
         max_concurrent_tasks: int = 4,
-        tracer_type: Optional[str] = None,        # 設定ファイルから読み込む
         tracer_config: Optional[Dict[str, Any]] = None,  # 設定ファイルから読み込む
     ):
         """Initialize TaskWorker.
@@ -1398,18 +1397,39 @@ class TaskWorker:
             queue: RedisTaskQueue instance
             worker_id: Unique worker identifier
             max_concurrent_tasks: Maximum concurrent task count
-            tracer_type: Tracer type ("noop", "console", "langfuse")
-            tracer_config: Tracer configuration dict
+            tracer_config: Tracer configuration dict with "type" key
+                          Example: {"type": "langfuse", "enable_runtime_graph": False}
         """
         self.queue = queue
         self.worker_id = worker_id
-        self.tracer_type = tracer_type
         self.tracer_config = tracer_config or {}
 ```
 
+**tracer_config形式:**
+```python
+# LangFuse tracer
+tracer_config = {
+    "type": "langfuse",              # Tracer type: "noop", "console", "langfuse"
+    "enable_runtime_graph": False,   # Workerではruntime graph不要
+}
+
+# Console tracer
+tracer_config = {
+    "type": "console",
+    "enable_runtime_graph": False,
+    "verbose": True,
+}
+
+# Noop tracer (no tracing)
+tracer_config = {
+    "type": "noop",
+}
+```
+
 **重要な設計決定:**
-- Workerでは**runtime graphのtrackingは不要**
-- デフォルトで`enable_runtime_graph=False`を使用
+- `tracer_type`は`tracer_config["type"]`から取得（パラメータ削減）
+- **デフォルトはNoopTracer**（tracer_configが空の場合や"type"未指定の場合）
+- Workerでは**runtime graphのtrackingは不要**（`enable_runtime_graph=False`推奨）
 - LangFuseTracerの場合、API keyは`.env`ファイルから読み込む
 
 ### 12.6 TaskWorkerでのトレース初期化
@@ -1440,32 +1460,34 @@ class TaskWorker:
         # (task execution logic)
 
         # Flush tracer to ensure data is sent
-        if tracer and hasattr(tracer, 'shutdown'):
+        if tracer:
             tracer.shutdown()
 
-    def _create_tracer(self) -> Optional[Tracer]:
+    def _create_tracer(self) -> Tracer:
         """Create tracer from worker configuration.
 
         Returns:
-            Tracer instance or None
+            Tracer instance (defaults to NoopTracer)
         """
-        if not self.tracer_type:
-            return None
+        # Default to noop tracer if type not specified
+        tracer_type = self.tracer_config.get("type", "noop")
+        tracer_type = tracer_type.lower()
 
-        tracer_type = self.tracer_type.lower()
+        # Extract config without "type" key
+        config = {k: v for k, v in self.tracer_config.items() if k != "type"}
 
         if tracer_type == "noop":
             from graflow.trace.noop import NoopTracer
-            return NoopTracer(**self.tracer_config)
+            return NoopTracer(**config)
 
         elif tracer_type == "console":
             from graflow.trace.console import ConsoleTracer
-            return ConsoleTracer(**self.tracer_config)
+            return ConsoleTracer(**config)
 
         elif tracer_type == "langfuse":
             from graflow.trace.langfuse import LangFuseTracer
             # LangFuseは.envからAPI keyを自動読み込み
-            return LangFuseTracer(**self.tracer_config)
+            return LangFuseTracer(**config)
 
         else:
             logger.warning(f"Unknown tracer type: {tracer_type}, using NoopTracer")
@@ -1766,9 +1788,12 @@ class Tracer(ABC):
 
 **重要な設計変更**:
 - TaskSpecには**トレース接続情報のみ**（trace_id, parent_span_id）
-- Workerは**自身の設定から**tracer_typeとtracer_configを読み込む
+- Workerは**自身の設定から**tracer_configを読み込む
+  - `tracer_type`は`tracer_config["type"]`に統合（パラメータ削減）
+  - **デフォルトはNoopTracer**（tracer_config空の場合）
 - 全タスクで同じtracer設定を共有する前提
 - Workerでは**runtime graph tracking無効**（enable_runtime_graph=False推奨）
+- `Tracer.shutdown()`メソッド追加（デフォルトno-op実装）
 
 #### Phase 4: テストと文書化
 
