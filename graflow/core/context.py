@@ -587,10 +587,13 @@ class ExecutionContext:
             TaskExecutionContext: The task execution context
         """
         task_ctx = self.create_task_context(task.task_id)
-        self.push_task_context(task_ctx)
 
-        # Call tracer hook: task start
+        # Call tracer hook: task start (before pushing to stack)
+        # This ensures current_task_id points to parent task
         self.tracer.on_task_start(task, self)
+
+        # Push task context to stack after tracer hook
+        self.push_task_context(task_ctx)
 
         error: Optional[Exception] = None
 
