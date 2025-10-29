@@ -54,7 +54,7 @@ WorkflowEngine
    - 実行時情報のみ記録（status, start_time, end_time, output, error, metadata）
 
 4. **可視化はユーティリティで対応**
-   - `visualize_runtime_graph()`メソッドで既存の`draw_ascii`を活用
+   - `export_runtime_graph()`で取得したデータを既存の`draw_ascii`や外部ツールで加工
    - networkxの分析機能（shortest_path, centrality等）を直接利用可能
 
 5. **LangFuseTracerはdotenvから設定を読み込む**
@@ -87,9 +87,9 @@ WorkflowEngine.execute()
 ```
 graflow/
 ├── trace/
-│   ├── __init__.py              # Public API exports
-│   ├── base.py                  # Tracer (ABC) + SpanStatus + TraceEvent
-│   ├── noop.py                  # NoopTracer (デフォルト実装 + runtime graph)
+│   ├── __init__.py              # Public API ドキュメント
+│   ├── base.py                  # Tracer (ABC) + runtime graph サポート
+│   ├── noop.py                  # NoopTracer (デフォルト実装)
 │   ├── console.py               # ConsoleTracer (コンソール出力)
 │   └── langfuse.py              # LangFuseTracer (LangFuse統合 + dotenv)
 ├── core/
@@ -104,37 +104,7 @@ graflow/
 
 ### 4.1 `graflow/trace/base.py`
 
-#### 4.1.1 `SpanStatus` Enum
-
-タスクやワークフローの実行ステータス。
-
-```python
-class SpanStatus(Enum):
-    PENDING = "pending"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    SKIPPED = "skipped"
-
-# 後方互換性
-TaskStatus = SpanStatus
-```
-
-#### 4.1.2 `TraceEvent` データクラス
-
-トレースイベントの表現。
-
-```python
-@dataclass
-class TraceEvent:
-    event_type: str              # "span_start", "span_end", "event"
-    span_id: str                 # Span識別子
-    timestamp: datetime
-    metadata: Dict[str, Any]
-    parent_span_id: Optional[str] = None
-```
-
-#### 4.1.3 `Tracer` 抽象基底クラス
+#### 4.1.1 `Tracer` 抽象基底クラス
 
 すべてのトレーサーの抽象基底クラス（ABC）。
 
@@ -227,13 +197,9 @@ class Tracer(ABC):
         """Get the runtime execution graph."""
         return self._runtime_graph
 
-    def get_execution_stats(self) -> Dict[str, Any]:
-        """Get execution statistics from runtime graph."""
-        # 実装は後述
-
-    def visualize_runtime_graph(self) -> str:
-        """Visualize runtime graph as ASCII."""
-        # 実装は後述
+    def export_runtime_graph(self, format: str = "dict") -> Optional[Dict[str, Any]]:
+        """Export runtime graph data (dict/json/graphml をサポート)。"""
+        # 実装は base.Tracer.export_runtime_graph を参照
 ```
 
 **Runtime Graph (networkx DiGraph) のノード属性:**
@@ -622,8 +588,7 @@ class ExecutionContext:
 # Note: runtime graphはtracer経由でアクセス
 # context.tracer.get_runtime_graph() -> nx.DiGraph
 # context.tracer.get_execution_order() -> List[str]
-# context.tracer.get_execution_stats() -> Dict[str, Any]
-# context.tracer.visualize_runtime_graph() -> str (ASCII)
+# context.tracer.export_runtime_graph("dict") -> Dict[str, Any]
 ```
 
 #### 5.1.2 `executing_task()` コンテキストマネージャー
@@ -853,7 +818,7 @@ with workflow("simple_workflow", context=context) as wf:
 
 # Runtime graphは取得可能
 print(context.tracer.get_execution_order())
-print(context.tracer.visualize_runtime_graph())
+print(context.tracer.export_runtime_graph("dict"))
 ```
 
 ### 6.2 LangFuseトレース（dotenv設定）
@@ -889,15 +854,13 @@ with workflow("traced_workflow", context=context) as wf:
 # 短命なアプリケーションの場合はflush
 tracer.flush()
 
-# Runtime graphの統計情報と可視化
+# Runtime graphのエクスポート例
 runtime_graph = context.tracer.get_runtime_graph()
 if runtime_graph:
-    stats = context.tracer.get_execution_stats()
-    print(f"Total tasks: {stats['total_tasks']}")
-    print(f"Execution path: {context.tracer.get_execution_order()}")
-
-    # ASCII可視化
-    print(context.tracer.visualize_runtime_graph())
+    export = context.tracer.export_runtime_graph("dict")
+    if export:
+        print(f"Recorded tasks: {len(export['nodes'])}")
+        print(f"Execution path: {context.tracer.get_execution_order()}")
 
     # networkx DiGraphとして直接分析
     import networkx as nx
@@ -908,41 +871,48 @@ if runtime_graph:
 ### 6.3 カスタムトレーサー（コンソール出力）
 
 ```python
-from graflow.trace import Tracer, SpanStatus
+from graflow.trace.base import Tracer
 
-class ConsoleTracer(Tracer):
-    """シンプルなコンソール出力トレーサー"""
+class SimpleConsoleTracer(Tracer):
+    """Template Methodに従った簡易コンソールトレーサー"""
 
-    def span_start(self, name, parent_name=None, metadata=None):
-        indent = "  " if parent_name else ""
-        task_type = metadata.get("task_type", "span") if metadata else "span"
-        print(f"{indent}▶ {name} [{task_type}]")
+    def __init__(self, enable_runtime_graph: bool = True):
+        super().__init__(enable_runtime_graph=enable_runtime_graph)
+        self._indent = 0
 
-    def span_end(self, name, status, **kwargs):
-        print(f"  ✓ {name} [{status.value}]")
+    def _print(self, icon: str, message: str) -> None:
+        indent = "  " * self._indent
+        print(f"{indent}{icon} {message}")
 
-    def event(self, name, parent_span=None, metadata=None):
-        print(f"    • {name}: {metadata.get('task_id', '')}")
+    def _output_trace_start(self, name, trace_id, metadata):
+        self._print("▶", f"TRACE START {name}")
+        self._indent += 1
 
-# 使用
-tracer = ConsoleTracer()
+    def _output_trace_end(self, name, output, metadata):
+        self._indent = max(0, self._indent - 1)
+        self._print("✓", f"TRACE END {name}")
+
+    def _output_span_start(self, name, parent_name, metadata):
+        self._print("▶", f"SPAN {name}")
+        self._indent += 1
+
+    def _output_span_end(self, name, output, metadata):
+        self._indent = max(0, self._indent - 1)
+        self._print("✓", f"SPAN {name}")
+
+    def _output_event(self, name, parent_span, metadata):
+        self._print("•", f"EVENT {name}")
+
+    def _output_attach_to_trace(self, trace_id, parent_span_id):
+        self._print("↺", f"ATTACH {trace_id} (parent={parent_span_id})")
+
+# 使用例
+tracer = SimpleConsoleTracer()
 context = create_execution_context(tracer=tracer)
 
 with workflow("console_workflow", context=context) as wf:
     task_a >> task_b >> task_c
     wf.execute()
-
-# 出力例:
-# ▶ console_workflow [workflow]
-#   ▶ task_a [Task]
-#   ✓ task_a [completed]
-#     • task_queued: task_b
-#   ▶ task_b [Task]
-#   ✓ task_b [completed]
-#     • task_queued: task_c
-#   ▶ task_c [Task]
-#   ✓ task_c [completed]
-# ✓ console_workflow [completed]
 ```
 
 ### 6.4 将来：LLM生成トレース
@@ -1055,45 +1025,10 @@ class Tracer:
         """Get the runtime execution graph."""
         return self._runtime_graph
 
-    def get_execution_stats(self) -> Dict[str, Any]:
-        """Get execution statistics from runtime graph."""
-        if self._runtime_graph is None:
-            return {"runtime_graph_disabled": True}
-
-        total_tasks = self._runtime_graph.number_of_nodes()
-        status_counts = {}
-        total_duration = 0.0
-
-        for node_id in self._runtime_graph.nodes():
-            node_data = self._runtime_graph.nodes[node_id]
-            status = node_data.get("status", "unknown")
-            status_counts[status] = status_counts.get(status, 0) + 1
-
-            # 実行時間計算
-            start_time = node_data.get("start_time")
-            end_time = node_data.get("end_time")
-            if start_time and end_time:
-                duration = (end_time - start_time).total_seconds()
-                total_duration += duration
-
-        return {
-            "total_tasks": total_tasks,
-            "status_counts": status_counts,
-            "total_duration_seconds": total_duration,
-            "execution_order": self._execution_order,
-        }
-
-    def visualize_runtime_graph(self) -> str:
-        """Visualize runtime graph as ASCII."""
-        if self._runtime_graph is None:
-            return "Runtime graph tracking is disabled"
-
-        if self._runtime_graph.number_of_nodes() == 0:
-            return "Runtime graph is empty"
-
-        from graflow.utils.graph import draw_ascii
-        return draw_ascii(self._runtime_graph)
 ```
+
+> Note: 現行実装では集計用ヘルパー（`get_execution_stats` や `visualize_runtime_graph`）は提供されていないため、
+> 必要に応じて `export_runtime_graph()` と networkx の API を組み合わせて可視化・分析する。
 
 ### 7.2 実行時のタスク情報取得
 
@@ -1121,8 +1056,6 @@ parents = list(runtime_graph.predecessors("task_1"))
    - 変更: `str(uuid.uuid4().int)` → `uuid.uuid4().hex`
 
 2. **`graflow/trace/base.py`**
-   - `SpanStatus` enum
-   - `TraceEvent` dataclass
    - `Tracer` 抽象基底クラス（ABC）
    - Runtime graph管理メソッド実装（共通機能）
 
@@ -1131,11 +1064,11 @@ parents = list(runtime_graph.predecessors("task_1"))
    - Runtime graph tracking実装
 
 4. **`graflow/trace/__init__.py`**
-   - Public API exports
+   - Public API ドキュメント整備（`__all__` は空のまま、直接 import を想定）
 
 5. **`ExecutionContext`への統合**
    - `tracer`フィールド追加
-   - デフォルト値設定（`NoopTracer(enable_runtime_graph=True)`）
+   - デフォルト値設定（`NoopTracer()` をそのまま使用）
 
 ### Phase 2: ConsoleTracer実装
 
@@ -1655,7 +1588,7 @@ Trace: distributed_workflow (session_id: wf_1234567890abcdef)
      - サブクラスは抽象メソッド（`_output_trace_start`, `_output_span_start`等）のみ実装
      - Runtime graph tracking は基底クラスで自動処理
    - Runtime graph管理メソッド実装
-     - `get_runtime_graph()`, `get_execution_order()`, `get_execution_stats()`, `visualize_runtime_graph()`
+     - `get_runtime_graph()`, `get_execution_order()`, `export_runtime_graph()`
 
 3. **`graflow/trace/noop.py`** ✅
    - `NoopTracer` クラス実装（デフォルトトレーサー）
