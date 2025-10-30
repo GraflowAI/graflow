@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 import uuid
 from contextlib import contextmanager
@@ -25,6 +26,9 @@ if TYPE_CHECKING:
     from graflow.trace.base import Tracer
 
 T = TypeVar('T')
+
+# Compiled regex pattern for iteration task detection (performance optimization)
+_ITERATION_PATTERN = re.compile(r'(_cycle_\d+_[0-9a-f]+)+$')
 
 
 class TaskExecutionContext:
@@ -531,8 +535,7 @@ class ExecutionContext:
 
         # Extract base task ID (strip _cycle_* suffix if present)
         # This handles nested iterations where task_id might be "task_cycle_1_abc_cycle_2_def"
-        import re
-        base_task_id = re.sub(r'(_cycle_\d+_[0-9a-f]+)+$', '', task_id)
+        base_task_id = _ITERATION_PATTERN.sub('', task_id)
         if base_task_id and base_task_id in self.graph.nodes:
             task_id = base_task_id
 

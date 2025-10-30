@@ -1554,6 +1554,21 @@ class Tracer(ABC):
 
 **影響**: `graflow/trace/base.py` の `on_parallel_group_start()`
 
+#### 14.5.4 Regex Pattern Performance Optimization
+
+**問題**: `next_iteration()`が呼ばれるたびに正規表現パターンをコンパイルしていたため、パフォーマンスに影響
+
+**修正**:
+1. モジュールレベルで正規表現パターンをコンパイル: `_ITERATION_PATTERN = re.compile(r'(_cycle_\d+_[0-9a-f]+)+$')`
+2. コンパイル済みパターンを使用: `_ITERATION_PATTERN.sub('', task_id)`
+
+**影響**:
+- `graflow/core/context.py` Line 5 (import re追加)
+- `graflow/core/context.py` Line 31 (パターンコンパイル)
+- `graflow/core/context.py` Line 538 (`next_iteration()`での使用)
+
+**効果**: イテレーションタスクの処理パフォーマンス向上（特に`next_iteration()`を頻繁に使用するワークフローで効果的）
+
 ### 14.6 次のステップ
 
 **Phase 3 完了状態:**
