@@ -237,6 +237,8 @@ class TaskWorker:
         Returns:
             Initialized tracer instance (defaults to NoopTracer)
         """
+        from graflow.trace.noop import NoopTracer
+
         # Default to noop tracer if type not specified
         tracer_type = self.tracer_config.get("type", "noop")
         tracer_type = tracer_type.lower()
@@ -246,7 +248,6 @@ class TaskWorker:
 
         try:
             if tracer_type == "noop":
-                from graflow.trace.noop import NoopTracer
                 return NoopTracer(**config)
             elif tracer_type == "console":
                 from graflow.trace.console import ConsoleTracer
@@ -257,11 +258,9 @@ class TaskWorker:
                 return LangFuseTracer(**config)
             else:
                 logger.warning(f"Unknown tracer type: {tracer_type}, using NoopTracer")
-                from graflow.trace.noop import NoopTracer
                 return NoopTracer()
         except Exception as e:
             logger.error(f"Failed to create tracer {tracer_type}: {e}")
-            from graflow.trace.noop import NoopTracer
             return NoopTracer()
 
     def _process_task_wrapper(self, task_spec: TaskSpec) -> Dict[str, Any]:
