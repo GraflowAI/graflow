@@ -1532,7 +1532,21 @@ class Tracer(ABC):
 
 **影響**: Line 573 in `graflow/core/context.py`
 
-#### 14.5.2 並列グループのエッジ作成タイミング
+#### 14.5.2 Tracerインスタンスの共有問題（Mutable Default Argument）
+
+**問題**: `ExecutionContext.__init__()`と`create()`で`tracer: Tracer = NoopTracer()`をデフォルト引数として使用していたため、全てのコンテキストで同一のNoopTracerインスタンスが共有されていた。Tracerは`_runtime_graph`, `_execution_order`, `_span_stack`などのmutable stateを持つため、独立したワークフローや並行ワーカー間でトレース情報が混在・破損する可能性があった。
+
+**修正**:
+1. パラメータを`tracer: Optional[Tracer] = None`に変更
+2. コンストラクタ内で`self.tracer = tracer if tracer is not None else NoopTracer()`として、Noneの場合に新しいインスタンスを生成
+
+**影響**:
+- `graflow/core/context.py` Line 194-200 (`__init__`)
+- `graflow/core/context.py` Line 295, 307 (`create()`)
+
+**検証**: `test_tracer_isolation.py`で各コンテキストが独立したtracerインスタンスを持つことを確認
+
+#### 14.5.3 並列グループのエッジ作成タイミング
 
 **問題**: `on_parallel_group_start`時にメンバータスクノードがまだ存在しないため、エッジが作成されない
 
