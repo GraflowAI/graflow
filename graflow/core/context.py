@@ -191,12 +191,13 @@ class ExecutionContext:
         config: Optional[Dict[str, Any]] = None,
         parent_context: Optional[ExecutionContext] = None,
         session_id: Optional[str] = None,
-        tracer: Tracer = NoopTracer()
+        tracer: Optional[Tracer] = None
     ):
         """Initialize ExecutionContext with configurable queue backend."""
         self.parent_context = parent_context
         self.session_id = session_id or uuid.uuid4().hex
-        self.tracer = tracer
+        # Each context gets its own tracer instance to avoid shared mutable state
+        self.tracer = tracer if tracer is not None else NoopTracer()
 
         self.graph = graph
         self.start_node = start_node
@@ -291,7 +292,7 @@ class ExecutionContext:
         default_max_retries: int = 3,
         channel_backend: str = "memory",
         config: Optional[Dict[str, Any]] = None,
-        tracer: Tracer = NoopTracer()
+        tracer: Optional[Tracer] = None
     ) -> ExecutionContext:
         """Create a new execution context with configurable channel backend.
 
@@ -303,7 +304,7 @@ class ExecutionContext:
             default_max_retries: Default maximum retry attempts
             channel_backend: Backend for inter-task communication (default: memory)
             config: Configuration applied to both queue and channel (e.g., redis_client, key_prefix)
-            tracer: Optional tracer for workflow execution tracking (default: NoopTracer)
+            tracer: Optional tracer for workflow execution tracking (default: creates new NoopTracer)
         """
         return cls(
             graph=graph,
