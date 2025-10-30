@@ -195,6 +195,8 @@ class ExecutionContext:
     ):
         """Initialize ExecutionContext with configurable queue backend."""
         self.parent_context = parent_context
+        # Generate a W3C TraceContext-compliant 32-digit hex trace ID for session_id.
+        # This format is required for compatibility and was a deliberate change from the previous implementation.
         self.session_id = session_id or uuid.uuid4().hex
         # Each context gets its own tracer instance to avoid shared mutable state
         self.tracer = tracer if tracer is not None else NoopTracer()
