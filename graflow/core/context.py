@@ -343,6 +343,9 @@ class ExecutionContext:
         )
         self.task_queue.enqueue(task_spec)
 
+        # Tracer: Task queued
+        self.tracer.on_task_queued(executable, self)
+
     def is_completed(self) -> bool:
         """Check if execution is completed (complete compatibility)."""
         return self.task_queue.is_empty() or self.steps >= self.max_steps
@@ -444,7 +447,8 @@ class ExecutionContext:
     def next_task(
         self,
         executable: Executable,
-        goto: bool = False
+        goto: bool = False,
+        _is_iteration: bool = False
     ) -> str:
         """Generate a new task or jump to existing task node.
 
@@ -453,50 +457,50 @@ class ExecutionContext:
         Args:
             executable: Executable object to execute as the new task
             goto: If True, skip successors of current task (works for both existing and new tasks)
+            _is_iteration: Internal flag to mark iteration tasks (set by next_iteration)
 
         Returns:
             The task ID from the executable
         """
         task_id = executable.task_id
+        is_new_task = task_id not in self.graph.nodes
 
         if goto:
             # Explicit goto: Skip successors regardless of whether task is new or existing
-            if task_id in self.graph.nodes:
-                # Existing task: Jump to it
-                print(f"🔄 Goto: Jumping to existing task: {task_id}")
-                self.add_to_queue(executable)
-            else:
+            if is_new_task:
                 # New task: Create it but still skip successors
                 print(f"✨ Goto: Creating new task (skip successors): {task_id}")
                 self.graph.add_node(executable, task_id)
-                self.add_to_queue(executable)
-            self._goto_called_in_current_task = True
-        # Auto-detect behavior (no goto specified)
-        elif task_id in self.graph.nodes:
-            # Existing task: Jump to it (auto-detected, skip successors)
-            print(f"🔄 Jumping to existing task: {task_id}")
+            else:
+                # Existing task: Jump to it
+                print(f"🔄 Goto: Jumping to existing task: {task_id}")
             self.add_to_queue(executable)
             self._goto_called_in_current_task = True
-        else:
+        # Auto-detect behavior (no goto specified)
+        elif is_new_task:
             # New task: Create dynamic task (normal successor processing)
             print(f"✨ Creating new dynamic task: {task_id}")
             self.graph.add_node(executable, task_id)
             self.add_to_queue(executable)
             # Note: _goto_called_in_current_task remains False for normal processing
+        else:
+            # Existing task: Jump to it (auto-detected, skip successors)
+            print(f"🔄 Jumping to existing task: {task_id}")
+            self.add_to_queue(executable)
+            self._goto_called_in_current_task = True
 
-            # Tracer: Dynamic task added
-            # Auto-detect if this is an iteration task by checking the task_id pattern
-            if self.tracer:
-                import re
-                # Iteration tasks have pattern: {base_id}_cycle_{count}_{uuid}
-                is_iteration = bool(re.search(r'_cycle_\d+_[0-9a-f]+$', task_id))
-                current_task_id = self.current_task_id if hasattr(self, 'current_task_id') else None
-                self.tracer.on_dynamic_task_added(
-                    task_id=task_id,
-                    parent_task_id=current_task_id,
-                    is_iteration=is_iteration,
-                    metadata={"task_type": type(executable).__name__}
-                )
+        # Tracer: Dynamic task added
+        current_task_id = self.current_task_id if hasattr(self, 'current_task_id') else None
+        self.tracer.on_dynamic_task_added(
+            task_id=task_id,
+            parent_task_id=current_task_id,
+            is_iteration=_is_iteration,
+            metadata={
+                "task_type": type(executable).__name__,
+                "is_new_task": is_new_task,
+                "goto": goto
+            }
+        )
 
         return task_id
 
@@ -572,7 +576,9 @@ class ExecutionContext:
 
         from .task import TaskWrapper
         iteration_task = TaskWrapper(iteration_id, iteration_func, inject_context=False)
-        return self.next_task(iteration_task)
+
+        # Add iteration task via next_task with _is_iteration=True
+        return self.next_task(iteration_task, _is_iteration=True)
 
     @contextmanager
     def executing_task(self, task: Executable):
