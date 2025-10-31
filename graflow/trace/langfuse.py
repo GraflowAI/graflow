@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from graflow.trace.base import Tracer
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from graflow.core.context import ExecutionContext
@@ -13,17 +16,15 @@ if TYPE_CHECKING:
 
 # Optional imports
 try:
-    from langfuse import Langfuse
-    from langfuse.client import StatefulSpanClient, StatefulTraceClient
+    from langfuse import Langfuse, LangfuseSpan  # type: ignore[import-not-found]
     LANGFUSE_AVAILABLE = True
 except ImportError:
     LANGFUSE_AVAILABLE = False
     Langfuse = None  # type: ignore
-    StatefulTraceClient = None  # type: ignore
-    StatefulSpanClient = None  # type: ignore
+    LangfuseSpan = None  # type: ignore
 
 try:
-    from dotenv import load_dotenv
+    from dotenv import load_dotenv  # type: ignore[import-not-found]
     DOTENV_AVAILABLE = True
 except ImportError:
     DOTENV_AVAILABLE = False
@@ -40,13 +41,18 @@ class LangFuseTracer(Tracer):
         Loads credentials from environment variables (via .env file):
         - LANGFUSE_PUBLIC_KEY: LangFuse public API key
         - LANGFUSE_SECRET_KEY: LangFuse secret API key
-        - LANGFUSE_HOST: LangFuse API host (optional, defaults to cloud)
+        - LANGFUSE_HOST: LangFuse API host (optional, defaults to https://cloud.langfuse.com)
+
+    Important:
+        - A LangFuse server must be running and accessible at the configured host
+        - Connection errors are logged but don't interrupt workflow execution
+        - For local development, run: docker run -p 3000:3000 langfuse/langfuse
 
     Example:
         # .env file:
         # LANGFUSE_PUBLIC_KEY=pk-xxx
         # LANGFUSE_SECRET_KEY=sk-xxx
-        # LANGFUSE_HOST=https://cloud.langfuse.com
+        # LANGFUSE_HOST=http://localhost:3000  # For local server
 
         from graflow.trace import LangFuseTracer
 
@@ -94,16 +100,18 @@ class LangFuseTracer(Tracer):
 
         self.enabled = enabled
 
+        # Initialize attributes with type hints
+        self.client: Optional[Langfuse] = None # type: ignore
+        self._root_span: Optional[LangfuseSpan] = None # type: ignore
+        self._span_stack: List[LangfuseSpan] = [] # type: ignore
+        self._parent_span_id: Optional[str] = None
+
         if not enabled:
             # No-op mode for testing
-            self.client = None
-            self._trace_client = None
-            self._span_stack: List[StatefulSpanClient] = []
-            self._parent_span_id: Optional[str] = None
             return
 
         # Load environment variables from .env file
-        load_dotenv()
+        load_dotenv() # type: ignore
 
         # Get credentials (parameters override env vars)
         final_public_key = public_key or os.getenv("LANGFUSE_PUBLIC_KEY")
@@ -122,13 +130,7 @@ class LangFuseTracer(Tracer):
             public_key=final_public_key,
             secret_key=final_secret_key,
             host=final_host,
-        )
-
-        # Track current trace and span stack
-        self._trace_client: Optional[StatefulTraceClient] = None
-        self._span_stack: List[StatefulSpanClient] = []
-        # Track parent span ID for distributed tracing (set by attach_to_trace)
-        self._parent_span_id: Optional[str] = None
+        ) # type: ignore
 
     # === Output methods (implement LangFuse output) ===
 
@@ -142,12 +144,22 @@ class LangFuseTracer(Tracer):
         if not self.enabled or not self.client:
             return
 
-        # Create LangFuse trace
-        self._trace_client = self.client.trace(
-            id=trace_id,  # Use session_id as trace_id
-            name=name,
-            metadata=metadata or {}
-        )
+        try:
+            # In v3, create a root span to represent the trace
+            # Use plain dict for trace_context as per v3 API
+            trace_context = None
+            if trace_id:
+                trace_context = {"trace_id": trace_id}
+
+            # Create root span (represents the trace)
+            self._root_span = self.client.start_span(
+                trace_context=trace_context,
+                name=name,
+                metadata=metadata or {}
+            )
+        except Exception as e:
+            logger.warning(f"Failed to start LangFuse trace '{name}': {e}")
+            self._root_span = None
 
     def _output_trace_end(
         self,
@@ -156,20 +168,24 @@ class LangFuseTracer(Tracer):
         metadata: Optional[Dict[str, Any]]
     ) -> None:
         """Output trace end to LangFuse."""
-        if not self.enabled or not self._trace_client:
+        if not self.enabled or not self._root_span:
             return
 
-        # Update trace with output
-        self._trace_client.update(
-            output=output,
-            metadata=metadata or {}
-        )
+        try:
+            # Update root span with output and metadata, then end it
+            self._root_span.update(
+                output=output,
+                metadata=metadata or {}
+            )
+            self._root_span.end()
 
-        # Flush to ensure data is sent
-        if self.client:
-            self.client.flush()
-
-        self._trace_client = None
+            # Flush to ensure data is sent
+            if self.client:
+                self.client.flush()
+        except Exception as e:
+            logger.warning(f"Failed to end LangFuse trace '{name}': {e}")
+        finally:
+            self._root_span = None
 
     def _output_span_start(
         self,
@@ -178,38 +194,32 @@ class LangFuseTracer(Tracer):
         metadata: Optional[Dict[str, Any]]
     ) -> None:
         """Output span start to LangFuse."""
-        if not self.enabled or not self._trace_client:
+        if not self.enabled or not self._root_span:
             return
 
-        # Create span under current trace or parent span
-        if self._span_stack:
-            # Nested span
-            parent_span = self._span_stack[-1]
-            span = parent_span.span(
-                name=name,
-                metadata=metadata or {}
-            )
-        else:
-            # Top-level span (or first span in worker process)
-            # If parent_span_id is set (from attach_to_trace), use it
-            # to connect this span to the parent task in distributed tracing
-            if self._parent_span_id:
-                span = self._trace_client.span(
+        try:
+            # Create span under current span or root span
+            if self._span_stack:
+                # Nested span - create child from current span
+                parent_span = self._span_stack[-1]
+                span = parent_span.start_span(
                     name=name,
-                    parent_observation_id=self._parent_span_id,
                     metadata=metadata or {}
                 )
-                # Clear parent span ID after first span creation
-                # (subsequent spans will use normal nesting via span stack)
-                self._parent_span_id = None
             else:
-                span = self._trace_client.span(
+                # Top-level span under root (or first span in worker process)
+                # If parent_span_id is set (from attach_to_trace), we need to
+                # connect this span to the parent task in distributed tracing
+                # Note: In v3, this is handled via trace_context in attach_to_trace
+                span = self._root_span.start_span(
                     name=name,
                     metadata=metadata or {}
                 )
 
-        # Push to stack
-        self._span_stack.append(span)
+            # Push to stack
+            self._span_stack.append(span)
+        except Exception as e:
+            logger.warning(f"Failed to start LangFuse span '{name}': {e}")
 
     def _output_span_end(
         self,
@@ -224,16 +234,22 @@ class LangFuseTracer(Tracer):
         # Pop current span
         span = self._span_stack.pop()
 
-        # Determine status from metadata
-        error = metadata.get("error") if metadata else None
-        level = "ERROR" if error else "DEFAULT"
+        try:
+            # Determine status from metadata
+            error = metadata.get("error") if metadata else None
 
-        # Update span with output
-        span.end(
-            output=output,
-            metadata=metadata or {},
-            level=level
-        )
+            # Update span with output and metadata
+            span.update(
+                output=output,
+                metadata=metadata or {},
+                level="ERROR" if error else None,
+                status_message=str(error) if error else None
+            )
+
+            # End the span
+            span.end()
+        except Exception as e:
+            logger.warning(f"Failed to end LangFuse span '{name}': {e}")
 
     def _output_event(
         self,
@@ -242,23 +258,26 @@ class LangFuseTracer(Tracer):
         metadata: Optional[Dict[str, Any]]
     ) -> None:
         """Output event to LangFuse."""
-        if not self.enabled or not self._trace_client:
+        if not self.enabled or not self._root_span:
             return
 
-        # Create event under current span or trace
-        if self._span_stack:
-            # Event under current span
-            parent = self._span_stack[-1]
-            parent.event(
-                name=name,
-                metadata=metadata or {}
-            )
-        else:
-            # Event under trace
-            self._trace_client.event(
-                name=name,
-                metadata=metadata or {}
-            )
+        try:
+            # Create event under current span or root span
+            if self._span_stack:
+                # Event under current span
+                parent = self._span_stack[-1]
+                parent.create_event(
+                    name=name,
+                    metadata=metadata or {}
+                )
+            else:
+                # Event under root span
+                self._root_span.create_event(
+                    name=name,
+                    metadata=metadata or {}
+                )
+        except Exception as e:
+            logger.warning(f"Failed to create LangFuse event '{name}': {e}")
 
     def _output_attach_to_trace(
         self,
@@ -268,24 +287,27 @@ class LangFuseTracer(Tracer):
         """Output attach to trace to LangFuse.
 
         Args:
-            trace_id: Trace ID to attach to
+            trace_id: Trace ID to attach to (session_id from parent)
             parent_span_id: Parent span ID for distributed tracing.
                            The first span created will be a child of this span.
         """
         if not self.enabled or not self.client:
             return
 
-        # Get existing trace by ID
-        # Note: LangFuse SDK doesn't have direct "attach to trace" API
-        # We need to create a new trace client with the existing trace_id
-        self._trace_client = self.client.trace(
-            id=trace_id,
-            name=f"worker_trace_{trace_id[:8]}"
-        )
+        try:
+            # In v3, use trace_context dict to attach to existing trace
+            # Create root span attached to the existing trace with parent span if provided
+            trace_context: Dict[str, str] = {"trace_id": trace_id}
+            if parent_span_id:
+                trace_context["parent_span_id"] = parent_span_id
 
-        # Store parent span ID for the first span to be created
-        # This ensures distributed task spans are children of their parent task
-        self._parent_span_id = parent_span_id
+            self._root_span = self.client.start_span(
+                trace_context=trace_context,
+                name=f"worker_trace_{trace_id[:8]}"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to attach to LangFuse trace '{trace_id}': {e}")
+            self._root_span = None
 
     # === Overridden hooks for LangFuse-specific behavior ===
 
@@ -317,7 +339,7 @@ class LangFuseTracer(Tracer):
             "parent_task_id": parent_task_id,
             "is_iteration": is_iteration
         })
-        
+
         event_name = "task_iteration_added" if is_iteration else "dynamic_task_added"
         self.event(event_name, metadata=event_metadata)
 
@@ -363,6 +385,10 @@ class LangFuseTracer(Tracer):
         """Flush remaining traces to LangFuse.
 
         Should be called at the end of the program to ensure all data is sent.
+        Connection errors are logged but don't raise exceptions.
         """
         if self.enabled and self.client:
-            self.client.flush()
+            try:
+                self.client.flush()
+            except Exception as e:
+                logger.warning(f"Failed to flush LangFuse traces during shutdown: {e}")
