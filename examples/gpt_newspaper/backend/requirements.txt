@@ -4,6 +4,7 @@
 tavily-python>=0.3.0
 litellm>=1.0.0
 python-dotenv>=1.0.0
+langfuse>=3.8.1
 
 # Web API dependencies
 fastapi>=0.115.0

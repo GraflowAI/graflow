@@ -38,9 +38,10 @@ from agents import (
 from graflow.core.context import TaskExecutionContext
 from graflow.core.decorators import task
 from graflow.core.workflow import workflow
+from graflow.trace.langfuse import LangFuseTracer
 
 
-def create_article_workflow(query: str, article_id: str, output_dir: str):
+def create_article_workflow(query: str, article_id: str, output_dir: str, tracer=None):
     """
     Create a workflow for processing a single article query.
 
@@ -53,6 +54,7 @@ def create_article_workflow(query: str, article_id: str, output_dir: str):
         query: Article topic/query
         article_id: Unique identifier for this article
         output_dir: Output directory for article HTML
+        tracer: Optional tracer for workflow execution tracking
 
     Returns:
         Workflow context
@@ -65,7 +67,7 @@ def create_article_workflow(query: str, article_id: str, output_dir: str):
     critique_agent = CritiqueAgent()
     designer_agent = DesignerAgent(output_dir)
 
-    with workflow(f"article_{article_id}") as wf:
+    with workflow(f"article_{article_id}", tracer=tracer) as wf:
 
         @task(id=f"search_{article_id}")
         def search_task() -> Dict:
@@ -210,12 +212,25 @@ def execute_article_workflow(query: str, article_id: str, output_dir: str) -> Di
     print(f"Processing Article: {query}")
     print(f"{'=' * 80}")
 
+    # Create tracer for workflow observability
+    try:
+        tracer = LangFuseTracer(enable_runtime_graph=True)
+        print(f"[{article_id}] LangFuse tracer initialized")
+    except Exception as e:
+        print(f"[{article_id}] Warning: LangFuse tracer initialization failed: {e}")
+        print(f"[{article_id}] Continuing without tracing...")
+        tracer = None
+
     # Create and execute workflow
-    wf = create_article_workflow(query, article_id, output_dir)
+    wf = create_article_workflow(query, article_id, output_dir, tracer=tracer)
     result = wf.execute(
         f"search_{article_id}",
         max_steps=30  # Allow multiple write-critique cycles
     )
+
+    # Shutdown tracer to flush remaining traces
+    if tracer:
+        tracer.shutdown()
 
     if isinstance(result, dict):
         return result
