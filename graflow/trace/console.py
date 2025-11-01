@@ -240,6 +240,9 @@ class ConsoleTracer(Tracer):
             indent_size=self.indent_size
         )
 
+        # Inherit indentation so branch spans appear nested under their parent.
+        branch_tracer._indent_level = max(self._indent_level, 0)
+
         # Attach to parent trace
         branch_tracer.attach_to_trace(trace_id, parent_span_id)
 
