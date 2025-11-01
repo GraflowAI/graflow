@@ -90,8 +90,9 @@ class WorkflowEngine:
         # Determine workflow name for tracing
         workflow_name = getattr(context.graph, 'name', None) or f"workflow_{context.session_id[:8]}"
 
-        # Call tracer hook: workflow start
-        context.tracer.on_workflow_start(workflow_name, context)
+        # Call tracer hook: workflow start (skip for nested contexts)
+        if context.parent_context is None:
+            context.tracer.on_workflow_start(workflow_name, context)
 
         print(f"Starting execution from: {start_task_id or context.start_node}")
 
@@ -161,8 +162,9 @@ class WorkflowEngine:
 
         print(f"Execution completed after {context.steps} steps")
 
-        # Call tracer hook: workflow end
-        context.tracer.on_workflow_end(workflow_name, context, result=last_result)
+        # Call tracer hook: workflow end (skip for nested contexts)
+        if context.parent_context is None:
+            context.tracer.on_workflow_end(workflow_name, context, result=last_result)
 
         return last_result
 
