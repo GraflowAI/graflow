@@ -426,14 +426,19 @@ class LangFuseTracer(Tracer):
 
         return branch_tracer
 
-    def shutdown(self) -> None:
-        """Flush remaining traces to LangFuse.
-
-        Should be called at the end of the program to ensure all data is sent.
-        Connection errors are logged but don't raise exceptions.
-        """
+    def flush(self) -> None:
+        """Flush traces to LangFuse."""
         if self.enabled and self.client:
             try:
                 self.client.flush()
             except Exception as e:
-                logger.warning(f"Failed to flush LangFuse traces during shutdown: {e}")
+                logger.warning(f"Failed to flush LangFuse traces: {e}")
+
+    def shutdown(self) -> None:
+        """
+        Shutdown the tracer and cleanup resources.
+        """
+        self.flush()
+        self._root_span = None
+        self._span_stack = []
+

@@ -467,6 +467,21 @@ class Tracer(ABC):
         """
         pass
 
+    def flush(self) -> None:
+        """Flush any buffered trace data to external services.
+
+        Default implementation: calls shutdown() for backward compatibility.
+
+        Subclasses can override this method to:
+        - Flush buffered trace data without closing connections
+        - Ensure all pending spans are sent
+
+        Note:
+            This is called after ParallelGroup execution to ensure
+            all branch tracer data is sent immediately.
+        """
+        pass  # Default: no-op (intentional, not abstract)
+
     def shutdown(self) -> None:
         """Flush remaining traces and cleanup resources.
 
