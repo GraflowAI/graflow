@@ -270,11 +270,11 @@ class ConsoleTracer(Tracer):
         """Override to print dynamic task addition event."""
         task_type = "iteration" if is_iteration else "dynamic"
         parent_info = f" (parent: {parent_task_id})" if parent_task_id else ""
-        
+
         self._print(
             "event",
             self._colorize(f"+ {task_type.upper()} TASK: {task_id}{parent_info}", "yellow")
         )
-        
+
         if self.show_metadata and metadata:
             self._print("", f"  {self._format_metadata(metadata)}")
