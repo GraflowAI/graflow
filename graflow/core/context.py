@@ -295,7 +295,7 @@ class ExecutionContext:
             parent_context=self,
             session_id=branch_session_id,  # Hierarchical session ID
             trace_id=self.trace_id,  # Shared trace ID for distributed tracing
-            tracer=self.tracer.clone(self.trace_id) if self.tracer else None,
+            tracer=self.tracer.clone(self.trace_id, self.current_task_id) if self.tracer else None,
         )
         return branch_context
 
@@ -421,7 +421,11 @@ class ExecutionContext:
     @property
     def current_task_context(self) -> Optional[TaskExecutionContext]:
         """Get current task execution context."""
-        return self._task_execution_stack[-1] if self._task_execution_stack else None
+        if self._task_execution_stack:
+            return self._task_execution_stack[-1]
+        if self.parent_context is not None:
+            return self.parent_context.current_task_context
+        return None
 
     @property
     def current_task_id(self) -> Optional[str]:
