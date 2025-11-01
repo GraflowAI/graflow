@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import logging
 import os
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
@@ -104,7 +105,6 @@ class LangFuseTracer(Tracer):
         self.client: Optional[Langfuse] = None # type: ignore
         self._root_span: Optional[LangfuseSpan] = None # type: ignore
         self._span_stack: List[LangfuseSpan] = [] # type: ignore
-        self._parent_span_id: Optional[str] = None
 
         if not enabled:
             # No-op mode for testing
@@ -381,35 +381,21 @@ class LangFuseTracer(Tracer):
             }
         )
 
-    def clone(self, trace_id: str, parent_span_id: Optional[str] = None) -> LangFuseTracer:
+    def clone(self, trace_id: str) -> LangFuseTracer:
         """Clone this tracer for branch/parallel execution.
 
         Creates an isolated tracer with its own span stack to avoid race conditions
-        in parallel execution, while sharing the Langfuse client and attaching to
-        the same parent trace.
-
-        If parent_span_id is not provided, automatically uses the current span's ID
-        from the span stack. This ensures that child tasks are nested under their
-        parent task (e.g., ParallelGroup children are nested under the ParallelGroup).
+        in parallel execution, while sharing the Langfuse client.
 
         Args:
             trace_id: Trace ID to attach to (shared across all branches)
-            parent_span_id: Optional parent span ID. If not provided, uses current span ID from stack.
 
         Returns:
-            New LangFuseTracer instance attached to parent trace
+            New LangFuseTracer instance with copied state
         """
         if not self.enabled or not self.client:
             # Return a disabled tracer if parent is disabled
             return LangFuseTracer(enabled=False)
-
-        # If parent_span_id not provided, get it from current span in stack
-        # This ensures child tasks are nested under the parent task (e.g., ParallelGroup)
-        effective_parent_span_id = parent_span_id
-        if effective_parent_span_id is None and self._span_stack:
-            # Get the ID of the current span (top of stack)
-            current_span = self._span_stack[-1]
-            effective_parent_span_id = current_span.id
 
         # Create a new tracer instance with its own state
         # We pass enabled=False initially to skip client initialization
@@ -419,10 +405,16 @@ class LangFuseTracer(Tracer):
         branch_tracer.enabled = True
         branch_tracer.client = self.client  # Share the Langfuse client
         branch_tracer._span_stack = []  # New stack for this branch
-        branch_tracer._parent_span_id = effective_parent_span_id
+        branch_tracer._current_trace_id = trace_id
 
-        # Attach to parent trace
-        branch_tracer.attach_to_trace(trace_id, effective_parent_span_id)
+        # Set root span to parent's current span (from span stack)
+        # This ensures branch spans are nested under the parent span (e.g., ParallelGroup)
+        # Use shallow copy to avoid sharing the same span reference
+        if self._span_stack:
+            branch_tracer._root_span = copy.copy(self._span_stack[-1])
+        else:
+            # Fallback to parent's root span if no current span
+            branch_tracer._root_span = copy.copy(self._root_span) if self._root_span else None
 
         return branch_tracer
 

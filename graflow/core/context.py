@@ -270,19 +270,24 @@ class ExecutionContext:
         - Unique session_id for isolation (channels, identification)
           Pattern: {parent_session_id}_{branch_id} for traceability
         - Shared trace_id for distributed tracing (all branches in same trace)
-        - Shared tracer instance for unified observability
+        - Cloned tracer with parent span context inherited from tracer state
 
         This ensures proper W3C TraceContext compliance while maintaining execution isolation.
         The session_id pattern allows inferring the parent-child relationship from the ID.
 
         Args:
-            branch_id: Identifier for this branch (typically a task_id)
+            branch_id: Identifier for this branch (used for session_id uniqueness)
 
         Returns:
             New ExecutionContext with shared trace context but isolated execution state
         """
         # Use deterministic pattern for session_id to maintain parent-child traceability
         branch_session_id = f"{self.session_id}_{branch_id}"
+
+        # Clone tracer (parent span context inherited from tracer state)
+        cloned_tracer = None
+        if self.tracer:
+            cloned_tracer = self.tracer.clone(self.trace_id)
 
         branch_context = ExecutionContext(
             graph=self.graph,
@@ -295,7 +300,7 @@ class ExecutionContext:
             parent_context=self,
             session_id=branch_session_id,  # Hierarchical session ID
             trace_id=self.trace_id,  # Shared trace ID for distributed tracing
-            tracer=self.tracer.clone(self.trace_id, self.current_task_id) if self.tracer else None,
+            tracer=cloned_tracer,
         )
         return branch_context
 

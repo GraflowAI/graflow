@@ -217,7 +217,7 @@ class ConsoleTracer(Tracer):
         )
         self._print(message, icon="🔗", color="cyan")
 
-    def clone(self, trace_id: str, parent_span_id: Optional[str] = None) -> ConsoleTracer:
+    def clone(self, trace_id: str) -> ConsoleTracer:
         """Clone this tracer for branch/parallel execution.
 
         Creates a new ConsoleTracer instance with:
@@ -227,7 +227,6 @@ class ConsoleTracer(Tracer):
 
         Args:
             trace_id: Trace ID to attach to (shared across all branches)
-            parent_span_id: Optional parent span ID for distributed tracing
 
         Returns:
             New ConsoleTracer instance for branch execution
@@ -243,8 +242,8 @@ class ConsoleTracer(Tracer):
         # Inherit indentation so branch spans appear nested under their parent.
         branch_tracer._indent_level = max(self._indent_level, 0)
 
-        # Attach to parent trace
-        branch_tracer.attach_to_trace(trace_id, parent_span_id)
+        # Set trace context
+        branch_tracer._current_trace_id = trace_id
 
         return branch_tracer
 

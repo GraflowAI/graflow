@@ -95,7 +95,9 @@ class ThreadingCoordinator(TaskCoordinator):
         future_task_map: Dict[concurrent.futures.Future, str] = {}
 
         for task in tasks:
-            branch_context = execution_context.create_branch_context(branch_id=task.task_id)
+            branch_context = execution_context.create_branch_context(
+                branch_id=task.task_id
+            )
 
             future = self._executor.submit(execute_task_with_engine, task, branch_context)
             futures.append(future)

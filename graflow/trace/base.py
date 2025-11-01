@@ -447,23 +447,22 @@ class Tracer(ABC):
         pass
 
     @abstractmethod
-    def clone(self, trace_id: str, parent_span_id: Optional[str] = None) -> Tracer:
+    def clone(self, trace_id: str) -> Tracer:
         """Clone this tracer for branch/parallel execution.
 
         Creates a new tracer instance with:
         - Cloned configuration (enable_runtime_graph=False for branches)
         - Shared thread-safe resources (clients, connections)
         - Isolated mutable state (_span_stack, _root_span, etc.)
-        - Attachment to parent trace via trace_id
+        - Parent span context inherited from current tracer state
 
         This prevents race conditions when multiple threads execute parallel tasks.
 
         Args:
             trace_id: Trace ID to attach to (shared across all branches)
-            parent_span_id: Optional parent span ID for distributed tracing
 
         Returns:
-            New tracer instance attached to parent trace
+            New tracer instance with copied state
         """
         pass
 
