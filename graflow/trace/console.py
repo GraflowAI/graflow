@@ -9,7 +9,6 @@ from graflow.trace.base import Tracer
 
 if TYPE_CHECKING:
     from graflow.core.context import ExecutionContext
-    from graflow.core.task import Executable
 
 
 class ConsoleTracer(Tracer):
@@ -248,17 +247,6 @@ class ConsoleTracer(Tracer):
         return branch_tracer
 
     # === Overridden hooks for event logging ===
-
-    def on_task_queued(
-        self,
-        task: Executable,
-        context: ExecutionContext
-    ) -> None:
-        """Task queued hook (override to add event output)."""
-        self.event(
-            f"task_queued: {task.task_id}",
-            metadata={"task_type": type(task).__name__}
-        )
 
     def on_parallel_group_start(
         self,

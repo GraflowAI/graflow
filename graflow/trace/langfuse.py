@@ -13,7 +13,6 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from graflow.core.context import ExecutionContext
-    from graflow.core.task import Executable
 
 # Optional imports
 try:
@@ -310,20 +309,6 @@ class LangFuseTracer(Tracer):
             self._root_span = None
 
     # === Overridden hooks for LangFuse-specific behavior ===
-
-    def on_task_queued(
-        self,
-        task: Executable,
-        context: ExecutionContext
-    ) -> None:
-        """Task queued hook (override to add event output)."""
-        self.event(
-            "task_queued",
-            metadata={
-                "task_id": task.task_id,
-                "task_type": type(task).__name__
-            }
-        )
 
     def on_dynamic_task_added(
         self,
