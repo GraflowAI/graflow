@@ -388,9 +388,13 @@ class LangFuseTracer(Tracer):
         in parallel execution, while sharing the Langfuse client and attaching to
         the same parent trace.
 
+        If parent_span_id is not provided, automatically uses the current span's ID
+        from the span stack. This ensures that child tasks are nested under their
+        parent task (e.g., ParallelGroup children are nested under the ParallelGroup).
+
         Args:
             trace_id: Trace ID to attach to (shared across all branches)
-            parent_span_id: Optional parent span ID for distributed tracing
+            parent_span_id: Optional parent span ID. If not provided, uses current span ID from stack.
 
         Returns:
             New LangFuseTracer instance attached to parent trace
@@ -398,6 +402,14 @@ class LangFuseTracer(Tracer):
         if not self.enabled or not self.client:
             # Return a disabled tracer if parent is disabled
             return LangFuseTracer(enabled=False)
+
+        # If parent_span_id not provided, get it from current span in stack
+        # This ensures child tasks are nested under the parent task (e.g., ParallelGroup)
+        effective_parent_span_id = parent_span_id
+        if effective_parent_span_id is None and self._span_stack:
+            # Get the ID of the current span (top of stack)
+            current_span = self._span_stack[-1]
+            effective_parent_span_id = current_span.id
 
         # Create a new tracer instance with its own state
         # We pass enabled=False initially to skip client initialization
@@ -407,10 +419,10 @@ class LangFuseTracer(Tracer):
         branch_tracer.enabled = True
         branch_tracer.client = self.client  # Share the Langfuse client
         branch_tracer._span_stack = []  # New stack for this branch
-        branch_tracer._parent_span_id = parent_span_id
+        branch_tracer._parent_span_id = effective_parent_span_id
 
         # Attach to parent trace
-        branch_tracer.attach_to_trace(trace_id, parent_span_id)
+        branch_tracer.attach_to_trace(trace_id, effective_parent_span_id)
 
         return branch_tracer
 

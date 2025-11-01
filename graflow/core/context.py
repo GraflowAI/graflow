@@ -295,7 +295,7 @@ class ExecutionContext:
             parent_context=self,
             session_id=branch_session_id,  # Hierarchical session ID
             trace_id=self.trace_id,  # Shared trace ID for distributed tracing
-            tracer=self.tracer.clone(self.trace_id, self.current_task_id) if self.tracer else None,
+            tracer=self.tracer.clone(self.trace_id) if self.tracer else None,
         )
         return branch_context
 
