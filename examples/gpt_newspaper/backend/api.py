@@ -36,8 +36,8 @@ from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnec
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from newspaper_workflow import run_newspaper_workflow as run_original_newspaper_workflow
 from newspaper_dynamic_workflow import run_newspaper_workflow as run_dynamic_newspaper_workflow
+from newspaper_workflow import run_newspaper_workflow as run_original_newspaper_workflow
 from pydantic import BaseModel, ConfigDict, Field
 
 # Initialize FastAPI app
@@ -477,8 +477,9 @@ async def serve_frontend():
 
 # For testing
 if __name__ == "__main__":
-    import uvicorn
     import threading
+
+    import uvicorn
 
     print("=" * 80)
     print("🗞️  GPT NEWSPAPER API")
