@@ -243,7 +243,7 @@ class Tracer(ABC):
     ) -> None:
         """Called when workflow execution starts.
 
-        Default implementation: starts a trace with session_id as trace_id.
+        Default implementation: starts a trace with trace_id from context.
 
         Args:
             workflow_name: Workflow name
@@ -251,10 +251,11 @@ class Tracer(ABC):
         """
         self.trace_start(
             workflow_name,
-            trace_id=context.session_id,
+            trace_id=context.trace_id,
             metadata={
                 "start_node": context.start_node,
-                "max_steps": context.max_steps
+                "max_steps": context.max_steps,
+                "session_id": context.session_id
             }
         )
 

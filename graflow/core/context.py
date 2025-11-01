@@ -195,13 +195,19 @@ class ExecutionContext:
         config: Optional[Dict[str, Any]] = None,
         parent_context: Optional[ExecutionContext] = None,
         session_id: Optional[str] = None,
+        trace_id: Optional[str] = None,
         tracer: Optional[Tracer] = None
     ):
         """Initialize ExecutionContext with configurable queue backend."""
         self.parent_context = parent_context
-        # Generate a W3C TraceContext-compliant 32-digit hex trace ID for session_id.
-        # This format is required for compatibility and was a deliberate change from the previous implementation.
+
+        # session_id: Unique identifier for this execution context (used for channels, isolation)
+        # trace_id: Shared identifier for distributed tracing (W3C TraceContext-compliant 32-digit hex)
+        # For root contexts: trace_id = session_id (both are unique)
+        # For branch contexts: trace_id is inherited, session_id is unique
         self.session_id = session_id or uuid.uuid4().hex
+        self.trace_id = trace_id or (parent_context.trace_id if parent_context else self.session_id)
+
         # Each context gets its own tracer instance to avoid shared mutable state
         self.tracer = tracer if tracer is not None else NoopTracer()
 
@@ -258,8 +264,26 @@ class ExecutionContext:
         self.checkpoint_request_path: Optional[str] = None
 
     def create_branch_context(self, branch_id: str) -> ExecutionContext:
-        """Create a child execution context with isolated queue/channel state."""
+        """Create a child execution context for parallel execution.
+
+        Branch contexts have:
+        - Unique session_id for isolation (channels, identification)
+          Pattern: {parent_session_id}_{branch_id} for traceability
+        - Shared trace_id for distributed tracing (all branches in same trace)
+        - Shared tracer instance for unified observability
+
+        This ensures proper W3C TraceContext compliance while maintaining execution isolation.
+        The session_id pattern allows inferring the parent-child relationship from the ID.
+
+        Args:
+            branch_id: Identifier for this branch (typically a task_id)
+
+        Returns:
+            New ExecutionContext with shared trace context but isolated execution state
+        """
+        # Use deterministic pattern for session_id to maintain parent-child traceability
         branch_session_id = f"{self.session_id}_{branch_id}"
+
         branch_context = ExecutionContext(
             graph=self.graph,
             start_node=None,
@@ -269,8 +293,9 @@ class ExecutionContext:
             channel_backend=self._channel_backend_type,
             config=self._original_config,
             parent_context=self,
-            session_id=branch_session_id,
-            tracer=self.tracer,  # Propagate tracer to branch context
+            session_id=branch_session_id,  # Hierarchical session ID
+            trace_id=self.trace_id,  # Shared trace ID for distributed tracing
+            tracer=self.tracer,  # Share tracer instance for unified tracing
         )
         return branch_context
 
@@ -336,8 +361,8 @@ class ExecutionContext:
     def add_to_queue(self, executable: Executable) -> None:
         """Add executable to execution queue with trace context."""
         # Always set trace context for distributed tracing
-        # Trace ID (workflow-wide ID = session_id)
-        trace_id = self.session_id
+        # Trace ID (workflow-wide ID, shared across all branches)
+        trace_id = self.trace_id
 
         # Parent span ID (currently executing task ID)
         parent_span_id = self.current_task_id if hasattr(self, 'current_task_id') else None
@@ -433,6 +458,7 @@ class ExecutionContext:
         return {
             "schema_version": "1.0",
             "session_id": self.session_id,
+            "trace_id": self.trace_id,
             "start_node": self.start_node,
             "steps": self.steps,
             "completed_tasks": list(self.completed_tasks),
