@@ -217,6 +217,34 @@ class ConsoleTracer(Tracer):
         )
         self._print(message, icon="🔗", color="cyan")
 
+    def clone(self, trace_id: str, parent_span_id: Optional[str] = None) -> ConsoleTracer:
+        """Clone this tracer for branch/parallel execution.
+
+        Creates a new ConsoleTracer instance with:
+        - Cloned configuration (colors, metadata, indent settings)
+        - Isolated mutable state (_indent_level, _span_start_times)
+        - Disabled runtime_graph tracking (parent tracks it)
+
+        Args:
+            trace_id: Trace ID to attach to (shared across all branches)
+            parent_span_id: Optional parent span ID for distributed tracing
+
+        Returns:
+            New ConsoleTracer instance for branch execution
+        """
+        # Create new instance with same configuration but no runtime graph
+        branch_tracer = ConsoleTracer(
+            enable_runtime_graph=False,  # Branch doesn't track runtime graph
+            enable_colors=self.enable_colors,
+            show_metadata=self.show_metadata,
+            indent_size=self.indent_size
+        )
+
+        # Attach to parent trace
+        branch_tracer.attach_to_trace(trace_id, parent_span_id)
+
+        return branch_tracer
+
     # === Overridden hooks for event logging ===
 
     def on_task_queued(

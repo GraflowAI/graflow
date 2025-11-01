@@ -91,3 +91,24 @@ class NoopTracer(Tracer):
     ) -> None:
         """Attach to trace output (no-op)."""
         pass
+
+    def clone(self, trace_id: str, parent_span_id: Optional[str] = None) -> NoopTracer:
+        """Clone this tracer for branch/parallel execution.
+
+        Creates a new NoopTracer instance with disabled runtime_graph tracking
+        (parent tracer tracks it).
+
+        Args:
+            trace_id: Trace ID to attach to (shared across all branches)
+            parent_span_id: Optional parent span ID for distributed tracing
+
+        Returns:
+            New NoopTracer instance for branch execution
+        """
+        # Create new instance without runtime graph tracking
+        branch_tracer = NoopTracer(enable_runtime_graph=False)
+
+        # Attach to parent trace
+        branch_tracer.attach_to_trace(trace_id, parent_span_id)
+
+        return branch_tracer

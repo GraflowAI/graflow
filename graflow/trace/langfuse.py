@@ -381,6 +381,39 @@ class LangFuseTracer(Tracer):
             }
         )
 
+    def clone(self, trace_id: str, parent_span_id: Optional[str] = None) -> LangFuseTracer:
+        """Clone this tracer for branch/parallel execution.
+
+        Creates an isolated tracer with its own span stack to avoid race conditions
+        in parallel execution, while sharing the Langfuse client and attaching to
+        the same parent trace.
+
+        Args:
+            trace_id: Trace ID to attach to (shared across all branches)
+            parent_span_id: Optional parent span ID for distributed tracing
+
+        Returns:
+            New LangFuseTracer instance attached to parent trace
+        """
+        if not self.enabled or not self.client:
+            # Return a disabled tracer if parent is disabled
+            return LangFuseTracer(enabled=False)
+
+        # Create a new tracer instance with its own state
+        # We pass enabled=False initially to skip client initialization
+        branch_tracer = LangFuseTracer(enabled=False)
+
+        # Share the client (thread-safe in v3) but create new state
+        branch_tracer.enabled = True
+        branch_tracer.client = self.client  # Share the Langfuse client
+        branch_tracer._span_stack = []  # New stack for this branch
+        branch_tracer._parent_span_id = parent_span_id
+
+        # Attach to parent trace
+        branch_tracer.attach_to_trace(trace_id, parent_span_id)
+
+        return branch_tracer
+
     def shutdown(self) -> None:
         """Flush remaining traces to LangFuse.
 
