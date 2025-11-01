@@ -362,24 +362,52 @@ tracer = LangFuseTracer(
 )
 ```
 
-**実装の特徴:**
+**実装の特徴 (v3 API):**
 
 - **dotenv統合**: `.env`ファイルから`LANGFUSE_*`環境変数を自動読み込み
-- `trace_start()` → LangFuseルートspanを作成
-- `span_start()` → 親spanの子spanとして作成（名前ベース管理） + runtime graph tracking
-- `span_end()` → spanを更新してend()を呼び出し + runtime graph更新
-- `event()` → 親spanのmetadataとして記録
-- `flush()` → LangFuseクライアントのflush()を呼び出し
+- **v3 API使用**: plain dictベースの`trace_context`を使用（v2のStatefulClientは廃止）
+- `_output_trace_start()` → ルートspanを作成（トレースを表現）
+- `_output_span_start()` → 親spanから子spanを作成（スタックで階層管理）
+- `_output_span_end()` → span.update()とspan.end()で明示的に終了
+- `_output_event()` → span.create_event()でイベント記録
+- `shutdown()` → client.flush()で確実にデータ送信
 
-**内部管理:**
+**内部管理 (v3):**
 
-- `_trace_client: Optional[StatefulTraceClient]` - 現在のトレースコンテキスト
-- `_span_stack: list[StatefulSpanClient]` - ネストしたspanを管理するスタック
-- `attach_to_trace()` は `parent_span_id` を指定すると LangFuse API から既存spanを再取得し、スタックへ積んで親子関係を復元
+```python
+class LangFuseTracer(Tracer):
+    def __init__(self, ...):
+        self.client: Optional[Langfuse] = None  # v3: Langfuseクライアント
+        self._root_span: Optional[LangfuseSpan] = None  # v3: ルートspan
+        self._span_stack: List[LangfuseSpan] = []  # v3: span階層管理
+```
 
-実装は Template Method パターンに従い、`_output_*` フック内で LangFuse SDK の
-`trace()`, `span()`, `event()` を呼び出します。エラー発生時は span の `level`
-を `ERROR` に設定し、`shutdown()` で `client.flush()` を確実に実行します。
+**v3 API の主要な変更:**
+- ❌ `StatefulTraceClient`, `StatefulSpanClient` (v2) → 廃止
+- ✅ `Langfuse`, `LangfuseSpan` (v3) → 新API
+- ✅ `trace_context: dict` → plain dictで指定
+- ✅ `span.start_span()` → 親spanから子spanを作成
+- ✅ `span.create_event()` → イベント作成
+- ✅ W3C TraceContext準拠の分散トレーシング
+
+**分散トレーシング対応:**
+
+```python
+def _output_attach_to_trace(self, trace_id: str, parent_span_id: Optional[str]) -> None:
+    """既存トレースに接続（Workerプロセス用）"""
+    trace_context: Dict[str, str] = {"trace_id": trace_id}
+    if parent_span_id:
+        trace_context["parent_span_id"] = parent_span_id
+
+    self._root_span = self.client.start_span(
+        trace_context=trace_context,
+        name=f"worker_trace_{trace_id[:8]}"
+    )
+```
+
+実装は Template Method パターンに従い、`_output_*` フック内で LangFuse v3 SDK の
+`start_span()`, `update()`, `end()`, `create_event()` を呼び出します。エラー発生時は
+span の `level` を `ERROR` に設定し、`shutdown()` で `client.flush()` を確実に実行します。
 
 ## 5. 統合ポイント
 
@@ -955,37 +983,32 @@ TaskWorkerは別プロセスで動作するため、親プロセスのトレー�
 
 **基本方針:**
 1. `TaskSpec`にトレースコンテキスト情報を追加
-2. タスクキューイング時にトレースID（`session_id`）と親spanIDを記録
+2. タスクキューイング時にトレースID（`trace_id`）と親spanIDを記録
 3. TaskWorkerでタスク実行時に親トレースに接続
 
-**トレースIDとして`session_id`を使用（W3C TraceContext準拠）:**
-- `ExecutionContext.session_id`は既にワークフロー実行ごとにユニークなID
-- **重要**: W3C TraceContext準拠のため、**32桁のhex形式**に変更が必要
-  - 現在: `str(uuid.uuid4().int)` → 10進数の長い文字列（非準拠）
-  - 変更後: `uuid.uuid4().hex` → 32桁のhex文字列（準拠）
-  - 例: `"0af7651916cd43dd8448eb211c80319c"`
-- これをトレースIDとして流用することで、追加の管理が不要
-- メインプロセスとWorkerプロセスで同じ`session_id`を共有することで、統合トレースを実現
+**trace_idとsession_idの分離（2025年11月更新）:**
+- `ExecutionContext.trace_id`: 分散トレーシング用の共有ID（W3C準拠32桁hex）
+- `ExecutionContext.session_id`: 各コンテキストの一意識別子（チャネル分離用）
+- **重要**: ルートコンテキストでは `trace_id = session_id`
+- **並列実行**: ブランチコンテキストは親の`trace_id`を継承、`session_id`は独自に生成
+- メインプロセスとWorkerプロセスで同じ`trace_id`を共有することで、統合トレースを実現
 
-### 12.3 session_idのW3C TraceContext準拠化
+### 12.3 W3C TraceContext準拠の実装
 
-**現在の実装（問題）:**
-```python
-# graflow/core/context.py
-self.session_id = session_id or str(uuid.uuid4().int)
-# 例: "123456789012345678901234567890" (10進数の長い文字列)
-```
-
-**変更後（W3C TraceContext準拠）:**
+**実装（2025年11月時点）:**
 ```python
 # graflow/core/context.py
 self.session_id = session_id or uuid.uuid4().hex
-# 例: "0af7651916cd43dd8448eb211c80319c" (32桁のhex文字列)
+self.trace_id = trace_id or (parent_context.trace_id if parent_context else self.session_id)
+
+# 例:
+# ルート: session_id="abc123", trace_id="abc123"
+# ブランチ: session_id="abc123_task1", trace_id="abc123" (継承)
 ```
 
 **W3C TraceContext仕様:**
-- trace-id: 32桁のhex（16バイト）
-- span-id: 16桁のhex（8バイト）
+- trace-id: 32桁のhex（16バイト） → `ExecutionContext.trace_id` として実装
+- span-id: 16桁のhex（8バイト） → タスクIDから生成する場合は必要に応じて変換
 
 ### 12.4 TaskSpecの拡張
 
@@ -1008,7 +1031,7 @@ class TaskSpec:
     group_id: Optional[str] = None
 
     # Trace context (新規)
-    trace_id: Optional[str] = None           # トレースID (= session_id, W3C準拠32桁hex)
+    trace_id: Optional[str] = None           # トレースID (W3C準拠32桁hex、全ブランチで共通)
     parent_span_id: Optional[str] = None     # 親spanID（キューイング元タスク）
 ```
 
@@ -1033,9 +1056,9 @@ class ExecutionContext:
         parent_span_id = None
 
         if self.tracer:
-            # トレースID（ワークフロー全体のID = session_id）
-            # session_idは既に32桁hex形式でW3C準拠
-            trace_id = self.session_id
+            # トレースID（ワークフロー全体で共有されるID、W3C準拠32桁hex）
+            # 全ブランチで同一のtrace_idを使用することで統合トレースを実現
+            trace_id = self.trace_id
 
             # 親spanID（現在実行中のタスクID）
             parent_span_id = self.current_task_id
@@ -1175,17 +1198,31 @@ class TaskWorker:
 
 LangFuseTracer（セクション 4.4 の実装を参照）に `attach_to_trace()` を追加して、既存トレースへワーカーが合流できるようにする。
 
+**v3 API実装 (2025年11月更新):**
+
 ```python
-def attach_to_trace(self, trace_id: str) -> None:
+def _output_attach_to_trace(self, trace_id: str, parent_span_id: Optional[str]) -> None:
     """既存のトレースへ合流する（TaskWorker から呼び出す）。"""
-    if not self.enabled:
+    if not self.enabled or not self.client:
         return
 
-    # session_id (= trace_id) を LangFuse のトレース名として採用
-    self._trace_name = trace_id
+    try:
+        # v3: trace_contextでトレースに接続
+        trace_context: Dict[str, str] = {"trace_id": trace_id}
+        if parent_span_id:
+            trace_context["parent_span_id"] = parent_span_id
 
-    # LangFuse API は同じ trace_id の span をグルーピングするため
-    # メインプロセスと Worker のトレースが統合される
+        # ルートspanを作成（既存トレースに接続）
+        self._root_span = self.client.start_span(
+            trace_context=trace_context,
+            name=f"worker_trace_{trace_id[:8]}"
+        )
+    except Exception as e:
+        logger.warning(f"Failed to attach to LangFuse trace '{trace_id}': {e}")
+        self._root_span = None
+
+# Langfuse v3 は同じ trace_id の span を自動的にグルーピングするため
+# メインプロセスと Worker のトレースが統合される
 ```
 
 ### 12.8 使用例：分散実行でのトレース
@@ -1259,23 +1296,26 @@ Trace: distributed_workflow (session_id: wf_1234567890abcdef)
         └─ span_end
 ```
 
-**重要:**
-- トレースID = `ExecutionContext.session_id` (W3C TraceContext準拠の32桁hex)
+**重要（2025年11月更新）:**
+- トレースID = `ExecutionContext.trace_id` (W3C TraceContext準拠の32桁hex)
 - 例: `"0af7651916cd43dd8448eb211c80319c"`
-- すべてのプロセス（メイン + ワーカー）で同じ`session_id`を共有
+- すべてのプロセス（メイン + ワーカー）で同じ`trace_id`を共有
 - LangFuseでは自動的に同一トレースとしてグループ化される
+- `session_id`は各コンテキストで一意（チャネル分離用）
 
 ### 12.10 設計上の考慮事項
 
 #### 12.10.1 W3C TraceContext準拠
 
-- **trace-id**: 32桁のhex（16バイト） - `session_id`として使用
+- **trace-id**: 32桁のhex（16バイト） - `ExecutionContext.trace_id` として実装
+  - ルートコンテキスト: `trace_id = session_id = uuid.uuid4().hex`
+  - ブランチコンテキスト: `trace_id` は親から継承（全ブランチで共通）
 - **span-id**: 16桁のhex（8バイト） - タスクIDから生成する場合は`hashlib`で16桁に変換
   ```python
   import hashlib
   span_id = hashlib.md5(task_id.encode()).hexdigest()[:16]
   ```
-- LangFuseが内部でW3C TraceContext形式を使用している場合、この準拠が重要
+- Langfuse v3は内部的にW3C TraceContext形式を使用しており、この準拠が重要
 
 #### 12.10.2 セキュリティ
 
@@ -1602,12 +1642,264 @@ class Tracer(ABC):
   - ConsoleTracer: print出力のみ（許容範囲）
   - LangFuseTracer: ネットワークI/O（非同期flush使用）
 
-### 14.8 技術的負債
+### 14.8 Langfuse v3 API移行とアーキテクチャ改善 (2025年11月)
+
+#### 14.8.1 session_id と trace_id の分離
+
+**背景:**
+当初の設計では `session_id` がトレースIDとしても使用されていたが、並列実行時に問題が発生：
+- ブランチコンテキストで `session_id` を変更するとトレースIDも変わってしまう
+- 並列タスクが異なるトレースとして記録される問題
+
+**解決策: trace_id フィールドの導入** ✅ 完了
+
+```python
+class ExecutionContext:
+    def __init__(
+        self,
+        ...
+        session_id: Optional[str] = None,
+        trace_id: Optional[str] = None,  # 新規追加
+        tracer: Optional[Tracer] = None
+    ):
+        # session_id: 各実行コンテキストの一意識別子（チャネル分離、識別用）
+        # trace_id: 分散トレーシング用の共有識別子（W3C TraceContext準拠32桁hex）
+        # ルートコンテキスト: trace_id = session_id (両方とも一意)
+        # ブランチコンテキスト: trace_id は継承、session_id は一意
+        self.session_id = session_id or uuid.uuid4().hex
+        self.trace_id = trace_id or (parent_context.trace_id if parent_context else self.session_id)
+```
+
+**役割の明確化:**
+
+| フィールド | 用途 | 並列実行時 |
+|-----------|------|----------|
+| `session_id` | コンテキスト識別、チャネル名、実行分離 | **各ブランチで一意** |
+| `trace_id` | 分散トレーシング、観測性ツール連携 | **全ブランチで共通** |
+
+**ブランチコンテキストの処理:**
+
+```python
+def create_branch_context(self, branch_id: str) -> ExecutionContext:
+    """並列実行用の子実行コンテキストを作成。
+
+    ブランチコンテキストの特性:
+    - session_id: 階層的パターン {parent_session_id}_{branch_id} で追跡可能性を維持
+    - trace_id: 親から継承（全ブランチが同一トレースに所属）
+    - tracer: 共有インスタンスで統一的な観測性を実現
+    """
+    branch_session_id = f"{self.session_id}_{branch_id}"  # 階層的パターン
+
+    return ExecutionContext(
+        ...
+        session_id=branch_session_id,  # 一意のセッションID
+        trace_id=self.trace_id,  # 共有トレースID（W3C準拠）
+        tracer=self.tracer,  # 共有tracerインスタンス
+    )
+```
+
+**ネストされたブランチの例:**
+
+| レベル | session_id | trace_id | 説明 |
+|-------|------------|----------|------|
+| ルート | `abc123` | `abc123` | ルートトレース |
+| ブランチ1 | `abc123_task1` | `abc123` | ← ルートから継承 |
+| ブランチ1.1 | `abc123_task1_task2` | `abc123` | ← ブランチ1から継承 |
+| ブランチ1.2 | `abc123_task1_task3` | `abc123` | ← ブランチ1から継承 |
+
+すべてのネストレベルで `trace_id` は一定に保たれ、Langfuseなどの観測性ツールで**単一の統合トレース**として表示されます。
+
+#### 14.8.2 Langfuse v3 API への移行
+
+**変更概要:**
+2025年6月にLangfuse Python SDK v3が正式リリースされ、APIが大幅に変更されました。
+
+**削除されたv2 API:**
+```python
+# ❌ v2 (廃止)
+from langfuse.client import StatefulSpanClient, StatefulTraceClient
+```
+
+**新しいv3 API:**
+```python
+# ✅ v3
+from langfuse import Langfuse, LangfuseSpan
+# trace_context は plain dict を使用
+```
+
+**主要な変更点:**
+
+1. **トレースコンテキストの指定方法**
+
+```python
+# v2 (廃止)
+from langfuse.types import TraceContext
+trace_context = TraceContext(trace_id=trace_id)
+
+# v3 (新API)
+trace_context = {"trace_id": trace_id}  # plain dict
+```
+
+2. **ルートスパンの作成**
+
+```python
+# v3: ルートスパンがトレースを表現
+self._root_span = self.client.start_span(
+    trace_context={"trace_id": trace_id} if trace_id else None,
+    name=workflow_name,
+    metadata=metadata or {}
+)
+```
+
+3. **ネストされたスパン**
+
+```python
+# v3: 親spanからchild spanを作成
+child_span = parent_span.start_span(
+    name="task_name",
+    metadata={"task_type": "Task"}
+)
+```
+
+4. **スパンのライフサイクル**
+
+```python
+# v3: update() と end() で明示的に管理
+span.update(
+    output=result,
+    metadata={"status": "completed"},
+    level="ERROR" if error else None,
+    status_message=str(error) if error else None
+)
+span.end()
+```
+
+5. **イベントの作成**
+
+```python
+# v3: spanからeventを作成
+span.create_event(
+    name="task_queued",
+    metadata={"task_id": task.task_id}
+)
+```
+
+6. **分散トレーシングの接続**
+
+```python
+# v3: trace_contextで親トレースに接続
+def _output_attach_to_trace(self, trace_id: str, parent_span_id: Optional[str]) -> None:
+    trace_context: Dict[str, str] = {"trace_id": trace_id}
+    if parent_span_id:
+        trace_context["parent_span_id"] = parent_span_id
+
+    self._root_span = self.client.start_span(
+        trace_context=trace_context,
+        name=f"worker_trace_{trace_id[:8]}"
+    )
+```
+
+**実装の改善:**
+
+```python
+# graflow/trace/langfuse.py の主要な変更
+
+class LangFuseTracer(Tracer):
+    def __init__(self, ...):
+        # v3: 型ヒントをシンプル化
+        self.client: Optional[Langfuse] = None
+        self._root_span: Optional[LangfuseSpan] = None
+        self._span_stack: List[LangfuseSpan] = []
+
+    def _output_trace_start(self, name: str, trace_id: Optional[str], metadata: Optional[Dict[str, Any]]) -> None:
+        # v3: plain dictでtrace_contextを指定
+        trace_context = {"trace_id": trace_id} if trace_id else None
+
+        self._root_span = self.client.start_span(
+            trace_context=trace_context,
+            name=name,
+            metadata=metadata or {}
+        )
+
+    def _output_span_start(self, name: str, parent_name: Optional[str], metadata: Optional[Dict[str, Any]]) -> None:
+        # v3: 親spanからchild spanを作成
+        if self._span_stack:
+            span = self._span_stack[-1].start_span(name=name, metadata=metadata or {})
+        else:
+            span = self._root_span.start_span(name=name, metadata=metadata or {})
+
+        self._span_stack.append(span)
+```
+
+**移行の影響:**
+- ✅ **W3C TraceContext準拠**: v3は標準的なトレース形式をサポート
+- ✅ **スレッドセーフ**: v3クライアントはスレッドセーフな設計
+- ✅ **コード簡素化**: plain dictの使用でコードが読みやすく
+- ✅ **パフォーマンス向上**: v3は内部的にOpenTelemetryベース
+
+#### 14.8.3 並列実行時のトレーサー伝播
+
+**問題:**
+`graflow/coordination/threading.py` で並列タスク実行時にtracerが正しく伝播されていなかった。
+
+**解決策:**
+ブランチコンテキストを通じてtracerを伝播：
+
+```python
+# graflow/core/context.py
+def create_branch_context(self, branch_id: str) -> ExecutionContext:
+    return ExecutionContext(
+        ...
+        tracer=self.tracer,  # 共有tracerインスタンス
+    )
+
+# graflow/coordination/threading.py
+def execute_task_with_engine(task, branch_context):
+    """各並列タスクはbranch_contextからtracerを取得"""
+    engine = WorkflowEngine()
+    # branch_context.tracer が自動的に使用される
+    engine.execute(branch_context, start_task_id=task.task_id)
+```
+
+**検証:**
+並列グループのすべてのタスクが同一トレースID (`trace_id`) で記録され、Langfuse UIで統合トレースとして表示されることを確認。
+
+#### 14.8.4 更新されたファイル
+
+```
+graflow/trace/langfuse.py       - Langfuse v3 API実装
+graflow/core/context.py          - trace_id/session_id分離、branch context修正
+graflow/trace/base.py            - trace_id使用に更新
+graflow/coordination/threading.py - tracer伝播のドキュメント強化
+```
+
+#### 14.8.5 影響と利点
+
+**観測性の向上:**
+- ✅ 並列・ネスト並列実行が単一トレースとして可視化
+- ✅ 分散ワーカー実行も統合トレースに含まれる
+- ✅ W3C TraceContext準拠で相互運用性向上
+
+**実装の改善:**
+- ✅ session_idとtrace_idの責務が明確化
+- ✅ Langfuse v3の最新機能を活用
+- ✅ コードの可読性と保守性が向上
+
+**下位互換性:**
+- ✅ 既存のワークフローコードは変更不要
+- ✅ NoopTracerはデフォルトで引き続き動作
+- ✅ トレース無効時のオーバーヘッドはゼロのまま
+
+### 14.9 技術的負債
 
 なし（現時点）
 
-### 14.9 参考情報
+### 14.10 参考情報
 
-- **実装期間**: 2025年10月（Phase 1-3前半）
+- **実装期間**: 2025年10月（Phase 1-3前半）、2025年11月（Langfuse v3移行）
 - **関連ブランチ**: `langfuse`
-- **主要な議論**: Template Methodパターンの採用、session_idのW3C準拠化
+- **主要な議論**:
+  - Template Methodパターンの採用
+  - session_idのW3C準拠化
+  - session_id/trace_id分離設計
+  - Langfuse v3 API移行
