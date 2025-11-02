@@ -8,6 +8,7 @@ Graflowに LiteLLM を使用した LLM 統合機能を追加する設計ドキ�
 
 - タスク内で LLM を簡単に利用できるようにする
 - LiteLLM を通じて複数の LLM プロバイダー（OpenAI, Anthropic, Google など）をサポート
+- **タスクごとに異なるモデルを使用可能**（コスト・性能の最適化）
 - **LiteLLM の `langfuse_otel` と `ExecutionContext.trace_id` で統一的にトレーシング**
 - Google ADK の LlmAgent を活用した Supervisor/ReAct パターンのサポート
 
@@ -18,6 +19,7 @@ Graflowに LiteLLM を使用した LLM 統合機能を追加する設計ドキ�
 3. **独立性**: ADKのtoolsとGraflowのtasksは完全に独立
 4. **依存性**: LiteLLM, Google ADK は optional dependency として扱う
 5. **トレーシング**: LiteLLM の `langfuse_otel` コールバックを使用し、`trace_id` のみを引き継ぐ（Graflow tracer と並行動作）
+6. **柔軟性**: タスクごとに異なる LLMClient インスタンスを作成し、最適なモデルを選択可能
 
 ---
 
@@ -28,15 +30,16 @@ Graflowに LiteLLM を使用した LLM 統合機能を追加する設計ドキ�
 ```
 graflow/llm/
 ├── __init__.py
-├── client.py          # LLMClient - LiteLLMラッパー + エージェントレジストリ
+├── client.py          # LLMClient - LiteLLMラッパー
 ├── config.py          # LLMConfig - 設定管理
+├── serialization.py   # Agent シリアライゼーション（YAML）
 └── agents/
     ├── __init__.py
     ├── base.py        # LLMAgent - ReAct/Supervisor用基底クラス
     └── adk_agent.py   # AdkLLMAgent - Google ADK LlmAgentラッパー
 ```
 
-**注**: LiteLLM の `langfuse_otel` コールバックを使用するため、独自の tracing モジュールは不要。
+**注**: LiteLLM の `langfuse` コールバックと OpenTelemetry を使用するため、独自の tracing モジュールは不要。
 
 ### アーキテクチャ図
 
@@ -95,8 +98,7 @@ graflow/llm/
 LiteLLM のラッパーで、以下の機能を提供：
 
 1. **Completion API**: LiteLLM の `completion()` への簡易アクセス
-2. **Agent Registry**: LLMAgent インスタンスの管理
-3. **自動トレーシング**: `trace_id` を metadata に設定し、LiteLLM の `langfuse_otel` で自動トレース
+2. **自動トレーシング**: OpenTelemetry context から trace_id/span_id を自動検出
 
 #### 主要メソッド
 
@@ -142,7 +144,6 @@ class LLMClient:
     ):
         self.model = model
         self.default_params = default_params
-        self._agents: Dict[str, "LLMAgent"] = {}
 
         try:
             self._litellm = importlib.import_module("litellm")
@@ -220,8 +221,6 @@ def extract_text(response: ModelResponse) -> str:
 - **モデルオーバーライド**: `completion(model="gpt-4")` で一時的にモデルを変更可能
 - **Langfuseメタデータ**: `generation_name` と `tags` で Langfuse でのトレース整理
 - **自動トレーシング**: OpenTelemetry context から trace_id/span_id を自動検出
-- **エージェントレジストリ**: タスク間で LLMAgent インスタンスを共有
-- **graflow/trace/ 非使用**: LLM層は独自にLangfuseへトレース送信（Graflow tracerとは独立）
 
 ---
 
@@ -353,6 +352,7 @@ class ExecutionContext:
     ):
         self._llm_config = llm_config
         self._llm_client = llm_client
+        self._llm_agents: Dict[str, LLMAgent] = {}  # Agent Registry
 
     @property
     def llm_client(self) -> Optional[LLMClient]:
@@ -369,6 +369,16 @@ class ExecutionContext:
             )
 
         return self._llm_client
+
+    def register_llm_agent(self, name: str, agent: LLMAgent) -> None:
+        """LLMAgent を登録"""
+        self._llm_agents[name] = agent
+
+    def get_llm_agent(self, name: str) -> LLMAgent:
+        """LLMAgent を取得"""
+        if name not in self._llm_agents:
+            raise KeyError(f"LLMAgent '{name}' not found in registry")
+        return self._llm_agents[name]
 ```
 
 ### ファクトリー関数
@@ -407,7 +417,9 @@ def task(
     id: Optional[str] = None,
     inject_context: bool = False,
     inject_llm_client: bool = False,  # 新規
-    model: Optional[str] = None,       # 新規
+    inject_llm_agent: bool = False,   # 新規
+    model: Optional[str] = None,      # 新規
+    agent_name: Optional[str] = None, # 新規
     handler: Optional[str] = None
 ) -> TaskWrapper | Callable[[F], TaskWrapper]:
     """
@@ -416,28 +428,61 @@ def task(
     Args:
         inject_context: ExecutionContext を第一引数に注入
         inject_llm_client: LLMClient を第一引数に注入
+        inject_llm_agent: LLMAgent を第一引数に注入
         model: inject_llm_client 使用時のモデルオーバーライド
+        agent_name: inject_llm_agent 使用時のエージェント名
     """
 ```
 
 ### 使用例
 
 ```python
-# シンプルな LLM タスク
+# シンプルな LLM タスク（ExecutionContext のデフォルトモデルを使用）
 @task(inject_llm_client=True)
 def summarize(llm: LLMClient, text: str) -> str:
+    """デフォルトモデル（例: gpt-4o-mini）でタスクを実行"""
     messages = [
         {"role": "system", "content": "You are a summarization assistant."},
         {"role": "user", "content": f"Summarize: {text}"}
     ]
     return llm.completion_text(messages)
 
-# モデルオーバーライド
-@task(inject_llm_client=True, model="gpt-4")
+# タスク固有のモデル指定（別の LLMClient インスタンスを使用）
+@task(inject_llm_client=True, model="gpt-4o")
 def complex_analysis(llm: LLMClient, data: str) -> str:
-    # このタスクはデフォルトが gpt-4o-mini でも gpt-4 を使用
-    return llm.completion_text([...])
+    """
+    タスクごとに異なるモデルを指定可能。
+
+    - ExecutionContext のデフォルトが gpt-4o-mini でも、このタスクは gpt-4o を使用
+    - 別の LLMClient インスタンスが作成される（default_params は継承）
+    - タスクごとに最適なモデルを選択可能
+    """
+    return llm.completion_text([{"role": "user", "content": data}])
+
+# 高性能モデルを必要とするタスク
+@task(inject_llm_client=True, model="claude-3-5-sonnet-20241022")
+def advanced_reasoning(llm: LLMClient, problem: str) -> str:
+    """複雑な推論タスクには Claude Sonnet を使用"""
+    return llm.completion_text([{"role": "user", "content": problem}])
+
+# コスト効率重視のタスク
+@task(inject_llm_client=True, model="gpt-4o-mini")
+def simple_formatting(llm: LLMClient, text: str) -> str:
+    """簡単なタスクには低コストモデルを使用"""
+    return llm.completion_text([{"role": "user", "content": text}])
+
+# LLM Agent を使用
+@task(inject_llm_agent=True, agent_name="supervisor")
+def run_supervisor(agent: LLMAgent, query: str) -> str:
+    """Agent Registry から "supervisor" を取得して実行"""
+    return agent.run(query)
 ```
+
+**重要**: `model` パラメータを指定した場合:
+- タスク実行時に**新しい LLMClient インスタンス**が作成される
+- ExecutionContext の `default_params`（temperature, max_tokens など）は継承される
+- モデルのみが上書きされる
+- タスクごとに最適なモデルを選択可能（コスト・性能のバランス調整）
 
 ### TaskWrapper の実装
 
@@ -449,16 +494,22 @@ class TaskWrapper(Executable):
         func: Callable,
         inject_context: bool = False,
         inject_llm_client: bool = False,
+        inject_llm_agent: bool = False,
         llm_model_override: Optional[str] = None,
+        agent_name: Optional[str] = None,
         handler_type: Optional[str] = None,
     ):
         self.inject_llm_client = inject_llm_client
+        self.inject_llm_agent = inject_llm_agent
         self.llm_model_override = llm_model_override
+        self.agent_name = agent_name
         # ...
 
     def __call__(self, *args, **kwargs) -> Any:
+        exec_context = self.get_execution_context()
+
+        # LLMClient injection
         if self.inject_llm_client:
-            exec_context = self.get_execution_context()
             llm_client = exec_context.llm_client
 
             if llm_client is None:
@@ -467,16 +518,36 @@ class TaskWrapper(Executable):
                     "but no LLM client configured"
                 )
 
-            # モデルオーバーライド
+            # タスク固有のモデル指定がある場合、別の LLMClient インスタンスを作成
+            # これにより、タスクごとに異なるモデルを使用可能
             if self.llm_model_override:
+                # 新しい LLMClient インスタンスを作成
+                # - model: タスク固有のモデル（例: "gpt-4o", "claude-3-5-sonnet-20241022"）
+                # - default_params: ExecutionContext の設定を継承（temperature, max_tokens など）
                 llm_client = LLMClient(
                     model=self.llm_model_override,
                     **llm_client.default_params
                 )
-                # エージェントレジストリをコピー
-                llm_client._agents = exec_context.llm_client._agents
 
             return self.func(llm_client, *args, **kwargs)
+
+        # LLMAgent injection
+        if self.inject_llm_agent:
+            if self.agent_name is None:
+                raise RuntimeError(
+                    f"Task {self.task_id} requires agent_name parameter "
+                    "when inject_llm_agent=True"
+                )
+
+            try:
+                agent = exec_context.get_llm_agent(self.agent_name)
+            except KeyError:
+                raise RuntimeError(
+                    f"Task {self.task_id} requires LLMAgent '{self.agent_name}' "
+                    "but not found in registry. Use ctx.register_llm_agent() first."
+                )
+
+            return self.func(agent, *args, **kwargs)
 
         # ... 他の injection ロジック ...
 ```
@@ -728,6 +799,7 @@ with workflow("nlp_pipeline", llm_config=LLMConfig.from_env()) as wf:
 
 ```python
 from graflow.llm.agents import AdkLLMAgent
+from graflow.core.context import ExecutionContext
 
 def web_search(query: str) -> str:
     """Web検索ツール（ADKツール、Graflowタスクではない）"""
@@ -737,8 +809,8 @@ def extract_facts(text: str) -> List[str]:
     """事実抽出ツール（ADKツール、Graflowタスクではない）"""
     return fact_extraction_api(text)
 
-@task(inject_llm_client=True)
-def setup_supervisor(llm: LLMClient) -> str:
+@task(inject_context=True, inject_llm_client=True)
+def setup_supervisor(ctx: ExecutionContext, llm: LLMClient) -> str:
     """Supervisorエージェントのセットアップ"""
 
     # サブエージェント定義
@@ -769,19 +841,17 @@ def setup_supervisor(llm: LLMClient) -> str:
         sub_agents=[researcher, writer]  # サブエージェント
     )
 
-    # レジストリに登録
-    llm.register_agent("supervisor", supervisor)
+    # ExecutionContext のレジストリに登録
+    ctx.register_llm_agent("supervisor", supervisor)
     return "Setup complete"
 
-@task(inject_llm_client=True)
-def run_supervisor(llm: LLMClient, query: str) -> str:
+@task(inject_llm_agent=True, agent_name="supervisor")
+def run_supervisor(agent: LLMAgent, query: str) -> str:
     """Supervisorエージェントの実行（Fat単一ノード）"""
 
-    # 登録されたSupervisorを取得
-    supervisor = llm.get_agent("supervisor")
-
+    # Agent Registry から "supervisor" を自動取得
     # Supervisor実行（内部でReActループとサブエージェント調整）
-    result = supervisor.run(query)
+    result = agent.run(query)
 
     return result
 
@@ -883,15 +953,20 @@ def full_featured_task(llm: LLMClient, text: str) -> str:
 
 ### Phase 1: コアインフラ
 
-- [ ] `graflow/llm/client.py` - LLMClient 実装（シンプル版、trace_id 不要）
+- [ ] `graflow/llm/client.py` - LLMClient 実装（completion API のみ）
 - [ ] `graflow/llm/config.py` - LLMConfig 実装（Langfuse 設定含む）
 - [ ] テスト: `tests/llm/test_client.py`
 
 ### Phase 2: Context 統合
 
 - [ ] `graflow/core/context.py` - ExecutionContext 拡張
+  - Agent Registry 追加（`_llm_agents`, `_llm_agents_yaml`）
+  - `register_llm_agent()`, `get_llm_agent()` メソッド
 - [ ] `graflow/core/decorators.py` - @task デコレーター拡張
+  - `inject_llm_client`, `inject_llm_agent`, `agent_name` パラメータ
 - [ ] `graflow/core/task.py` - TaskWrapper 拡張
+  - LLMClient injection
+  - LLMAgent injection
 - [ ] テスト: `tests/llm/test_injection.py`
 
 ### Phase 3: OpenTelemetry 統合
@@ -899,15 +974,30 @@ def full_featured_task(llm: LLMClient, text: str) -> str:
 - [ ] `graflow/trace/langfuse.py` - OpenTelemetry context 設定を追加
   - `_output_span_start()` で SpanContext を設定
   - `_output_span_end()` で context をクリア
+  - `_otel_context_tokens` でトークン管理
 - [ ] テスト: `tests/trace/test_otel_integration.py`
 
 ### Phase 4: Agent 統合
 
 - [ ] `graflow/llm/agents/base.py` - LLMAgent 基底クラス
-- [ ] `graflow/llm/agents/adk_agent.py` - AdkLLMAgent 実装（シンプル版）
+- [ ] `graflow/llm/agents/adk_agent.py` - AdkLLMAgent 実装
+  - Google ADK LlmAgent のラッパー
+  - `_from_adk_agent()` クラスメソッド（復元用）
 - [ ] テスト: `tests/llm/test_adk_agent.py`
 
-### Phase 4: ドキュメントとサンプル
+### Phase 5: 分散実行サポート
+
+- [ ] `graflow/llm/serialization.py` - Agent YAML シリアライゼーション
+  - `agent_to_yaml()` - BaseAgent → YAML 文字列
+  - `yaml_to_agent()` - YAML 文字列 → BaseAgent
+- [ ] `graflow/core/context.py` - シリアライゼーション対応
+  - `__getstate__()` - Agent インスタンスを除外
+  - `__setstate__()` - _llm_agents を初期化
+- [ ] Worker での Agent 復元テスト
+- [ ] Redis バックエンドでのテスト
+- [ ] 統合テスト: `tests/llm/integration/test_distributed_agent.py`
+
+### Phase 6: ドキュメントとサンプル
 
 - [ ] README 更新
 - [ ] `examples/llm/` - サンプルコード
@@ -915,13 +1005,8 @@ def full_featured_task(llm: LLMClient, text: str) -> str:
   - [ ] `02_workflow_with_llm.py`
   - [ ] `03_adk_supervisor.py`
   - [ ] `04_model_override.py`
+  - [ ] `05_distributed_agent.py`
 - [ ] 統合テスト: `tests/llm/integration/`
-
-### Phase 5: 分散実行テスト
-
-- [ ] Worker での LLMClient シリアライゼーション
-- [ ] Redis バックエンドでのテスト
-- [ ] 統合テスト: `tests/llm/integration/test_distributed_llm.py`
 
 ---
 
@@ -1092,6 +1177,30 @@ class TaskWrapper(Executable):
 
 **動作**: タスク実行時に例外を発生させる（設定ミスを明確に指摘）
 
+#### 5. LLMAgent が Agent Registry に未登録
+
+```python
+class TaskWrapper(Executable):
+    def __call__(self, *args, **kwargs) -> Any:
+        if self.inject_llm_agent:
+            if self.agent_name is None:
+                raise RuntimeError(
+                    f"Task {self.task_id} requires agent_name parameter "
+                    "when inject_llm_agent=True"
+                )
+
+            try:
+                agent = exec_context.get_llm_agent(self.agent_name)
+            except KeyError:
+                raise RuntimeError(
+                    f"Task {self.task_id} requires LLMAgent '{self.agent_name}' "
+                    "but not found in registry. "
+                    "Use ctx.register_llm_agent('{self.agent_name}', agent) first."
+                )
+```
+
+**動作**: タスク実行時に例外を発生させる（Agent 未登録を明確に指摘）
+
 ### エラーメッセージの一貫性
 
 すべてのエラーメッセージに以下を含める：
@@ -1135,19 +1244,73 @@ def dynamic_supervisor(ctx: ExecutionContext, llm: LLMClient, query: str):
     return result
 ```
 
-### Q3: `inject_context` と `inject_llm_client` を同時に使える？
+### Q3: タスクごとに異なるモデルを使いたい
 
-**A**: 現在の設計では排他的ですが、将来的にサポート可能：
+**A**: `model` パラメータを使って、タスクごとに異なる LLMClient インスタンスを作成できます：
 
 ```python
-# 両方使う場合
+# ExecutionContext のデフォルトモデルを gpt-4o-mini に設定
+llm_config = LLMConfig(model="gpt-4o-mini", default_params={"temperature": 0.7})
+context = ExecutionContext.create(graph, start_node, llm_config=llm_config)
+
+# タスクA: デフォルトモデル（gpt-4o-mini）を使用
+@task(inject_llm_client=True)
+def summarize(llm: LLMClient, text: str) -> str:
+    # llm.model == "gpt-4o-mini"
+    return llm.completion_text([...])
+
+# タスクB: 高性能モデル（gpt-4o）を使用
+@task(inject_llm_client=True, model="gpt-4o")
+def analyze(llm: LLMClient, data: str) -> str:
+    # llm.model == "gpt-4o"
+    # 新しい LLMClient インスタンスが作成される
+    # default_params（temperature=0.7）は継承される
+    return llm.completion_text([...])
+
+# タスクC: 別のプロバイダー（Claude）を使用
+@task(inject_llm_client=True, model="claude-3-5-sonnet-20241022")
+def reason(llm: LLMClient, problem: str) -> str:
+    # llm.model == "claude-3-5-sonnet-20241022"
+    # 別の LLMClient インスタンスが作成される
+    return llm.completion_text([...])
+```
+
+**ポイント**:
+- 各タスクで別の LLMClient インスタンスが作成される
+- `default_params`（temperature, max_tokens など）は ExecutionContext の設定を継承
+- モデルのみが上書きされる
+- コスト効率と性能のバランスを最適化可能
+
+**ユースケース**:
+- 簡単なタスク: `gpt-4o-mini`（低コスト）
+- 複雑な分析: `gpt-4o` or `claude-3-5-sonnet-20241022`（高性能）
+- コード生成: `claude-3-5-sonnet-20241022`（コード特化）
+
+### Q4: `inject_context` と `inject_llm_client` を同時に使える？
+
+**A**: 可能です：
+
+```python
+# 両方使う場合（Agent Registry にアクセスする場合など）
+@task(inject_context=True, inject_llm_client=True)
+def my_task(ctx: ExecutionContext, llm: LLMClient, data: str):
+    # LLM completion
+    result = llm.completion_text([...])
+
+    # Agent を登録
+    agent = create_agent()
+    ctx.register_llm_agent("my_agent", agent)
+
+    return result
+
+# または ctx 経由でアクセス
 @task(inject_context=True)
 def my_task(ctx: ExecutionContext, data: str):
     llm = ctx.llm_client
     llm.completion_text([...])
 ```
 
-### Q4: 分散実行で LLMClient はどうなる？
+### Q5: 分散実行で LLMClient はどうなる？
 
 **A**: LLMConfig がシリアライズされ、Worker で再構築：
 
@@ -1155,6 +1318,209 @@ def my_task(ctx: ExecutionContext, data: str):
 2. Worker で ExecutionContext を復元
 3. `llm_client` プロパティアクセス時に遅延初期化
 4. Langfuse トレーシングは Worker でも自動的に有効化される
+
+### Q6: 分散実行で LLMAgent はどうなる？
+
+**A**: Agent を YAML でシリアライズして Worker に送信：
+
+```python
+# Agent のシリアライゼーション
+from google.adk.utils.yaml_utils import dump_pydantic_to_yaml
+import io
+
+def agent_to_yaml(agent: BaseAgent) -> str:
+    """BaseAgent を YAML 文字列に変換"""
+    buf = io.StringIO()
+    dump_pydantic_to_yaml(agent, buf)
+    return buf.getvalue()
+
+# Agent の復元
+import yaml
+from google.adk.agents import BaseAgent
+
+def yaml_to_agent(yaml_str: str) -> BaseAgent:
+    """YAML 文字列から BaseAgent を復元"""
+    cfg = yaml.safe_load(yaml_str)
+    agent = BaseAgent.from_config(cfg)
+    return agent
+```
+
+**ExecutionContext での処理:**
+
+1. `register_llm_agent()` 時に Agent を YAML に変換して保存
+2. Worker にシリアライズ時に YAML 文字列を含める
+3. Worker で `get_llm_agent()` 時に YAML から復元
+
+詳細は「分散実行サポート」セクションを参照
+
+---
+
+## 分散実行サポート
+
+### Agent のシリアライゼーション
+
+Google ADK の BaseAgent は YAML ベースの設定をサポートしており、これを活用して分散実行を実現します。
+
+#### シリアライゼーションヘルパー
+
+```python
+# graflow/llm/serialization.py
+
+import io
+import yaml
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from google.adk.agents import BaseAgent
+
+def agent_to_yaml(agent: "BaseAgent") -> str:
+    """BaseAgent を YAML 文字列に変換
+
+    Args:
+        agent: Google ADK の BaseAgent インスタンス
+
+    Returns:
+        YAML 文字列
+
+    Raises:
+        ImportError: Google ADK が未インストール
+    """
+    try:
+        from google.adk.utils.yaml_utils import dump_pydantic_to_yaml
+    except ImportError:
+        raise ImportError(
+            "Google ADK is not installed. "
+            "Install with: pip install 'graflow[adk]'"
+        )
+
+    buf = io.StringIO()
+    dump_pydantic_to_yaml(agent, buf)
+    return buf.getvalue()
+
+
+def yaml_to_agent(yaml_str: str) -> "BaseAgent":
+    """YAML 文字列から BaseAgent を復元
+
+    Args:
+        yaml_str: YAML 文字列
+
+    Returns:
+        BaseAgent インスタンス
+
+    Raises:
+        ImportError: Google ADK が未インストール
+    """
+    try:
+        from google.adk.agents import BaseAgent
+    except ImportError:
+        raise ImportError(
+            "Google ADK is not installed. "
+            "Install with: pip install 'graflow[adk]'"
+        )
+
+    cfg = yaml.safe_load(yaml_str)
+    agent = BaseAgent.from_config(cfg)
+    return agent
+```
+
+#### ExecutionContext の拡張
+
+```python
+class ExecutionContext:
+    def __init__(self, ...):
+        self._llm_agents: Dict[str, LLMAgent] = {}
+        self._llm_agents_yaml: Dict[str, str] = {}  # YAML 文字列キャッシュ
+
+    def register_llm_agent(self, name: str, agent: LLMAgent) -> None:
+        """LLMAgent を登録（YAML でシリアライズ）"""
+        self._llm_agents[name] = agent
+
+        # Agent を YAML に変換してキャッシュ（分散実行用）
+        if isinstance(agent, AdkLLMAgent):
+            from graflow.llm.serialization import agent_to_yaml
+            self._llm_agents_yaml[name] = agent_to_yaml(agent._adk_agent)
+
+    def get_llm_agent(self, name: str) -> LLMAgent:
+        """LLMAgent を取得（必要なら YAML から復元）"""
+        # キャッシュにあればそれを返す
+        if name in self._llm_agents:
+            return self._llm_agents[name]
+
+        # YAML から復元（Worker での実行時）
+        if name in self._llm_agents_yaml:
+            from graflow.llm.serialization import yaml_to_agent
+            from graflow.llm.agents import AdkLLMAgent
+
+            adk_agent = yaml_to_agent(self._llm_agents_yaml[name])
+            agent = AdkLLMAgent._from_adk_agent(adk_agent)
+            self._llm_agents[name] = agent  # キャッシュ
+            return agent
+
+        raise KeyError(f"LLMAgent '{name}' not found in registry")
+
+    def __getstate__(self):
+        """シリアライゼーション時の処理"""
+        state = self.__dict__.copy()
+        # Agent インスタンスはシリアライズしない（YAML のみ送信）
+        state['_llm_agents'] = {}
+        return state
+
+    def __setstate__(self, state):
+        """デシリアライゼーション時の処理"""
+        self.__dict__.update(state)
+        # _llm_agents は空で初期化（必要時に YAML から復元）
+        if '_llm_agents' not in self.__dict__:
+            self._llm_agents = {}
+```
+
+### 分散実行フロー
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ Main Process                                            │
+│                                                         │
+│  1. Agent 作成                                          │
+│     supervisor = AdkLLMAgent(...)                      │
+│                                                         │
+│  2. Agent 登録                                          │
+│     ctx.register_llm_agent("supervisor", supervisor)   │
+│     └─ agent_to_yaml() で YAML に変換                  │
+│                                                         │
+│  3. ExecutionContext をシリアライズ                     │
+│     └─ _llm_agents_yaml (YAML 文字列) のみ送信        │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+                        │
+                        │ Redis Queue
+                        ▼
+┌─────────────────────────────────────────────────────────┐
+│ Worker Process                                          │
+│                                                         │
+│  1. ExecutionContext を復元                            │
+│     └─ _llm_agents は空                                │
+│     └─ _llm_agents_yaml に YAML 文字列                 │
+│                                                         │
+│  2. Agent を取得                                        │
+│     agent = ctx.get_llm_agent("supervisor")            │
+│     └─ yaml_to_agent() で YAML から復元                │
+│                                                         │
+│  3. Agent を実行                                        │
+│     result = agent.run(query)                          │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 注意点
+
+1. **Agent の状態**: Agent のランタイム状態（実行履歴など）はシリアライズされない
+2. **Tools のシリアライゼーション**: ADK tools も YAML に含まれる（関数参照は文字列として保存）
+3. **Sub-agents**: 階層的な sub-agents も再帰的にシリアライズされる
+4. **LLMClient の参照**: Agent 内の LLMClient 参照は復元時に再構築が必要
+
+### 実装優先度
+
+- **Phase 1-4**: ローカル実行での動作確認
+- **Phase 5**: 分散実行サポート（YAML シリアライゼーション）
 
 ---
 
@@ -1186,7 +1552,7 @@ def my_task(ctx: ExecutionContext, data: str):
 2. **LLM Layer**
    - `LLMClient`: LiteLLM のシンプルなラッパー（completion API）
    - `LLMAgent`: Google ADK のラッパー（Supervisor/ReAct パターン）
-   - Agent Registry: タスク間で agent インスタンスを共有
+   - Agent Registry: ExecutionContext で管理（simple dict）
 
 3. **Tracing Layer**
    - LangFuseTracer が OpenTelemetry context に trace_id/span_id を設定
@@ -1225,14 +1591,17 @@ Trace: workflow_execution (trace_id: abc123...)
 ### 次のステップ
 
 1. **Phase 1**: LLMClient, LLMConfig 実装（基本機能）
-2. **Phase 2**: ExecutionContext 統合、@task デコレーター拡張
+2. **Phase 2**: ExecutionContext 統合、@task デコレーター拡張（Agent Registry 含む）
 3. **Phase 3**: LangFuseTracer に OpenTelemetry context 設定を追加（自動伝搬実現）
 4. **Phase 4**: AdkLLMAgent 実装（Supervisor/ReAct パターン）
-5. **Phase 5**: サンプルコードとドキュメント
+5. **Phase 5**: 分散実行サポート（Agent YAML シリアライゼーション）
+6. **Phase 6**: サンプルコードとドキュメント
 
 ### 設計の成功基準
 
 - ✅ タスク内で `@task(inject_llm_client=True)` で簡単に LLM 利用
+- ✅ タスク内で `@task(inject_llm_agent=True, agent_name="...")` で簡単に Agent 利用
+- ✅ Agent Registry を ExecutionContext で管理（simple dict）
 - ✅ LiteLLM で複数の LLM プロバイダーをサポート（OpenAI, Anthropic, Google など）
 - ✅ Langfuse で Graflow タスクと LLM 呼び出しを統一的にトレース
 - ✅ Google ADK で Supervisor/ReAct パターンをサポート
