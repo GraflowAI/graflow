@@ -194,7 +194,7 @@ class TestDynamicTaskTracing:
             )
 
             # Execute dynamic child
-            child_task = TaskWrapper(task_id=child_id, func=lambda: f"result_{i}", register_to_context=False)
+            child_task = TaskWrapper(task_id=child_id, func=lambda i=i: f"result_{i}", register_to_context=False)
             tracer.on_task_start(child_task, context)
             tracer.on_task_end(child_task, context, result=f"result_{i}")
 
@@ -311,7 +311,7 @@ class TestRuntimeGraphAnalysis:
 
         tasks = []
         for i in range(5):
-            task = TaskWrapper(task_id=f"task_{i}", func=lambda: f"result_{i}", register_to_context=False)
+            task = TaskWrapper(task_id=f"task_{i}", func=lambda i=i: f"result_{i}", register_to_context=False)
             tasks.append(task)
             tracer.on_task_start(task, context)
             tracer.on_task_end(task, context, result=f"result_{i}")
@@ -472,3 +472,175 @@ class TestLangFuseTracerIntegration:
 
         # Verify flush was called (may be called multiple times - by workflow_end and explicit flush)
         assert mock_client.flush.call_count >= 1
+
+
+class TestDistributedExecutionTracing:
+    """Test tracing with distributed execution (TaskWorker simulation)."""
+
+    def test_noop_tracer_with_worker_simulation(self):
+        """Test NoopTracer with simulated distributed task execution."""
+        # Setup tracer and context
+        tracer = NoopTracer()
+        graph = TaskGraph()
+        context = ExecutionContext(graph=graph, tracer=tracer)
+
+        # Simulate main process workflow
+        tracer.on_workflow_start("distributed_workflow", context)
+
+        # Task queued for worker
+        task1 = TaskWrapper(task_id="worker_task_1", func=lambda: "result_1", register_to_context=False)
+        tracer.on_task_queued(task1, context)
+
+        # Simulate worker picking up task
+        tracer.on_task_start(task1, context)
+        result1 = task1.func()
+        tracer.on_task_end(task1, context, result=result1)
+
+        # Another worker task
+        task2 = TaskWrapper(task_id="worker_task_2", func=lambda: "result_2", register_to_context=False)
+        tracer.on_task_queued(task2, context)
+        tracer.on_task_start(task2, context)
+        result2 = task2.func()
+        tracer.on_task_end(task2, context, result=result2)
+
+        tracer.on_workflow_end("distributed_workflow", context)
+
+        # Verify runtime graph tracking
+        runtime_graph = tracer.get_runtime_graph()
+        assert runtime_graph is not None
+        assert "worker_task_1" in runtime_graph.nodes
+        assert "worker_task_2" in runtime_graph.nodes
+
+        # Verify tasks completed
+        assert runtime_graph.nodes["worker_task_1"]["status"] == "completed"
+        assert runtime_graph.nodes["worker_task_2"]["status"] == "completed"
+
+    def test_console_tracer_with_worker_simulation(self, capsys):
+        """Test ConsoleTracer with simulated distributed task execution."""
+        # Setup tracer and context
+        tracer = ConsoleTracer(enable_colors=False)
+        graph = TaskGraph()
+        context = ExecutionContext(graph=graph, tracer=tracer)
+
+        # Simulate distributed workflow
+        tracer.on_workflow_start("distributed_workflow", context)
+
+        task = TaskWrapper(task_id="worker_task", func=lambda: "result", register_to_context=False)
+        tracer.on_task_queued(task, context)
+        tracer.on_task_start(task, context)
+        tracer.on_task_end(task, context, result="result")
+
+        tracer.on_workflow_end("distributed_workflow", context)
+
+        # Verify console output
+        captured = capsys.readouterr()
+        assert "distributed_workflow" in captured.out
+        assert "worker_task" in captured.out
+
+    def test_tracer_cloning_for_parallel_workers(self):
+        """Test tracer cloning for parallel worker execution."""
+        # Setup main tracer
+        main_tracer = NoopTracer()
+        graph = TaskGraph()
+        context = ExecutionContext(graph=graph, tracer=main_tracer)
+
+        # Start workflow on main tracer
+        main_tracer.on_workflow_start("parallel_workers_workflow", context)
+
+        # Clone tracer for worker 1
+        worker1_tracer = main_tracer.clone("trace_worker_1")
+        assert isinstance(worker1_tracer, NoopTracer)
+        # Branch tracers should have runtime graph disabled
+        assert worker1_tracer.get_runtime_graph() is None
+
+        # Clone tracer for worker 2
+        worker2_tracer = main_tracer.clone("trace_worker_2")
+        assert isinstance(worker2_tracer, NoopTracer)
+        assert worker2_tracer.get_runtime_graph() is None
+
+        # Simulate worker 1 executing task
+        task1 = TaskWrapper(task_id="worker1_task", func=lambda: "result1", register_to_context=False)
+        worker1_tracer.on_task_start(task1, context)
+        worker1_tracer.on_task_end(task1, context, result="result1")
+
+        # Simulate worker 2 executing task
+        task2 = TaskWrapper(task_id="worker2_task", func=lambda: "result2", register_to_context=False)
+        worker2_tracer.on_task_start(task2, context)
+        worker2_tracer.on_task_end(task2, context, result="result2")
+
+        # Main tracer still tracks the workflow
+        main_tracer.on_workflow_end("parallel_workers_workflow", context)
+
+        # Verify main tracer has runtime graph
+        main_graph = main_tracer.get_runtime_graph()
+        assert main_graph is not None
+        assert "parallel_workers_workflow" in main_graph.nodes
+
+    @patch("graflow.trace.langfuse.LANGFUSE_AVAILABLE", True)
+    @patch("graflow.trace.langfuse.Langfuse")
+    def test_langfuse_tracer_with_distributed_execution(self, mock_langfuse_class):
+        """Test LangFuseTracer with distributed execution simulation."""
+        from graflow.trace.langfuse import LangFuseTracer
+
+        # Setup mock
+        mock_client = MagicMock()
+        mock_root_span = MagicMock()
+        mock_task_span = MagicMock()
+        mock_root_span.start_span.return_value = mock_task_span
+        mock_client.start_span.return_value = mock_root_span
+        mock_langfuse_class.return_value = mock_client
+
+        # Setup main tracer
+        main_tracer = LangFuseTracer(public_key="pk", secret_key="sk", enabled=True)
+        graph = TaskGraph()
+        context = ExecutionContext(graph=graph, tracer=main_tracer)
+
+        # Start workflow
+        main_tracer.on_workflow_start("distributed_langfuse_workflow", context)
+
+        # Clone tracer for worker (simulating distributed execution)
+        worker_tracer = main_tracer.clone("worker_trace_123")
+        assert worker_tracer.client is main_tracer.client  # Shares same client
+
+        # Worker executes task
+        task = TaskWrapper(task_id="distributed_task", func=lambda: "result", register_to_context=False)
+        worker_tracer.on_task_start(task, context)
+        worker_tracer.on_task_end(task, context, result="result")
+
+        # End workflow on main tracer
+        main_tracer.on_workflow_end("distributed_langfuse_workflow", context)
+
+        # Verify LangFuse client was called
+        assert mock_client.start_span.called
+
+    def test_task_queued_tracking(self):
+        """Test tracking of queued tasks in distributed execution."""
+        # Setup tracer and context
+        tracer = NoopTracer()
+        graph = TaskGraph()
+        context = ExecutionContext(graph=graph, tracer=tracer)
+
+        # Start workflow
+        tracer.on_workflow_start("queued_tasks_workflow", context)
+
+        # Queue multiple tasks
+        tasks = []
+        for i in range(3):
+            task = TaskWrapper(task_id=f"queued_task_{i}", func=lambda i=i: f"result_{i}", register_to_context=False)
+            tasks.append(task)
+            tracer.on_task_queued(task, context)
+
+        # Execute tasks in order
+        for task in tasks:
+            tracer.on_task_start(task, context)
+            tracer.on_task_end(task, context, result="result")
+
+        tracer.on_workflow_end("queued_tasks_workflow", context)
+
+        # Verify all tasks are tracked
+        runtime_graph = tracer.get_runtime_graph()
+        assert runtime_graph is not None
+        for i in range(3):
+            task_id = f"queued_task_{i}"
+            assert task_id in runtime_graph.nodes
+            assert runtime_graph.nodes[task_id]["status"] == "completed"
