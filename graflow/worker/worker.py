@@ -259,8 +259,11 @@ class TaskWorker:
             else:
                 logger.warning(f"Unknown tracer type: {tracer_type}, using NoopTracer")
                 return NoopTracer()
-        except Exception as e:
+        except (ImportError, ValueError, TypeError) as e:
             logger.error(f"Failed to create tracer {tracer_type}: {e}")
+            return NoopTracer()
+        except Exception as e:
+            logger.error(f"Unexpected error creating tracer {tracer_type}: {e}")
             return NoopTracer()
 
     def _process_task_wrapper(self, task_spec: TaskSpec) -> Dict[str, Any]:
