@@ -61,18 +61,26 @@ class ThreadingCoordinator(TaskCoordinator):
             return
 
         def execute_task_with_engine(task: 'Executable', branch_context: 'ExecutionContext') -> tuple[str, bool, str, float]:
-            """Execute single task using WorkflowEngine within a branch context."""
+            """Execute single task using WorkflowEngine within a branch context.
+
+            Note: The tracer is propagated via branch_context, which inherits the parent tracer.
+            Each parallel task will create its own span within the parent trace.
+            """
             task_id = task.task_id
             start_time = time.time()
             try:
                 from graflow.core.engine import WorkflowEngine
 
+                # Create engine with the branch context (which has the tracer)
                 engine = WorkflowEngine()
                 logger.debug(
-                    "Executing task %s in session '%s'",
+                    "Executing task %s in session '%s' (tracer: %s)",
                     task_id,
                     branch_context.session_id,
+                    "enabled" if branch_context.tracer else "disabled",
                 )
+
+                # Execute task - the engine will use branch_context.tracer for tracing
                 engine.execute(branch_context, start_task_id=task_id)
 
                 return task_id, True, "Success", time.time() - start_time
@@ -87,7 +95,9 @@ class ThreadingCoordinator(TaskCoordinator):
         future_task_map: Dict[concurrent.futures.Future, str] = {}
 
         for task in tasks:
-            branch_context = execution_context.create_branch_context(branch_id=task.task_id)
+            branch_context = execution_context.create_branch_context(
+                branch_id=task.task_id
+            )
 
             future = self._executor.submit(execute_task_with_engine, task, branch_context)
             futures.append(future)

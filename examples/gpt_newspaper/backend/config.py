@@ -42,7 +42,7 @@ class Config:
     DEFAULT_MODEL_PARAMS: Dict[str, Any] = _load_model_params(
         os.getenv("GPT_NEWSPAPER_MODEL_PARAMS")
     )
- 
+
     # Workflow Configuration
     MAX_CRITIQUE_ITERATIONS = int(os.getenv("MAX_CRITIQUE_ITERATIONS", "5"))
     DEFAULT_LAYOUT = os.getenv("NEWSPAPER_LAYOUT", "layout_1.html")

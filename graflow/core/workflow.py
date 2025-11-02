@@ -13,6 +13,8 @@ if TYPE_CHECKING:
     from graflow.coordination.executor import GroupExecutor
     from graflow.core.task import Executable
 
+from graflow.trace.base import Tracer
+
 # Context variable for current workflow context
 _current_context: contextvars.ContextVar[Optional[WorkflowContext]] = contextvars.ContextVar(
     'current_workflow', default=None
@@ -24,11 +26,12 @@ class WorkflowContext:
     This class manages the workflow graph and provides methods to add tasks,
     edges, and execute the workflow."""
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, tracer: Optional[Tracer] = None):
         """Initialize a new workflow context.
 
         Args:
             name: Name for this workflow
+            tracer: Optional tracer for workflow execution tracking
         """
         self.name = name
         self.graph = TaskGraph()
@@ -36,6 +39,7 @@ class WorkflowContext:
         self._group_counter = 0
         self._group_executor: Optional[GroupExecutor] = None
         self._redis_client: Optional[Any] = None
+        self._tracer = tracer
 
     def __enter__(self):
         """Enter the workflow context."""
@@ -106,7 +110,7 @@ class WorkflowContext:
 
         from .context import ExecutionContext
         from .engine import WorkflowEngine
-        exec_context = ExecutionContext.create(self.graph, start_node, max_steps=max_steps)
+        exec_context = ExecutionContext.create(self.graph, start_node, max_steps=max_steps, tracer=self._tracer)
         if self._group_executor:
             exec_context.group_executor = self._group_executor
 
@@ -187,13 +191,14 @@ def clear_workflow_context() -> None:
     """Clear the current workflow context."""
     _current_context.set(None)
 
-def workflow(name: str) -> WorkflowContext:
+def workflow(name: str, tracer: Optional[Tracer] = None) -> WorkflowContext:
     """Context manager for creating a workflow.
 
     Args:
         name: Name of the workflow
+        tracer: Optional tracer for workflow execution tracking
 
     Returns:
         WorkflowContext instance
     """
-    return WorkflowContext(name)
+    return WorkflowContext(name, tracer=tracer)

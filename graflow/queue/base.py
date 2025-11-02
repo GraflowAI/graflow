@@ -36,6 +36,9 @@ class TaskSpec:
     last_error: Optional[str] = None
     # Phase 2: Barrier synchronization support
     group_id: Optional[str] = None
+    # Trace context for distributed tracing
+    trace_id: Optional[str] = None           # Trace ID (= session_id, W3C compliant 32-digit hex)
+    parent_span_id: Optional[str] = None     # Parent span ID (task that queued this task)
 
     @property
     def task_id(self) -> str:

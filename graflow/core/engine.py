@@ -87,6 +87,15 @@ class WorkflowEngine:
         """
         assert context.graph is not None, "Graph must be set before execution"
 
+        # Determine workflow name for tracing
+        workflow_name = getattr(context.graph, 'name', None) or f"workflow_{context.session_id[:8]}"
+
+        # Call tracer hook: workflow start (skip for nested contexts to avoid duplicate traces)
+        # Nested contexts (branches/parallel groups) are already tracked via parent context's tracer
+        # Only the root context initiates workflow-level tracing
+        if context.parent_context is None:
+            context.tracer.on_workflow_start(workflow_name, context)
+
         print(f"Starting execution from: {start_task_id or context.start_node}")
 
         # Initialize first task
@@ -129,13 +138,6 @@ class WorkflowEngine:
             else:
                 # Add successor nodes to queue
                 successors = list(graph.successors(task_id))
-
-                # Prevent re-queuing internal members of a ParallelGroup
-                from graflow.core.task import ParallelGroup  # Local import to avoid cycle
-                if isinstance(task, ParallelGroup):
-                    member_ids = {member.task_id for member in task.tasks}
-                    successors = [succ for succ in successors if succ not in member_ids]
-
                 for succ in successors:
                     succ_task = graph.get_node(succ)
                     context.add_to_queue(succ_task)
@@ -161,6 +163,13 @@ class WorkflowEngine:
             task_id = context.get_next_task()
 
         print(f"Execution completed after {context.steps} steps")
+
+        # Call tracer hook: workflow end (skip for nested contexts to avoid duplicate traces)
+        # Nested contexts (branches/parallel groups) are already tracked via parent context's tracer
+        # Only the root context closes workflow-level tracing
+        if context.parent_context is None:
+            context.tracer.on_workflow_end(workflow_name, context, result=last_result)
+
         return last_result
 
     def execute_with_cycles(self, graph: TaskGraph, start_node: str, max_steps: int = 10) -> None:

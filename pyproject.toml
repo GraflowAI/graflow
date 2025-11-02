@@ -31,7 +31,6 @@ classifiers = [
 
 [dependency-groups]
 dev = [
-    "docker>=7.1.0",
     "pandas>=2.3.1",
     "pytest>=8.4.1",
     "pytest-mock>=3.14.1",
@@ -40,6 +39,8 @@ dev = [
 
 [project.optional-dependencies]
 extras = [
+    "docker>=7.1.0",
+    "langfuse>=3.8.1",
     "grandalf>=0.8",
     "pygraphviz>=1.14",
 ]
@@ -83,7 +84,8 @@ ignore = [
     "PLR0915",  # https://docs.astral.sh/ruff/rules/too-many-statements/
     "E501",     # https://docs.astral.sh/ruff/rules/line-too-long/
     "B904",     # https://docs.astral.sh/ruff/rules/raise-without-from-inside-except/
-
+    "B027",     # https://docs.astral.sh/ruff/rules/empty-method-without-abstract-decorator/
+    # Tracer hooks are intentionally empty by default (Template Method pattern); see graflow.trace.* for design.
 ]
 
 [tool.ruff.lint.isort]

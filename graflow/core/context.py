@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 import uuid
 from contextlib import contextmanager
@@ -18,11 +19,16 @@ from graflow.core.task_registry import TaskResolver
 from graflow.exceptions import CycleLimitExceededError
 from graflow.queue.base import TaskQueue, TaskSpec
 from graflow.queue.memory import InMemoryTaskQueue
+from graflow.trace.noop import NoopTracer
 
 if TYPE_CHECKING:
     from graflow.core.task import Executable
+    from graflow.trace.base import Tracer
 
 T = TypeVar('T')
+
+# Compiled regex pattern for iteration task detection (performance optimization)
+_ITERATION_PATTERN: re.Pattern[str] = re.compile(r'(_cycle_\d+_[0-9a-f]+)+$')
 
 
 class TaskExecutionContext:
@@ -188,11 +194,23 @@ class ExecutionContext:
         channel_backend: str = "memory",
         config: Optional[Dict[str, Any]] = None,
         parent_context: Optional[ExecutionContext] = None,
-        session_id: Optional[str] = None
+        session_id: Optional[str] = None,
+        trace_id: Optional[str] = None,
+        tracer: Optional[Tracer] = None
     ):
         """Initialize ExecutionContext with configurable queue backend."""
         self.parent_context = parent_context
-        self.session_id = session_id or str(uuid.uuid4().int)
+
+        # session_id: Unique identifier for this execution context (used for channels, isolation)
+        # trace_id: Shared identifier for distributed tracing (W3C TraceContext-compliant 32-digit hex)
+        # For root contexts: trace_id = session_id (both are unique)
+        # For branch contexts: trace_id is inherited, session_id is unique
+        self.session_id = session_id or uuid.uuid4().hex
+        self.trace_id = trace_id or (parent_context.trace_id if parent_context else self.session_id)
+
+        # Each context gets its own tracer instance to avoid shared mutable state
+        self.tracer = tracer if tracer is not None else NoopTracer()
+
         self.graph = graph
         self.start_node = start_node
         self.max_steps = max_steps
@@ -246,8 +264,31 @@ class ExecutionContext:
         self.checkpoint_request_path: Optional[str] = None
 
     def create_branch_context(self, branch_id: str) -> ExecutionContext:
-        """Create a child execution context with isolated queue/channel state."""
+        """Create a child execution context for parallel execution.
+
+        Branch contexts have:
+        - Unique session_id for isolation (channels, identification)
+          Pattern: {parent_session_id}_{branch_id} for traceability
+        - Shared trace_id for distributed tracing (all branches in same trace)
+        - Cloned tracer with parent span context inherited from tracer state
+
+        This ensures proper W3C TraceContext compliance while maintaining execution isolation.
+        The session_id pattern allows inferring the parent-child relationship from the ID.
+
+        Args:
+            branch_id: Identifier for this branch (used for session_id uniqueness)
+
+        Returns:
+            New ExecutionContext with shared trace context but isolated execution state
+        """
+        # Use deterministic pattern for session_id to maintain parent-child traceability
         branch_session_id = f"{self.session_id}_{branch_id}"
+
+        # Clone tracer (parent span context inherited from tracer state)
+        cloned_tracer = None
+        if self.tracer:
+            cloned_tracer = self.tracer.clone(self.trace_id)
+
         branch_context = ExecutionContext(
             graph=self.graph,
             start_node=None,
@@ -257,7 +298,9 @@ class ExecutionContext:
             channel_backend=self._channel_backend_type,
             config=self._original_config,
             parent_context=self,
-            session_id=branch_session_id,
+            session_id=branch_session_id,  # Hierarchical session ID
+            trace_id=self.trace_id,  # Shared trace ID for distributed tracing
+            tracer=cloned_tracer,
         )
         return branch_context
 
@@ -284,7 +327,8 @@ class ExecutionContext:
         default_max_cycles: int = 10,
         default_max_retries: int = 3,
         channel_backend: str = "memory",
-        config: Optional[Dict[str, Any]] = None
+        config: Optional[Dict[str, Any]] = None,
+        tracer: Optional[Tracer] = None
     ) -> ExecutionContext:
         """Create a new execution context with configurable channel backend.
 
@@ -296,6 +340,7 @@ class ExecutionContext:
             default_max_retries: Default maximum retry attempts
             channel_backend: Backend for inter-task communication (default: memory)
             config: Configuration applied to both queue and channel (e.g., redis_client, key_prefix)
+            tracer: Optional tracer for workflow execution tracking (default: creates new NoopTracer)
         """
         return cls(
             graph=graph,
@@ -305,6 +350,7 @@ class ExecutionContext:
             default_max_retries=default_max_retries,
             channel_backend=channel_backend,
             config=config,
+            tracer=tracer,
         )
 
     @property
@@ -318,12 +364,24 @@ class ExecutionContext:
         return self._task_resolver
 
     def add_to_queue(self, executable: Executable) -> None:
-        """Add executable to execution queue."""
+        """Add executable to execution queue with trace context."""
+        # Always set trace context for distributed tracing
+        # Trace ID (workflow-wide ID, shared across all branches)
+        trace_id = self.trace_id
+
+        # Parent span ID (currently executing task ID)
+        parent_span_id = self.current_task_id if hasattr(self, 'current_task_id') else None
+
         task_spec = TaskSpec(
             executable=executable,
-            execution_context=self
+            execution_context=self,
+            trace_id=trace_id,
+            parent_span_id=parent_span_id,
         )
         self.task_queue.enqueue(task_spec)
+
+        # Tracer: Task queued
+        self.tracer.on_task_queued(executable, self)
 
     def is_completed(self) -> bool:
         """Check if execution is completed (complete compatibility)."""
@@ -368,7 +426,11 @@ class ExecutionContext:
     @property
     def current_task_context(self) -> Optional[TaskExecutionContext]:
         """Get current task execution context."""
-        return self._task_execution_stack[-1] if self._task_execution_stack else None
+        if self._task_execution_stack:
+            return self._task_execution_stack[-1]
+        if self.parent_context is not None:
+            return self.parent_context.current_task_context
+        return None
 
     @property
     def current_task_id(self) -> Optional[str]:
@@ -405,6 +467,7 @@ class ExecutionContext:
         return {
             "schema_version": "1.0",
             "session_id": self.session_id,
+            "trace_id": self.trace_id,
             "start_node": self.start_node,
             "steps": self.steps,
             "completed_tasks": list(self.completed_tasks),
@@ -423,42 +486,63 @@ class ExecutionContext:
         """Reset goto flag for next task execution."""
         self._goto_called_in_current_task = False
 
-    def next_task(self, executable: Executable, goto: bool = False) -> str:
+    def next_task(
+        self,
+        executable: Executable,
+        goto: bool = False,
+        _is_iteration: bool = False
+    ) -> str:
         """Generate a new task or jump to existing task node.
+
+        For iteration/cycle tasks, use next_iteration() instead.
 
         Args:
             executable: Executable object to execute as the new task
             goto: If True, skip successors of current task (works for both existing and new tasks)
+            _is_iteration: Internal flag to mark iteration tasks (set by next_iteration)
 
         Returns:
             The task ID from the executable
         """
         task_id = executable.task_id
+        is_new_task = task_id not in self.graph.nodes
 
         if goto:
             # Explicit goto: Skip successors regardless of whether task is new or existing
-            if task_id in self.graph.nodes:
-                # Existing task: Jump to it
-                print(f"🔄 Goto: Jumping to existing task: {task_id}")
-                self.add_to_queue(executable)
-            else:
+            if is_new_task:
                 # New task: Create it but still skip successors
                 print(f"✨ Goto: Creating new task (skip successors): {task_id}")
                 self.graph.add_node(executable, task_id)
-                self.add_to_queue(executable)
-            self._goto_called_in_current_task = True
-        # Auto-detect behavior (no goto specified)
-        elif task_id in self.graph.nodes:
-            # Existing task: Jump to it (auto-detected, skip successors)
-            print(f"🔄 Jumping to existing task: {task_id}")
+            else:
+                # Existing task: Jump to it
+                print(f"🔄 Goto: Jumping to existing task: {task_id}")
             self.add_to_queue(executable)
             self._goto_called_in_current_task = True
-        else:
+        # Auto-detect behavior (no goto specified)
+        elif is_new_task:
             # New task: Create dynamic task (normal successor processing)
             print(f"✨ Creating new dynamic task: {task_id}")
             self.graph.add_node(executable, task_id)
             self.add_to_queue(executable)
             # Note: _goto_called_in_current_task remains False for normal processing
+        else:
+            # Existing task: Jump to it (auto-detected, skip successors)
+            print(f"🔄 Jumping to existing task: {task_id}")
+            self.add_to_queue(executable)
+            self._goto_called_in_current_task = True
+
+        # Tracer: Dynamic task added
+        current_task_id = self.current_task_id if hasattr(self, 'current_task_id') else None
+        self.tracer.on_dynamic_task_added(
+            task_id=task_id,
+            parent_task_id=current_task_id,
+            is_iteration=_is_iteration,
+            metadata={
+                "task_type": type(executable).__name__,
+                "is_new_task": is_new_task,
+                "goto": goto
+            }
+        )
 
         return task_id
 
@@ -486,8 +570,7 @@ class ExecutionContext:
 
         # Extract base task ID (strip _cycle_* suffix if present)
         # This handles nested iterations where task_id might be "task_cycle_1_abc_cycle_2_def"
-        import re
-        base_task_id = re.sub(r'(_cycle_\d+_[0-9a-f]+)+$', '', task_id)
+        base_task_id = _ITERATION_PATTERN.sub('', task_id)
         if base_task_id and base_task_id in self.graph.nodes:
             task_id = base_task_id
 
@@ -534,11 +617,15 @@ class ExecutionContext:
 
         from .task import TaskWrapper
         iteration_task = TaskWrapper(iteration_id, iteration_func, inject_context=False)
-        return self.next_task(iteration_task)
+
+        # Add iteration task via next_task with _is_iteration=True
+        return self.next_task(iteration_task, _is_iteration=True)
 
     @contextmanager
     def executing_task(self, task: Executable):
         """Context manager for task execution with proper cleanup.
+
+        Calls tracer hooks for task start/end automatically.
 
         Args:
             task: The task being executed
@@ -547,11 +634,27 @@ class ExecutionContext:
             TaskExecutionContext: The task execution context
         """
         task_ctx = self.create_task_context(task.task_id)
+
+        # Call tracer hook: task start (before pushing to stack)
+        # This ensures current_task_id points to parent task
+        self.tracer.on_task_start(task, self)
+
+        # Push task context to stack after tracer hook
         self.push_task_context(task_ctx)
+
+        error: Optional[Exception] = None
+
         try:
             task.set_execution_context(self)
             yield task_ctx
+            # Result will be set by handler, we don't need to retrieve it here
+        except Exception as e:
+            error = e
+            raise
         finally:
+            # Call tracer hook: task end (always called, even on error)
+            # Note: result is passed as None since it's stored in context by handler
+            self.tracer.on_task_end(task, self, result=None, error=error)
             self.pop_task_context()
 
     def execute(self) -> Any:
@@ -711,10 +814,23 @@ class ExecutionContext:
         with open(path, "rb") as f:
             return load(f)
 
-def create_execution_context(start_node: str = "ROOT", max_steps: int = 10) -> ExecutionContext:
-    """Create an initial execution context with a single root node."""
+def create_execution_context(
+    start_node: str = "ROOT",
+    max_steps: int = 10,
+    tracer: Optional[Tracer] = None
+) -> ExecutionContext:
+    """Create an initial execution context with a single root node.
+
+    Args:
+        start_node: Starting task node
+        max_steps: Maximum execution steps
+        tracer: Optional tracer for workflow execution tracking
+    """
+    from graflow.trace.noop import NoopTracer
+    if tracer is None:
+        tracer = NoopTracer()
     graph = TaskGraph()
-    return ExecutionContext.create(graph, start_node, max_steps=max_steps)
+    return ExecutionContext.create(graph, start_node, max_steps=max_steps, tracer=tracer)
 
 def execute_with_cycles(graph: TaskGraph, start_node: str, max_steps: int = 10) -> None:
     """Execute tasks allowing cycles from global graph."""
