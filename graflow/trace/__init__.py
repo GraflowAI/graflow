@@ -31,4 +31,20 @@ Examples:
     context = ExecutionContext.create(graph, start_node, tracer=tracer)
 """
 
-__all__ = []
+from importlib.util import find_spec
+
+from graflow.trace.base import Tracer
+from graflow.trace.console import ConsoleTracer
+from graflow.trace.noop import NoopTracer
+
+__all__ = [
+    "ConsoleTracer",
+    "NoopTracer",
+    "Tracer",
+]
+
+# LangFuseTracer is optional (requires langfuse package)
+if find_spec("langfuse") is not None:
+    from graflow.trace.langfuse import LangFuseTracer  # noqa: F401
+
+    __all__.append("LangFuseTracer")
