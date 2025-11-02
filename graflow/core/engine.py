@@ -90,7 +90,9 @@ class WorkflowEngine:
         # Determine workflow name for tracing
         workflow_name = getattr(context.graph, 'name', None) or f"workflow_{context.session_id[:8]}"
 
-        # Call tracer hook: workflow start (skip for nested contexts)
+        # Call tracer hook: workflow start (skip for nested contexts to avoid duplicate traces)
+        # Nested contexts (branches/parallel groups) are already tracked via parent context's tracer
+        # Only the root context initiates workflow-level tracing
         if context.parent_context is None:
             context.tracer.on_workflow_start(workflow_name, context)
 
@@ -162,7 +164,9 @@ class WorkflowEngine:
 
         print(f"Execution completed after {context.steps} steps")
 
-        # Call tracer hook: workflow end (skip for nested contexts)
+        # Call tracer hook: workflow end (skip for nested contexts to avoid duplicate traces)
+        # Nested contexts (branches/parallel groups) are already tracked via parent context's tracer
+        # Only the root context closes workflow-level tracing
         if context.parent_context is None:
             context.tracer.on_workflow_end(workflow_name, context, result=last_result)
 
