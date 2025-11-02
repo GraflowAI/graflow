@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 T = TypeVar('T')
 
 # Compiled regex pattern for iteration task detection (performance optimization)
-_ITERATION_PATTERN = re.compile(r'(_cycle_\d+_[0-9a-f]+)+$')
+_ITERATION_PATTERN: re.Pattern[str] = re.compile(r'(_cycle_\d+_[0-9a-f]+)+$')
 
 
 class TaskExecutionContext:
