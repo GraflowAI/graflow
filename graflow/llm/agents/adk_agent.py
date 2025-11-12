@@ -10,22 +10,15 @@ from .base import LLMAgent
 
 if TYPE_CHECKING:
     from google.adk.agents import LlmAgent
-    from google.adk.runners import Runner
-    from google.adk.sessions import InMemorySessionService
-    from google.genai import types
-
-try:
-    from google.adk.agents import LlmAgent
     from google.adk.runners import Runner as AdkRunner
     from google.adk.sessions import InMemorySessionService
     from google.genai import types as genai_types
 
+try:
+    from google.adk.agents import LlmAgent
     ADK_AVAILABLE = True
 except ImportError:
     ADK_AVAILABLE = False
-    InMemorySessionService = None  # type: ignore
-    AdkRunner = None  # type: ignore
-    genai_types = None  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +126,7 @@ class AdkLLMAgent(LLMAgent):
         self._session_service = session_service
 
         # Create Runner with app_name
-        self._runner: Runner = AdkRunner(  # type: ignore
+        self._runner: AdkRunner = AdkRunner(  # type: ignore
             agent=adk_agent,
             app_name=self._app_name,
             session_service=session_service
