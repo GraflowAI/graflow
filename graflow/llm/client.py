@@ -8,12 +8,17 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from graflow.utils.dotenv import load_env
 
-logger = logging.getLogger(__name__)
-
 if TYPE_CHECKING:
     from litellm import completion
     from litellm.types.utils import ModelResponse
 
+try:
+    from litellm import completion
+    LITELLM_AVAILABLE = True
+except ImportError:
+    LITELLM_AVAILABLE = False
+
+logger = logging.getLogger(__name__)
 
 def setup_langfuse_for_litellm() -> None:
     """Setup Langfuse integration for LiteLLM.
@@ -163,6 +168,8 @@ class LLMClient:
             client.completion([...], model="gpt-4o")  # Uses gpt-4o
             ```
         """
+        if not LITELLM_AVAILABLE:
+            raise RuntimeError("liteLLM is not installed. Install with: pip install litellm")
         self.model = model
         self.default_params = default_params
 
