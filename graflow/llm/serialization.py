@@ -71,7 +71,7 @@ def agent_to_yaml(agent: LlmAgent) -> str:  # type: ignore[valid-type]
 
     try:
         # Use Pydantic's model_dump to get dict representation
-        config_dict = agent.model_dump(mode="json")
+        config_dict = agent.model_dump(mode="python")
         # Convert dict to YAML string
         yaml_str = yaml.dump(config_dict, default_flow_style=False, sort_keys=False)
         logger.debug(f"Serialized agent '{agent.name}' to YAML ({len(yaml_str)} chars)")
