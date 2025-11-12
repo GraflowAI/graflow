@@ -32,8 +32,14 @@ Result: [Structured research summary]
 ✅ Agent workflow completed successfully!
 """
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from google.adk.agents import LlmAgent
+
 from graflow.core.decorators import task
 from graflow.core.workflow import workflow
+from graflow.llm.agents.adk_agent import AdkLLMAgent
 
 
 def main():
@@ -75,10 +81,6 @@ def main():
             """Register the research agent with tools."""
             print("Registering research agent with tools...")
             try:
-                from google_adk.types import LlmAgent
-
-                from graflow.llm.agents.adk_agent import AdkLLMAgent
-
                 # Get ExecutionContext from TaskExecutionContext
                 exec_context = context.execution_context
 
