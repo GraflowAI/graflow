@@ -856,3 +856,92 @@ class TestExecutionContextLLMSerialization:
         pytest.importorskip("litellm")
         client = new_context.llm_client
         assert client.model == "gpt-5-mini"
+
+    def test_llm_client_serialization(self):
+        """Test that ExecutionContext with llm_client survives pickle.
+
+        This is a simple, focused test verifying that:
+        - LLMClient can be pickled directly
+        - ExecutionContext with LLMClient survives pickle operations
+        - Client model and configuration remain intact
+        - No data loss during serialization/deserialization
+        """
+        pytest.importorskip("litellm")
+        from graflow.llm.client import LLMClient
+
+        graph = TaskGraph()
+        graph.add_node(Task("test_task", register_to_context=False), "test_task")
+
+        # Create LLMClient with specific configuration
+        llm_client = LLMClient(model="claude-3-5-sonnet-20241022", temperature=0.3)
+
+        # Create context with LLMClient
+        context = ExecutionContext.create(
+            graph=graph,
+            start_node="test_task",
+            max_steps=10,
+            llm_client=llm_client
+        )
+
+        # Pickle and unpickle the entire context
+        pickled = pickle.dumps(context)
+        restored_context = pickle.loads(pickled)
+
+        # Verify LLMClient survived pickle
+        assert restored_context._llm_client is not None
+        restored_client = restored_context.llm_client
+
+        # Verify configuration is preserved
+        assert restored_client.model == "claude-3-5-sonnet-20241022"
+        assert restored_client.default_params["temperature"] == 0.3
+
+        # Verify client is functional (basic check)
+        assert isinstance(restored_client, LLMClient)
+
+    def test_llm_agent_yaml_roundtrip(self):
+        """Test ADK agent can be serialized to YAML and back.
+
+        This test verifies the complete YAML roundtrip for ADK LlmAgent:
+        - Agent can be serialized to YAML string using agent_to_yaml()
+        - YAML string preserves agent configuration
+        - Agent can be reconstructed from YAML using yaml_to_agent()
+        - Reconstructed agent maintains original configuration
+        - No information loss during YAML roundtrip
+        """
+        try:
+            from google.adk.agents import LlmAgent
+
+            from graflow.llm.serialization import agent_to_yaml, yaml_to_agent
+        except ImportError:
+            pytest.skip("google-adk not available")
+
+        # Create original ADK agent
+        original_agent = LlmAgent(
+            name="yaml_test_agent",
+            model="gemini-2.0-flash-exp"
+        )
+
+        # Serialize to YAML
+        yaml_str = agent_to_yaml(original_agent)
+        assert yaml_str is not None
+        assert isinstance(yaml_str, str)
+        assert "yaml_test_agent" in yaml_str
+        assert "gemini-2.0-flash-exp" in yaml_str
+
+        # Deserialize from YAML (roundtrip)
+        restored_agent = yaml_to_agent(yaml_str)
+
+        # Verify agent is properly reconstructed
+        assert restored_agent is not None
+        assert isinstance(restored_agent, LlmAgent)
+        assert restored_agent.name == "yaml_test_agent"
+        assert restored_agent.model == "gemini-2.0-flash-exp"
+
+        # Verify it's a new instance (not the same object)
+        assert restored_agent is not original_agent
+
+        # Verify second roundtrip produces same result
+        yaml_str2 = agent_to_yaml(restored_agent)
+        restored_agent2 = yaml_to_agent(yaml_str2)
+        assert restored_agent2.name == "yaml_test_agent"
+        assert restored_agent2.model == "gemini-2.0-flash-exp"

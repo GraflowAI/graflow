@@ -6,9 +6,7 @@ import logging
 import uuid
 from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional
 
-from graflow.llm.agents.base import LLMAgent
-
-logger = logging.getLogger(__name__)
+from .base import LLMAgent
 
 if TYPE_CHECKING:
     from google.adk.agents import LlmAgent
@@ -16,16 +14,20 @@ if TYPE_CHECKING:
     from google.adk.sessions import InMemorySessionService
     from google.genai import types
 
-# Optional imports
 try:
     from google.adk.agents import LlmAgent
-    from google.adk.runners import Runner
+    from google.adk.runners import Runner as AdkRunner
     from google.adk.sessions import InMemorySessionService
-    from google.genai import types
+    from google.genai import types as genai_types
+
     ADK_AVAILABLE = True
 except ImportError:
     ADK_AVAILABLE = False
+    InMemorySessionService = None  # type: ignore
+    AdkRunner = None  # type: ignore
+    genai_types = None  # type: ignore
 
+logger = logging.getLogger(__name__)
 
 class AdkLLMAgent(LLMAgent):
     """Wrapper for Google ADK LlmAgent.
@@ -131,7 +133,7 @@ class AdkLLMAgent(LLMAgent):
         self._session_service = session_service
 
         # Create Runner with app_name
-        self._runner: Runner = Runner(
+        self._runner: Runner = AdkRunner(  # type: ignore
             agent=adk_agent,
             app_name=self._app_name,
             session_service=session_service
@@ -183,9 +185,9 @@ class AdkLLMAgent(LLMAgent):
                 session_id = str(uuid.uuid4())
 
             # Create Content from input text
-            content = types.Content(
+            content = genai_types.Content(  # type: ignore
                 role="user",
-                parts=[types.Part(text=input_text)]
+                parts=[genai_types.Part(text=input_text)]  # type: ignore
             )
 
             # Run agent via Runner (synchronous)
@@ -264,9 +266,9 @@ class AdkLLMAgent(LLMAgent):
                 session_id = str(uuid.uuid4())
 
             # Create Content for ADK
-            content = types.Content(
+            content = genai_types.Content(  # type: ignore
                 role="user",
-                parts=[types.Part(text=input_text)]
+                parts=[genai_types.Part(text=input_text)]  # type: ignore
             )
 
             # Run agent via Runner (asynchronous)
