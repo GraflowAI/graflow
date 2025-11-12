@@ -515,3 +515,344 @@ class TestExecutionContextSerialization:
         restored_task = restored_spec.executable
         result = restored_task.func()
         assert result == 42
+
+
+class TestExecutionContextLLMSerialization:
+    """Test suite for LLM client and agent serialization in ExecutionContext.
+
+    This test class validates that LLM-related components (LLMClient and LLMAgent)
+    can be properly serialized and deserialized, which is critical for:
+
+    - Distributed task execution with LLM-powered tasks
+    - Worker processes accessing shared LLM clients
+    - Agent persistence across process boundaries
+    - Seamless state recovery in distributed workflows
+    """
+
+    def test_llm_client_explicit_serialization(self):
+        """Test that explicitly set LLMClient is preserved during serialization.
+
+        Verifies that:
+        - Explicitly injected LLMClient instances survive serialization
+        - Model configuration is preserved
+        - Client remains functional after deserialization
+        - Default parameters are maintained
+        """
+        pytest.importorskip("litellm")
+        from graflow.llm.client import LLMClient
+
+        graph = TaskGraph()
+        graph.add_node(Task("test_task", register_to_context=False), "test_task")
+
+        # Create explicit LLMClient with custom configuration
+        llm_client = LLMClient(model="gpt-4o", temperature=0.7, max_tokens=1000)
+
+        context = ExecutionContext.create(
+            graph=graph,
+            start_node="test_task",
+            max_steps=10,
+            llm_client=llm_client
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            context_path = os.path.join(tmpdir, "context.pkl")
+
+            # Save and load
+            context.save(context_path)
+            loaded_context = ExecutionContext.load(context_path)
+
+            # Verify LLMClient is preserved
+            assert loaded_context._llm_client is not None
+            loaded_client = loaded_context.llm_client
+            assert loaded_client.model == "gpt-4o"
+            assert loaded_client.default_params["temperature"] == 0.7
+            assert loaded_client.default_params["max_tokens"] == 1000
+
+    def test_llm_client_auto_creation_after_deserialization(self):
+        """Test that LLMClient is auto-created on first access after deserialization.
+
+        Verifies that:
+        - Context without explicit LLMClient can be serialized
+        - LLMClient is lazily created on first property access
+        - Default model (gpt-5-mini) is used
+        - Auto-creation works correctly in deserialized context
+        """
+        pytest.importorskip("litellm")
+
+        graph = TaskGraph()
+        graph.add_node(Task("test_task", register_to_context=False), "test_task")
+
+        # Create context WITHOUT explicit LLMClient
+        context = ExecutionContext.create(
+            graph=graph,
+            start_node="test_task",
+            max_steps=10
+        )
+
+        # Don't access llm_client property yet
+        assert context._llm_client is None
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            context_path = os.path.join(tmpdir, "context.pkl")
+
+            # Save and load
+            context.save(context_path)
+            loaded_context = ExecutionContext.load(context_path)
+
+            # Verify _llm_client is None after deserialization
+            assert loaded_context._llm_client is None
+
+            # Access llm_client property - should auto-create
+            client = loaded_context.llm_client
+
+            # Verify auto-created client has default model
+            assert client is not None
+            assert client.model == "gpt-5-mini"
+
+    def test_llm_agent_serialization_adk(self):
+        """Test that LLMAgent (ADK) is serialized to YAML and restored.
+
+        Verifies that:
+        - AdkLLMAgent instances are serialized to YAML
+        - YAML representation is preserved in _llm_agents_yaml
+        - Agent instances are NOT directly serialized (memory optimization)
+        - Agents can be restored from YAML in worker processes
+        """
+        try:
+            from google.adk.agents import LlmAgent  # noqa: I001
+            from graflow.llm.agents.adk_agent import AdkLLMAgent
+        except ImportError:
+            pytest.skip("google-adk not available")
+
+        graph = TaskGraph()
+        graph.add_node(Task("test_task", register_to_context=False), "test_task")
+
+        context = ExecutionContext.create(
+            graph=graph,
+            start_node="test_task",
+            max_steps=10
+        )
+
+        # Create and register ADK agent
+        adk_agent = LlmAgent(
+            name="test_supervisor",
+            model="gemini-2.0-flash-exp"
+        )
+        agent = AdkLLMAgent(adk_agent, app_name=context.session_id)
+
+        context.register_llm_agent("supervisor", agent)
+
+        # Verify agent is registered and YAML is created
+        assert "supervisor" in context._llm_agents
+        assert "supervisor" in context._llm_agents_yaml
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            context_path = os.path.join(tmpdir, "context.pkl")
+
+            # Save context
+            context.save(context_path)
+            loaded_context = ExecutionContext.load(context_path)
+
+            # Verify agent instances are NOT preserved (memory optimization)
+            assert len(loaded_context._llm_agents) == 0
+
+            # Verify YAML is preserved
+            assert "supervisor" in loaded_context._llm_agents_yaml
+
+            # Access agent - should restore from YAML
+            restored_agent = loaded_context.get_llm_agent("supervisor")
+
+            # Verify agent is restored and functional
+            assert restored_agent is not None
+            assert isinstance(restored_agent, AdkLLMAgent)
+            assert restored_agent._adk_agent.name == "test_supervisor"
+            assert restored_agent._adk_agent.model == "gemini-2.0-flash-exp"
+
+            # Verify restored agent is cached
+            assert "supervisor" in loaded_context._llm_agents
+
+    def test_llm_agent_not_found_after_deserialization(self):
+        """Test that accessing non-existent agent raises KeyError.
+
+        Verifies that:
+        - Agent registry behaves correctly after deserialization
+        - Proper error is raised for missing agents
+        - Error messages are informative
+        """
+        graph = TaskGraph()
+        graph.add_node(Task("test_task", register_to_context=False), "test_task")
+
+        context = ExecutionContext.create(
+            graph=graph,
+            start_node="test_task",
+            max_steps=10
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            context_path = os.path.join(tmpdir, "context.pkl")
+
+            # Save and load empty context
+            context.save(context_path)
+            loaded_context = ExecutionContext.load(context_path)
+
+            # Try to access non-existent agent
+            with pytest.raises(KeyError, match="LLMAgent 'nonexistent' not found"):
+                loaded_context.get_llm_agent("nonexistent")
+
+    def test_multiple_llm_agents_serialization(self):
+        """Test serialization with multiple registered agents.
+
+        Verifies that:
+        - Multiple agents can be registered and serialized
+        - Each agent's YAML is preserved independently
+        - All agents can be restored correctly
+        - Agent isolation is maintained
+        """
+        try:
+            from google.adk.agents import LlmAgent  # noqa: I001
+            from graflow.llm.agents.adk_agent import AdkLLMAgent
+        except ImportError:
+            pytest.skip("google-adk not available")
+
+        graph = TaskGraph()
+        graph.add_node(Task("test_task", register_to_context=False), "test_task")
+
+        context = ExecutionContext.create(
+            graph=graph,
+            start_node="test_task",
+            max_steps=10
+        )
+
+        # Register multiple agents
+        agent1 = AdkLLMAgent(
+            LlmAgent(name="agent1", model="gemini-2.0-flash-exp"),
+            app_name=context.session_id
+        )
+        agent2 = AdkLLMAgent(
+            LlmAgent(name="agent2", model="gemini-2.0-flash-exp"),
+            app_name=context.session_id
+        )
+        agent3 = AdkLLMAgent(
+            LlmAgent(name="agent3", model="gemini-2.0-flash-exp"),
+            app_name=context.session_id
+        )
+
+        context.register_llm_agent("agent1", agent1)
+        context.register_llm_agent("agent2", agent2)
+        context.register_llm_agent("agent3", agent3)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            context_path = os.path.join(tmpdir, "context.pkl")
+
+            # Save and load
+            context.save(context_path)
+            loaded_context = ExecutionContext.load(context_path)
+
+            # Verify all agents can be restored
+            restored_agent1 = loaded_context.get_llm_agent("agent1")
+            restored_agent2 = loaded_context.get_llm_agent("agent2")
+            restored_agent3 = loaded_context.get_llm_agent("agent3")
+            assert isinstance(restored_agent1, AdkLLMAgent)
+            assert isinstance(restored_agent2, AdkLLMAgent)
+            assert isinstance(restored_agent3, AdkLLMAgent)
+
+            # Verify each agent is correct
+            assert restored_agent1._adk_agent.name == "agent1"
+            assert restored_agent2._adk_agent.name == "agent2"
+            assert restored_agent3._adk_agent.name == "agent3"
+
+    def test_llm_client_and_agent_together(self):
+        """Test serialization with both LLMClient and LLMAgent.
+
+        Verifies that:
+        - LLMClient and LLMAgent can coexist in serialized context
+        - Both are preserved independently
+        - No interference between client and agent serialization
+        - Both remain functional after deserialization
+        """
+        try:
+            pytest.importorskip("litellm")
+            from google.adk.agents import LlmAgent  # noqa: I001
+            from graflow.llm.agents.adk_agent import AdkLLMAgent
+            from graflow.llm.client import LLMClient
+        except ImportError:
+            pytest.skip("litellm or google-adk not available")
+
+        graph = TaskGraph()
+        graph.add_node(Task("test_task", register_to_context=False), "test_task")
+
+        # Create context with LLMClient
+        llm_client = LLMClient(model="gpt-4o", temperature=0.5)
+
+        context = ExecutionContext.create(
+            graph=graph,
+            start_node="test_task",
+            max_steps=10,
+            llm_client=llm_client
+        )
+
+        # Register agent
+        adk_agent = LlmAgent(name="supervisor", model="gemini-2.0-flash-exp")
+        agent = AdkLLMAgent(adk_agent, app_name=context.session_id)
+        context.register_llm_agent("supervisor", agent)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            context_path = os.path.join(tmpdir, "context.pkl")
+
+            # Save and load
+            context.save(context_path)
+            loaded_context = ExecutionContext.load(context_path)
+
+            # Verify LLMClient is preserved
+            loaded_client = loaded_context.llm_client
+            assert loaded_client.model == "gpt-4o"
+            assert loaded_client.default_params["temperature"] == 0.5
+
+            # Verify agent can be restored
+            restored_agent = loaded_context.get_llm_agent("supervisor")
+            assert isinstance(restored_agent, AdkLLMAgent)
+            assert restored_agent._adk_agent.name == "supervisor"
+
+    def test_backward_compatibility_without_llm_attributes(self):
+        """Test that old checkpoints without LLM attributes can be loaded.
+
+        Verifies that:
+        - __setstate__ initializes missing LLM attributes
+        - Backward compatibility is maintained
+        - Old checkpoints work with new code
+        - Default values are applied correctly
+        """
+        graph = TaskGraph()
+        graph.add_node(Task("test_task", register_to_context=False), "test_task")
+
+        context = ExecutionContext.create(
+            graph=graph,
+            start_node="test_task",
+            max_steps=10
+        )
+
+        # Manually create a "legacy" state without LLM attributes
+        state = context.__getstate__()
+
+        # Remove LLM attributes to simulate old checkpoint
+        state.pop('_llm_client', None)
+        state.pop('_llm_agents', None)
+        state.pop('_llm_agents_yaml', None)
+
+        # Create new context and restore legacy state
+        new_context = ExecutionContext.__new__(ExecutionContext)
+        new_context.__setstate__(state)
+
+        # Verify LLM attributes are initialized
+        assert hasattr(new_context, '_llm_client')
+        assert hasattr(new_context, '_llm_agents')
+        assert hasattr(new_context, '_llm_agents_yaml')
+
+        assert new_context._llm_client is None
+        assert new_context._llm_agents == {}
+        assert new_context._llm_agents_yaml == {}
+
+        # Verify auto-creation still works
+        pytest.importorskip("litellm")
+        client = new_context.llm_client
+        assert client.model == "gpt-5-mini"

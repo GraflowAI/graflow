@@ -597,6 +597,8 @@ class TaskWrapper(Executable):
         task_id: str,
         func,
         inject_context: bool = False,
+        inject_llm_client: bool = False,
+        inject_llm_agent: Optional[str] = None,
         register_to_context: bool = True,
         handler_type: Optional[str] = None
     ) -> None:
@@ -605,7 +607,10 @@ class TaskWrapper(Executable):
         Args:
             task_id: Task identifier
             func: Function to wrap
-            inject_context: Whether to inject ExecutionContext as first argument
+            inject_context: Whether to inject TaskExecutionContext as first argument
+            inject_llm_client: Whether to inject shared LLMClient instance as first argument
+            inject_llm_agent: Agent name string to inject LLMAgent as first argument
+                            (agent must be registered in ExecutionContext)
             register_to_context: Whether to register to workflow context
             handler_type: Execution handler type ("direct", "docker", or custom)
         """
@@ -613,6 +618,8 @@ class TaskWrapper(Executable):
         self._task_id = task_id
         self.func = func
         self.inject_context = inject_context
+        self.inject_llm_client = inject_llm_client
+        self.inject_llm_agent = inject_llm_agent
 
         # Add serialization attributes required for checkpoint/resume
         # These may be overwritten by @task decorator if used
@@ -634,9 +641,28 @@ class TaskWrapper(Executable):
         return self._task_id
 
     def __call__(self, *args, **kwargs) -> Any:
-        """Allow direct function call."""
+        """Allow direct function call with automatic dependency injection."""
+        exec_context = self.get_execution_context()
+
+        # LLMClient injection (shared instance from ExecutionContext)
+        if self.inject_llm_client:
+            llm_client = exec_context.llm_client
+            # Inject shared LLMClient instance (always available, auto-created if needed)
+            return self.func(llm_client, *args, **kwargs)
+
+        # LLMAgent injection
+        if self.inject_llm_agent:
+            try:
+                agent = exec_context.get_llm_agent(self.inject_llm_agent)
+            except KeyError:
+                raise RuntimeError(
+                    f"Task '{self._task_id}' requires LLMAgent '{self.inject_llm_agent}', but it's not registered. "
+                    f"Register it with: context.register_llm_agent('{self.inject_llm_agent}', agent)"
+                )
+            return self.func(agent, *args, **kwargs)
+
+        # TaskExecutionContext injection
         if self.inject_context:
-            exec_context = self.get_execution_context()
             task_context = exec_context.current_task_context
             if task_context:
                 return self.func(task_context, *args, **kwargs)
@@ -644,6 +670,7 @@ class TaskWrapper(Executable):
                 # Fallback: create temporary task context
                 with exec_context.executing_task(self) as task_ctx:
                     return self.func(task_ctx, *args, **kwargs)
+
         return self.func(*args, **kwargs)
 
     def run(self) -> Any:
