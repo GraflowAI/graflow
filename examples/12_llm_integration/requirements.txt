@@ -1,0 +1,18 @@
+# Requirements for LLM Integration Examples
+# Install with: pip install -r requirements.txt
+# Or with uv: uv pip install -r requirements.txt
+
+# Core Graflow - Required
+# Install from parent directory: pip install -e ../..
+
+# LLM Integration - Required for all examples
+litellm>=1.0.0  # LiteLLM for multi-provider LLM access
+
+# Google ADK - Required for agent examples (llm_agent.py, multi_agent_workflow.py)
+google-adk>=0.1.0  # Google Agent Development Kit for ReAct/Supervisor patterns
+
+# Environment Variables - Optional but recommended
+python-dotenv>=1.0.0  # Load API keys and config from .env file
+
+# Tracing - Optional
+langfuse>=2.0.0  # For LLM call tracing and observability

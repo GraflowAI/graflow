@@ -249,23 +249,57 @@ For a quick overview, follow this fast-track:
 ## Prerequisites
 
 - Python 3.11 or higher
-- Graflow installed (`pip install -e .` from the project root)
+- Graflow installed (see Setup below)
+
+### Setup
+
+**Option 1: Using uv (recommended)**
+```bash
+# Create virtual environment
+uv venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install Graflow
+uv pip install -e .
+
+# Install example-specific dependencies (e.g., for LLM integration)
+cd examples/12_llm_integration
+uv pip install -r requirements.txt
+```
+
+**Option 2: Using pip**
+```bash
+# Install Graflow
+pip install -e .
+
+# Install optional dependencies as needed
+pip install redis docker litellm google-adk
+```
 
 ### Optional Dependencies
 
 Some examples require additional packages:
 
-- **Redis examples**: `pip install redis`
-- **Docker examples**: `pip install docker`
-- **Visualization**: `pip install grandalf pygraphviz requests`
-- **LLM integration**: `pip install litellm` (for LLMClient) and `pip install google-adk` (for agents)
+- **Redis examples**: `redis`
+- **Docker examples**: `docker`
+- **Visualization**: `grandalf`, `pygraphviz`, `requests`
+- **LLM integration**: `litellm` (for LLMClient), `google-adk` (for agents)
 
 ## Running Examples
 
-Each example is self-contained and can be run directly:
-
+**Option 1: Direct execution**
 ```bash
 python examples/01_basics/hello_world.py
+```
+
+**Option 2: Using uv run (with dependencies)**
+```bash
+# Run with inline dependencies
+uv run --with litellm python examples/12_llm_integration/simple_llm_client.py
+
+# Or install from requirements.txt
+cd examples/12_llm_integration
+uv run --with-requirements requirements.txt python simple_llm_client.py
 ```
 
 Expected output is documented in each example file's docstring.
