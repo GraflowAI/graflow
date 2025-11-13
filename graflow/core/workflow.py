@@ -4,16 +4,20 @@ from __future__ import annotations
 
 import contextvars
 import uuid
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 from graflow.core.graph import TaskGraph
 from graflow.exceptions import GraphCompilationError
+from graflow.trace.base import Tracer
 
 if TYPE_CHECKING:
     from graflow.coordination.executor import GroupExecutor
+    from graflow.core.context import ExecutionContext
     from graflow.core.task import Executable
+    from graflow.llm.agents.base import LLMAgent
 
-from graflow.trace.base import Tracer
+LLMAgentFactory = Callable[['ExecutionContext'], 'LLMAgent']
+LLMAgentProvider = Union['LLMAgent', LLMAgentFactory]
 
 # Context variable for current workflow context
 _current_context: contextvars.ContextVar[Optional[WorkflowContext]] = contextvars.ContextVar(
@@ -40,6 +44,7 @@ class WorkflowContext:
         self._group_executor: Optional[GroupExecutor] = None
         self._redis_client: Optional[Any] = None
         self._tracer = tracer
+        self._llm_agent_providers: dict[str, LLMAgentProvider] = {}
 
     def __enter__(self):
         """Enter the workflow context."""
@@ -91,6 +96,17 @@ class WorkflowContext:
         """
         return self._redis_client
 
+    def register_llm_agent(self, name: str, agent_or_factory: LLMAgentProvider) -> None:
+        """Register an LLMAgent to be attached when the workflow executes.
+
+        Args:
+            name: Identifier used when injecting the agent via ``@task(inject_llm_agent=...)``
+            agent_or_factory: Either an ``LLMAgent`` instance or a callable that receives
+                the ``ExecutionContext`` and returns an ``LLMAgent``. Factories are useful
+                when the agent needs the workflow session_id or other runtime data.
+        """
+        self._llm_agent_providers[name] = agent_or_factory
+
     def execute(self, start_node: Optional[str] = None, max_steps: int = 10) -> Any:
         """Execute the workflow starting from the specified node.
 
@@ -113,6 +129,8 @@ class WorkflowContext:
         exec_context = ExecutionContext.create(self.graph, start_node, max_steps=max_steps, tracer=self._tracer)
         if self._group_executor:
             exec_context.group_executor = self._group_executor
+
+        self._attach_llm_agents(exec_context)
 
         engine = WorkflowEngine()
         return engine.execute(exec_context)
@@ -149,6 +167,24 @@ class WorkflowContext:
         """Get the next group name for this workflow."""
         self._group_counter += 1
         return f"ParallelGroup_{self._group_counter}"
+
+    def _attach_llm_agents(self, exec_context: ExecutionContext) -> None:
+        """Attach workflow-level LLMAgents to the newly created ExecutionContext."""
+        if not self._llm_agent_providers:
+            return
+
+        from graflow.llm.agents.base import LLMAgent
+
+        for name, provider in self._llm_agent_providers.items():
+            if isinstance(provider, LLMAgent):
+                agent = provider
+            elif callable(provider):
+                agent = provider(exec_context)
+            else:
+                raise TypeError(
+                    f"LLMAgent provider for '{name}' must be LLMAgent or callable"
+                )
+            exec_context.register_llm_agent(name, agent)
 
 def get_current_workflow_context(create_if_not_exist: bool = False) -> Optional[WorkflowContext]:
     """Get the current workflow context if it exists.
