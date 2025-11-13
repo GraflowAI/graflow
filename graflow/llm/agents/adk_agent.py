@@ -16,6 +16,9 @@ if TYPE_CHECKING:
 
 try:
     from google.adk.agents import LlmAgent
+    from google.adk.runners import Runner as AdkRunner
+    from google.adk.sessions import InMemorySessionService
+    from google.genai import types as genai_types
     ADK_AVAILABLE = True
 except ImportError:
     ADK_AVAILABLE = False
@@ -243,12 +246,24 @@ class AdkLLMAgent(LLMAgent):
             separate from the app_name (set in __init__ from workflow trace_id).
         """
         try:
+            import asyncio
+
             # Set defaults
             if user_id is None:
                 user_id = self._default_user_id
             if session_id is None:
                 # Generate a new session ID for this execution
                 session_id = str(uuid.uuid4())
+
+            # Create session in session service (async in ADK 1.0+)
+            # Use asyncio.run() to execute async session creation synchronously
+            asyncio.run(
+                self._session_service.create_session(
+                    app_name=self._app_name,
+                    user_id=user_id,
+                    session_id=session_id
+                )
+            )
 
             # Create Content from input text
             content = genai_types.Content(  # type: ignore
