@@ -11,6 +11,24 @@ Graflow provides seamless LLM integration through:
 - **Model Override**: Per-task model selection for cost/performance optimization
 - **Tracing**: Unified tracing with Langfuse integration
 
+## Setup
+
+From the repository root, install the example dependencies with `uv`:
+
+```bash
+uv venv .venv
+source .venv/bin/activate
+uv pip install -r examples/12_llm_integration/requirements.txt
+```
+
+Or run scripts directly with a temporary environment:
+
+```bash
+uv run --with examples/12_llm_integration/requirements.txt python examples/12_llm_integration/your_script.py
+```
+
+> Replace `your_script.py` with any of the example files in this directory (e.g., `simple_llm_client.py`).
+
 ## Prerequisites
 
 ### Basic Setup (LLMClient)
@@ -62,8 +80,8 @@ PYTHONPATH=. uv run python examples/12_llm_integration/simple_llm_client.py
 **Key code**:
 ```python
 @task(inject_llm_client=True)
-def my_task(llm):
-    response = llm.completion(
+def my_task(llm_client):
+    response = llm_client.completion(
         messages=[{"role": "user", "content": "Hello!"}],
         max_tokens=50
     )
@@ -88,14 +106,14 @@ PYTHONPATH=. uv run python examples/12_llm_integration/model_override.py
 **Key code**:
 ```python
 @task(inject_llm_client=True)
-def simple_task(llm):
+def simple_task(llm_client):
     # Use cheap model for simple tasks
-    return llm.completion(model="gpt-5-mini", messages=[...])
+    return llm_client.completion(model="gpt-5-mini", messages=[...])
 
 @task(inject_llm_client=True)
-def complex_task(llm):
+def complex_task(llm_client):
     # Use powerful model for complex reasoning
-    return llm.completion(model="gpt-4o", messages=[...])
+    return llm_client.completion(model="gpt-4o", messages=[...])
 ```
 
 ### 3. LLMAgent with Google ADK (`llm_agent.py`)
@@ -130,8 +148,9 @@ exec_context.register_llm_agent("assistant", agent)
 
 # Use in task
 @task(inject_llm_agent="assistant")
-def my_task(agent):
-    return agent.send_message("Use my_tool to...")
+def my_task(llm_agent):
+    result = llm_agent.run("Use my_tool to...")
+    return result["output"]
 ```
 
 ### 4. Multi-Agent Workflow (`multi_agent_workflow.py`)
@@ -159,20 +178,20 @@ exec_context.register_llm_agent("writer", writer_agent)
 
 # Define collaborative workflow
 @task(inject_llm_agent="researcher")
-def research(agent):
-    return agent.send_message("Research...")
+def research(llm_agent):
+    return llm_agent.run("Research...")["output"]
 
 @task(inject_llm_agent="analyst")
-def analyze(agent):
-    return agent.send_message("Analyze...")
+def analyze(llm_agent):
+    return llm_agent.run("Analyze...")["output"]
 
 @task(inject_llm_agent="writer")
-def write(agent):
-    return agent.send_message("Write...")
+def write(llm_agent):
+    return llm_agent.run("Write...")["output"]
 
 @task(inject_llm_client=True)
-def review(llm):
-    return llm.completion(messages=[...])
+def review(llm_client):
+    return llm_client.completion(messages=[...])
 
 # Pipeline
 research >> analyze >> write >> review
@@ -187,8 +206,8 @@ from graflow.core.workflow import workflow
 
 with workflow("my_workflow") as ctx:
     @task(inject_llm_client=True)
-    def llm_task(llm):
-        response = llm.completion(
+    def llm_task(llm_client):
+        response = llm_client.completion(
             messages=[{"role": "user", "content": "Hello!"}]
         )
         return response.choices[0].message.content
@@ -199,12 +218,12 @@ with workflow("my_workflow") as ctx:
 ### Step 2: Model Override
 ```python
 @task(inject_llm_client=True)
-def smart_task(llm):
+def smart_task(llm_client):
     # Use cheap model first
-    summary = llm.completion(model="gpt-5-mini", messages=[...])
+    summary = llm_client.completion(model="gpt-5-mini", messages=[...])
 
     # Use expensive model for complex reasoning
-    analysis = llm.completion(model="gpt-4o", messages=[...])
+    analysis = llm_client.completion(model="gpt-4o", messages=[...])
 
     return analysis
 ```
@@ -218,18 +237,18 @@ def my_tool(input: str) -> str:
     """Custom tool."""
     return f"Processed: {input}"
 
-@task(inject_context=True)
-def setup(context):
-    exec_context = context.execution_context
-    adk_agent = LlmAgent(name="assistant", model="gemini-2.0-flash-exp", tools=[my_tool])
-    agent = AdkLLMAgent(adk_agent, app_name=exec_context.session_id)
-    exec_context.register_llm_agent("assistant", agent)
+with workflow("agent_workflow") as ctx:
+    def create_agent(exec_context):
+        adk_agent = LlmAgent(name="assistant", model="gemini-2.0-flash-exp", tools=[my_tool])
+        return AdkLLMAgent(adk_agent, app_name=exec_context.session_id)
 
-@task(inject_llm_agent="assistant")
-def agent_task(agent):
-    return agent.send_message("Use my_tool to process 'hello'")
+    ctx.register_llm_agent("assistant", create_agent)
 
-setup >> agent_task
+    @task(inject_llm_agent="assistant")
+    def agent_task(llm_agent):
+        return llm_agent.run("Use my_tool to process 'hello'")["output"]
+
+    ctx.execute("agent_task")
 ```
 
 ## Common Patterns
@@ -238,31 +257,31 @@ setup >> agent_task
 ```python
 # Use cheap models for simple tasks
 @task(inject_llm_client=True)
-def classify(llm):
-    return llm.completion(model="gpt-5-mini", messages=[...])
+def classify(llm_client):
+    return llm_client.completion(model="gpt-5-mini", messages=[...])
 
 # Use expensive models for complex tasks
 @task(inject_llm_client=True)
-def deep_analysis(llm):
-    return llm.completion(model="gpt-4o", messages=[...])
+def deep_analysis(llm_client):
+    return llm_client.completion(model="gpt-4o", messages=[...])
 ```
 
 ### Pattern 2: Multi-Provider
 ```python
 # OpenAI for code
 @task(inject_llm_client=True)
-def generate_code(llm):
-    return llm.completion(model="gpt-4o", messages=[...])
+def generate_code(llm_client):
+    return llm_client.completion(model="gpt-4o", messages=[...])
 
 # Anthropic for reasoning
 @task(inject_llm_client=True)
-def reason(llm):
-    return llm.completion(model="claude-3-5-sonnet-20241022", messages=[...])
+def reason(llm_client):
+    return llm_client.completion(model="claude-3-5-sonnet-20241022", messages=[...])
 
 # Google for speed
 @task(inject_llm_client=True)
-def quick_task(llm):
-    return llm.completion(model="gemini-2.0-flash-exp", messages=[...])
+def quick_task(llm_client):
+    return llm_client.completion(model="gemini-2.0-flash-exp", messages=[...])
 ```
 
 ### Pattern 3: Agent Specialization
@@ -272,10 +291,10 @@ researcher = LlmAgent(name="researcher", tools=[fetch_data, search_web])
 analyst = LlmAgent(name="analyst", tools=[calculate, visualize])
 writer = LlmAgent(name="writer", tools=[format_text, check_grammar])
 
-# Register all agents
-exec_context.register_llm_agent("researcher", AdkLLMAgent(researcher, app_name=...))
-exec_context.register_llm_agent("analyst", AdkLLMAgent(analyst, app_name=...))
-exec_context.register_llm_agent("writer", AdkLLMAgent(writer, app_name=...))
+# Register all agents when the workflow executes
+ctx.register_llm_agent("researcher", lambda exec_ctx: AdkLLMAgent(researcher, app_name=exec_ctx.session_id))
+ctx.register_llm_agent("analyst", lambda exec_ctx: AdkLLMAgent(analyst, app_name=exec_ctx.session_id))
+ctx.register_llm_agent("writer", lambda exec_ctx: AdkLLMAgent(writer, app_name=exec_ctx.session_id))
 
 # Use in pipeline
 research_task >> analysis_task >> writing_task

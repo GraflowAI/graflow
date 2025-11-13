@@ -37,6 +37,7 @@ Cost saved by using appropriate models for each task.
 
 from graflow.core.decorators import task
 from graflow.core.workflow import workflow
+from graflow.llm.client import LLMClient
 
 
 def main():
@@ -46,11 +47,11 @@ def main():
     with workflow("model_override") as ctx:
 
         @task(inject_llm_client=True)
-        def simple_classification(llm):
+        def simple_classification(llm_client: LLMClient):
             """Use cheap model for simple classification task."""
             print("Task 1: Simple classification (gpt-5-mini - cheap & fast)")
 
-            response = llm.completion(
+            category = llm_client.completion_text(
                 model="gpt-5-mini",  # Override: use cheap model
                 messages=[
                     {"role": "user", "content": "Classify this text in one word: 'Hello, how are you?'"}
@@ -58,16 +59,15 @@ def main():
                 max_tokens=10
             )
 
-            category = response.choices[0].message.content
             print(f"Category: {category}\n")
             return category
 
         @task(inject_llm_client=True)
-        def complex_analysis(llm):
+        def complex_analysis(llm_client: LLMClient):
             """Use expensive model for complex reasoning task."""
             print("Task 2: Complex analysis (gpt-4o - expensive & accurate)")
 
-            response = llm.completion(
+            analysis = llm_client.completion_text(
                 model="gpt-4o",  # Override: use powerful model for complex task
                 messages=[
                     {
@@ -84,16 +84,15 @@ def main():
                 max_tokens=150
             )
 
-            analysis = response.choices[0].message.content
             print(f"{analysis}\n")
             return analysis
 
         @task(inject_llm_client=True)
-        def quick_summary(llm):
+        def quick_summary(llm_client: LLMClient):
             """Use cheap model for simple summarization."""
             print("Task 3: Quick summary (gpt-5-mini - cheap & fast)")
 
-            response = llm.completion(
+            summary = llm_client.completion_text(
                 model="gpt-5-mini",  # Override: back to cheap model
                 messages=[
                     {
@@ -104,7 +103,6 @@ def main():
                 max_tokens=50
             )
 
-            summary = response.choices[0].message.content
             print(f"{summary}\n")
             return summary
 

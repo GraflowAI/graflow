@@ -36,6 +36,7 @@ Task 3: Summarize text
 
 from graflow.core.decorators import task
 from graflow.core.workflow import workflow
+from graflow.llm.client import LLMClient
 
 
 def main():
@@ -45,39 +46,37 @@ def main():
     with workflow("simple_llm") as ctx:
 
         @task(inject_llm_client=True)
-        def generate_greeting(llm):
+        def generate_greeting(llm_client: LLMClient):
             """Generate a friendly greeting using LLM."""
             print("Task 1: Generate greeting")
 
-            response = llm.completion(
+            greeting = llm_client.completion_text(
                 messages=[
                     {"role": "user", "content": "Say a brief, friendly greeting as an AI assistant."}
                 ],
                 max_tokens=50
             )
 
-            greeting = response.choices[0].message.content
             print(f"{greeting}\n")
             return greeting
 
         @task(inject_llm_client=True)
-        def answer_question(llm):
+        def answer_question(llm_client: LLMClient):
             """Answer a technical question using LLM."""
             print("Task 2: Answer question")
 
-            response = llm.completion(
+            answer = llm_client.completion_text(
                 messages=[
                     {"role": "user", "content": "In one sentence, what is Python?"}
                 ],
                 max_tokens=50
             )
 
-            answer = response.choices[0].message.content
             print(f"{answer}\n")
             return answer
 
         @task(inject_llm_client=True)
-        def summarize_text(llm):
+        def summarize_text(llm_client: LLMClient):
             """Summarize a text using LLM."""
             print("Task 3: Summarize text")
 
@@ -88,14 +87,13 @@ def main():
             cycle detection, and dynamic task generation.
             """
 
-            response = llm.completion(
+            summary = llm_client.completion_text(
                 messages=[
                     {"role": "user", "content": f"Summarize in one sentence: {text}"}
                 ],
                 max_tokens=50
             )
 
-            summary = response.choices[0].message.content
             print(f"{summary}\n")
             return summary
 
@@ -118,9 +116,9 @@ if __name__ == "__main__":
 #
 # 1. **LLMClient Injection**
 #    @task(inject_llm_client=True)
-#    def my_task(llm):
-#        # llm is automatically injected
-#        response = llm.completion(messages=[...])
+#    def my_task(llm_client):
+#        # llm_client is automatically injected as named argument
+#        response = llm_client.completion(messages=[...])
 #
 # 2. **Automatic Initialization**
 #    - LLMClient is auto-created from ExecutionContext
@@ -168,12 +166,12 @@ if __name__ == "__main__":
 #
 # 4. Chain LLM calls:
 #    @task(inject_llm_client=True)
-#    def chain_example(llm):
+#    def chain_example(llm_client):
 #        # First call
-#        idea = llm.completion(messages=[{"role": "user", "content": "Suggest a topic"}])
+#        idea = llm_client.completion(messages=[{"role": "user", "content": "Suggest a topic"}])
 #
 #        # Second call uses result from first
-#        expanded = llm.completion(messages=[
+#        expanded = llm_client.completion(messages=[
 #            {"role": "user", "content": f"Explain: {idea.choices[0].message.content}"}
 #        ])
 #

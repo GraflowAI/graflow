@@ -43,8 +43,12 @@ Task 4: Review phase (llm client)
 ✅ Multi-agent workflow completed successfully!
 """
 
+from typing import Any
+
 from graflow.core.decorators import task
 from graflow.core.workflow import workflow
+from graflow.llm.agents.base import LLMAgent
+from graflow.llm.client import LLMClient
 
 
 def main():
@@ -98,111 +102,94 @@ def main():
         # Store shared data
         workflow_data = {}
 
-        @task(inject_context=True)
-        def setup_agents(context):
-            """Register all specialized agents."""
-            print("Registering specialized agents...")
-            try:
-                from google_adk.types import LlmAgent
+        try:
+            from google.adk.types import LlmAgent  # type: ignore
 
-                from graflow.llm.agents.adk_agent import AdkLLMAgent
+            from graflow.llm.agents.adk_agent import AdkLLMAgent
+        except ImportError:
+            print("❌ Google ADK not installed. Install with: uv add google-adk")
+            print("Skipping multi-agent demo...")
+            return
 
-                # Get ExecutionContext from TaskExecutionContext
-                exec_context = context.execution_context
+        print("Registering specialized agents...")
 
-                # Agent 1: Researcher - has data fetching tools
-                researcher_agent = LlmAgent(
-                    name="researcher",
+        def make_agent_factory(agent_name: str, tools):
+            def factory(exec_context):
+                agent = LlmAgent(
+                    name=agent_name,
                     model="gemini-2.0-flash-exp",
-                    tools=[fetch_data]
+                    tools=tools,
                 )
-                exec_context.register_llm_agent(
-                    "researcher",
-                    AdkLLMAgent(researcher_agent, app_name=exec_context.session_id)
-                )
-                print("✅ Researcher agent registered")
+                wrapped = AdkLLMAgent(agent, app_name=exec_context.session_id)
+                print(f"✅ {agent_name.capitalize()} agent registered")
+                return wrapped
 
-                # Agent 2: Analyst - has analysis tools
-                analyst_agent = LlmAgent(
-                    name="analyst",
-                    model="gemini-2.0-flash-exp",
-                    tools=[calculate_metrics]
-                )
-                exec_context.register_llm_agent(
-                    "analyst",
-                    AdkLLMAgent(analyst_agent, app_name=exec_context.session_id)
-                )
-                print("✅ Analyst agent registered")
+            return factory
 
-                # Agent 3: Writer - has formatting tools
-                writer_agent = LlmAgent(
-                    name="writer",
-                    model="gemini-2.0-flash-exp",
-                    tools=[format_output]
-                )
-                exec_context.register_llm_agent(
-                    "writer",
-                    AdkLLMAgent(writer_agent, app_name=exec_context.session_id)
-                )
-                print("✅ Writer agent registered\n")
-                return "agents_registered"
+        ctx.register_llm_agent("researcher", make_agent_factory("researcher", [fetch_data]))
+        ctx.register_llm_agent("analyst", make_agent_factory("analyst", [calculate_metrics]))
+        ctx.register_llm_agent("writer", make_agent_factory("writer", [format_output]))
+        print()
 
-            except ImportError:
-                print("❌ Google ADK not installed. Install with: uv add google-adk")
-                print("Skipping multi-agent demo...")
-                raise
+        def _agent_output(result: Any) -> str:
+            if isinstance(result, dict) and "output" in result:
+                return str(result["output"])
+            return str(result)
 
         @task(inject_llm_agent="researcher")
-        def research_phase(agent):
+        def research_phase(llm_agent: LLMAgent):
             """Researcher agent gathers information."""
             print("Task 1: Research phase (researcher)")
 
-            result = agent.send_message(
+            result = llm_agent.run(
                 "Use the fetch_data tool to research 'python' and 'workflow'. "
                 "Combine your findings into a brief summary."
             )
 
-            workflow_data["research"] = result
-            print(f"Research completed: {len(result)} chars\n")
-            return result
+            output = _agent_output(result)
+            workflow_data["research"] = output
+            print(f"Research completed: {len(output)} chars\n")
+            return output
 
         @task(inject_llm_agent="analyst")
-        def analysis_phase(agent):
+        def analysis_phase(llm_agent: LLMAgent):
             """Analyst agent processes the research."""
             print("Task 2: Analysis phase (analyst)")
 
             research_data = workflow_data.get("research", "")
-            result = agent.send_message(
+            result = llm_agent.run(
                 f"Analyze this research data using calculate_metrics: {research_data[:200]}... "
                 "Then provide key insights."
             )
 
-            workflow_data["analysis"] = result
+            output = _agent_output(result)
+            workflow_data["analysis"] = output
             print("Analysis completed\n")
-            return result
+            return output
 
         @task(inject_llm_agent="writer")
-        def writing_phase(agent):
+        def writing_phase(llm_agent: LLMAgent):
             """Writer agent creates final output."""
             print("Task 3: Writing phase (writer)")
 
             analysis = workflow_data.get("analysis", "")
-            result = agent.send_message(
+            result = llm_agent.run(
                 f"Based on this analysis: {analysis[:200]}... "
                 "Write a concise report and format it using format_output tool with markdown style."
             )
 
-            workflow_data["report"] = result
+            output = _agent_output(result)
+            workflow_data["report"] = output
             print("Report written\n")
-            return result
+            return output
 
         @task(inject_llm_client=True)
-        def review_phase(llm):
+        def review_phase(llm: LLMClient):
             """Use LLMClient for final review (no tools needed)."""
             print("Task 4: Review phase (llm client)")
 
             report = workflow_data.get("report", "")
-            response = llm.completion(
+            rating = llm.completion_text(
                 model="gpt-5-mini",  # Use cheap model for simple review
                 messages=[
                     {"role": "user", "content": f"Review this report and rate it (1-10): {report[:300]}..."}
@@ -210,15 +197,14 @@ def main():
                 max_tokens=50
             )
 
-            rating = response.choices[0].message.content
             print(f"Review: {rating}\n")
             return rating
 
-        # Define pipeline: Setup -> Researcher -> Analyst -> Writer -> Reviewer
-        setup_agents >> research_phase >> analysis_phase >> writing_phase >> review_phase  # type: ignore
+        # Define pipeline: Researcher -> Analyst -> Writer -> Reviewer
+        research_phase >> analysis_phase >> writing_phase >> review_phase  # type: ignore
 
         # Execute the workflow
-        ctx.execute("setup_agents")
+        ctx.execute("research_phase")
 
         print("✅ Multi-agent workflow completed successfully!")
 
@@ -232,14 +218,12 @@ if __name__ == "__main__":
 # ============================================================================
 #
 # 1. **Multiple Agent Registration**
-#    @task(inject_context=True)
-#    def setup(context):
-#        exec_context = context.execution_context
+#    def create_agent(exec_context):
+#        return AdkLLMAgent(..., app_name=exec_context.session_id)
 #
-#        # Register multiple agents
-#        exec_context.register_llm_agent("researcher", researcher_agent)
-#        exec_context.register_llm_agent("analyst", analyst_agent)
-#        exec_context.register_llm_agent("writer", writer_agent)
+#    ctx.register_llm_agent("researcher", create_agent)
+#    ctx.register_llm_agent("analyst", create_agent)
+#    ctx.register_llm_agent("writer", create_agent)
 #
 # 2. **Specialized Agent Tools**
 #    # Each agent has tools for its domain
@@ -250,27 +234,27 @@ if __name__ == "__main__":
 # 3. **Agent Collaboration**
 #    # Agents work together via task dependencies
 #    @task(inject_llm_agent="researcher")
-#    def research(agent):
-#        data = agent.send_message("...")
+#    def research(llm_agent):
+#        data = llm_agent.run("...")["output"]
 #        shared_storage["data"] = data  # Pass to next agent
 #        return data
 #
 #    @task(inject_llm_agent="analyst")
-#    def analyze(agent):
+#    def analyze(llm_agent):
 #        data = shared_storage["data"]  # Get from previous agent
-#        result = agent.send_message(f"Analyze: {data}")
+#        result = llm_agent.run(f"Analyze: {data}")["output"]
 #        return result
 #
 # 4. **Mixing LLMClient and LLMAgent**
 #    # Use agents for tool-requiring tasks
 #    @task(inject_llm_agent="researcher")
-#    def complex_task(agent):
-#        return agent.send_message("...")
+#    def complex_task(llm_agent):
+#        return llm_agent.run("...")["output"]
 #
 #    # Use client for simple completions
 #    @task(inject_llm_client=True)
-#    def simple_task(llm):
-#        return llm.completion(messages=[...])
+#    def simple_task(llm_client):
+#        return llm_client.completion(messages=[...])
 #
 # 5. **Next Steps**
 #    ✅ Customize agents for your domain
@@ -292,15 +276,15 @@ if __name__ == "__main__":
 # 2. Use channels for communication:
 #    from graflow.channels.factory import ChannelFactory
 #
-#    @task(inject_llm_agent="researcher")
-#    def research(agent, ctx):
-#        result = agent.send_message("...")
-#        ctx.channel("research_data").put(result)  # Share via channel
+#    @task(inject_context=True, inject_llm_agent="researcher")
+#    def research(ctx, llm_agent):
+#        result = llm_agent.run("...")["output"]
+#        ctx.get_channel("research_data").put(result)  # Share via channel
 #
-#    @task(inject_llm_agent="analyst")
-#    def analyze(agent, ctx):
-#        data = ctx.channel("research_data").get()  # Read from channel
-#        return agent.send_message(f"Analyze: {data}")
+#    @task(inject_context=True, inject_llm_agent="analyst")
+#    def analyze(ctx, llm_agent):
+#        data = ctx.get_channel("research_data").get()  # Read from channel
+#        return llm_agent.run(f"Analyze: {data}")["output"]
 #
 # 3. Parallel agent execution:
 #    # Multiple researchers working in parallel
@@ -312,7 +296,7 @@ if __name__ == "__main__":
 #
 # 4. Dynamic agent selection:
 #    @task(inject_llm_client=True)
-#    def router(llm, task_type):
+#    def router(llm_client, task_type):
 #        # Decide which agent to use
 #        if task_type == "research":
 #            # Next task uses researcher agent
@@ -324,8 +308,8 @@ if __name__ == "__main__":
 # 5. Agent hierarchies:
 #    # Supervisor agent coordinates worker agents
 #    @task(inject_llm_agent="supervisor")
-#    def supervise(agent):
-#        plan = agent.send_message("Create a plan for these tasks...")
+#    def supervise(llm_agent):
+#        plan = llm_agent.run("Create a plan for these tasks...")["output"]
 #
 #        # Supervisor delegates to workers
 #        for subtask in plan:

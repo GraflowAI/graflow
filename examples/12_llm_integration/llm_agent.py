@@ -34,8 +34,13 @@ Result: [Structured research summary]
 
 from typing import TYPE_CHECKING
 
+from graflow.core.context import ExecutionContext
+from graflow.llm.agents.base import LLMAgent
+
 if TYPE_CHECKING:
     from google.adk.agents import LlmAgent
+
+from google.adk.agents import LlmAgent
 
 from graflow.core.decorators import task
 from graflow.core.workflow import workflow
@@ -73,44 +78,35 @@ def main():
             return f"Error: {e}"
 
     with workflow("llm_agent") as ctx:
-        # Note: Agent registration must happen in a task with ExecutionContext access
-        # We'll register the agent in a setup task
-
-        @task(inject_context=True)
-        def setup_agent(context):
-            """Register the research agent with tools."""
+        # Register the agent so it is available when the workflow executes.
+        # Use a factory to access the ExecutionContext (for session_id/app_name).
+        def create_research_agent(exec_context: ExecutionContext) -> LLMAgent:
+            """Create Google ADK agent and wrap it for Graflow."""
             print("Registering research agent with tools...")
             try:
-                # Get ExecutionContext from TaskExecutionContext
-                exec_context = context.execution_context
-
-                # Create Google ADK agent with tools
                 adk_agent = LlmAgent(
                     name="research_agent",
                     model="gemini-2.0-flash-exp",
                     tools=[get_current_time, calculate]
                 )
 
-                # Wrap in Graflow's AdkLLMAgent
                 agent = AdkLLMAgent(adk_agent, app_name=exec_context.session_id)
-
-                # Register agent in ExecutionContext
-                exec_context.register_llm_agent("research_agent", agent)
                 print("✅ Agent registered successfully\n")
-                return "agent_registered"
-
+                return agent
             except ImportError:
                 print("❌ Google ADK not installed. Install with: uv add google-adk")
                 print("Skipping agent demo...")
                 raise
 
+        ctx.register_llm_agent("research_agent", create_research_agent)
+
         @task(inject_llm_agent="research_agent")
-        def research_with_agent(agent):
+        def research_with_agent(llm_agent: LLMAgent):
             """Use agent to perform research with tools."""
             print("Task: Research and summarize")
 
             # Agent uses tools to complete the task
-            result = agent.send_message(
+            result = llm_agent.run(
                 """
                 Please help me with the following:
                 1. What is the current time?
@@ -129,11 +125,11 @@ def main():
             print("✅ Results processed successfully\n")
             return "processed"
 
-        # Define pipeline: Setup agent first, then use it
-        setup_agent >> research_with_agent >> process_results  # type: ignore
+        # Define pipeline
+        research_with_agent >> process_results  # type: ignore
 
         # Execute the workflow
-        ctx.execute("setup_agent")
+        ctx.execute()
 
         print("✅ Agent workflow completed successfully!")
 
@@ -147,19 +143,16 @@ if __name__ == "__main__":
 # ============================================================================
 #
 # 1. **LLMAgent Injection**
-#    # Register agent in setup task with context injection
-#    @task(inject_context=True)
-#    def setup(context):
-#        exec_context = context.execution_context
-#        exec_context.register_llm_agent("agent_name", agent)
+#    # Register agent before execution (optional factory)
+#    def create_agent(exec_context):
+#        return AdkLLMAgent(..., app_name=exec_context.session_id)
+#
+#    ctx.register_llm_agent("agent_name", create_agent)
 #
 #    # Then inject agent into task
 #    @task(inject_llm_agent="agent_name")
-#    def my_task(agent):
-#        result = agent.send_message("...")
-#
-#    # Connect tasks
-#    setup >> my_task
+#    def my_task(llm_agent):
+#        result = llm_agent.send_message("...")
 #
 # 2. **Google ADK Integration**
 #    from google_adk.types import LlmAgent
@@ -224,31 +217,31 @@ if __name__ == "__main__":
 #
 # 3. Multi-turn conversations:
 #    @task(inject_llm_agent="assistant")
-#    def conversation(agent):
+#    def conversation(llm_agent):
 #        # First message
-#        response1 = agent.send_message("What's 2+2?")
+#        response1 = llm_agent.send_message("What's 2+2?")
 #
 #        # Follow-up (agent remembers context)
-#        response2 = agent.send_message("Now multiply that by 3")
+#        response2 = llm_agent.send_message("Now multiply that by 3")
 #
 #        return response2
 #
 # 4. Combine with LLMClient:
 #    @task(inject_llm_client=True, inject_llm_agent="assistant")
-#    def hybrid_task(llm, agent):
+#    def hybrid_task(llm_client, llm_agent):
 #        # Use client for simple completion
-#        summary = llm.completion(messages=[...])
+#        summary = llm_client.completion(messages=[...])
 #
 #        # Use agent for complex reasoning with tools
-#        analysis = agent.send_message(f"Analyze this: {summary}")
+#        analysis = llm_agent.send_message(f"Analyze this: {summary}")
 #
 #        return analysis
 #
 # 5. Error handling:
 #    @task(inject_llm_agent="assistant")
-#    def safe_agent_call(agent):
+#    def safe_agent_call(llm_agent):
 #        try:
-#            result = agent.send_message("...")
+#            result = llm_agent.send_message("...")
 #            return result
 #        except Exception as e:
 #            print(f"Agent error: {e}")
