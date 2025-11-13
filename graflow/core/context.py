@@ -107,6 +107,53 @@ class TaskExecutionContext:
         """Get execution result for a node from channel."""
         return self.execution_context.get_result(node, default)
 
+    # === LLM integration accessors ===
+
+    @property
+    def llm_client(self) -> LLMClient:
+        """Get shared LLMClient instance from execution context.
+
+        Returns:
+            LLMClient instance (auto-created with default model if not set)
+
+        Example:
+            ```python
+            @task(inject_context=True)
+            def my_task(context: TaskExecutionContext):
+                # Access LLMClient through context
+                llm = context.llm_client
+                response = llm.completion(
+                    messages=[{"role": "user", "content": "Hello"}]
+                )
+                return response.choices[0].message.content
+            ```
+        """
+        return self.execution_context.llm_client
+
+    def get_llm_agent(self, name: str) -> LLMAgent:
+        """Get registered LLMAgent by name from execution context.
+
+        Args:
+            name: Agent identifier
+
+        Returns:
+            LLMAgent instance
+
+        Raises:
+            KeyError: If agent not registered
+
+        Example:
+            ```python
+            @task(inject_context=True)
+            def my_task(context: TaskExecutionContext):
+                # Access registered agent through context
+                agent = context.get_llm_agent("researcher")
+                result = agent.run("Research topic X")
+                return result["output"]
+            ```
+        """
+        return self.execution_context.get_llm_agent(name)
+
     def set_local_data(self, key: str, value: Any) -> None:
         """Set task-local data."""
         self.local_data[key] = value
