@@ -30,7 +30,9 @@ except ImportError:
 
 # OpenTelemetry imports for context propagation
 try:
+    from opentelemetry import context as otel_context
     from opentelemetry import trace
+    from opentelemetry.trace import NonRecordingSpan, SpanContext, TraceFlags
     OTEL_AVAILABLE = True
 except ImportError:
     OTEL_AVAILABLE = False
