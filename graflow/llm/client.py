@@ -20,12 +20,19 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Global flag to track if tracing has been set up
+_litellm_tracing_enabled = False
+
+
 def setup_langfuse_for_litellm() -> None:
     """Setup Langfuse integration for LiteLLM.
 
-    This configures LiteLLM to send traces to Langfuse. LiteLLM will automatically
-    detect OpenTelemetry context (trace_id, parent_span_id) set by LangFuseTracer
-    and create properly nested spans in Langfuse.
+    This configures LiteLLM to send traces to Langfuse using the OpenTelemetry-based
+    integration. When used with LangFuseTracer, LiteLLM will automatically detect
+    OpenTelemetry context (trace_id, span_id) set by the tracer and create properly
+    nested spans in Langfuse.
+
+    Uses the "langfuse_otel" callback which is compatible with Langfuse SDK v3+.
 
     Loads credentials from environment variables (via .env file):
     - LANGFUSE_PUBLIC_KEY: Langfuse public API key
@@ -38,15 +45,30 @@ def setup_langfuse_for_litellm() -> None:
     Example:
         ```python
         # .env file:
-        # LANGFUSE_PUBLIC_KEY=pk-xxx
-        # LANGFUSE_SECRET_KEY=sk-xxx
-        # LANGFUSE_HOST=http://localhost:3000  # Optional
+        # LANGFUSE_PUBLIC_KEY=pk-lf-...
+        # LANGFUSE_SECRET_KEY=sk-lf-...
+        # LANGFUSE_HOST=https://cloud.langfuse.com  # Optional
 
         from graflow.llm import setup_langfuse_for_litellm
 
         setup_langfuse_for_litellm()
         ```
+
+    Note:
+        - This function is idempotent (safe to call multiple times)
+        - Uses "langfuse_otel" callback (compatible with Langfuse SDK v3+)
+        - When LangFuseTracer is active, the OpenTelemetry context it sets will
+          be automatically picked up by LiteLLM's Langfuse callback, creating
+          properly nested traces in Langfuse UI.
+        - LLMClient calls this automatically when enable_tracing=True (default)
     """
+    global _litellm_tracing_enabled
+
+    # Check if already enabled (idempotent)
+    if _litellm_tracing_enabled:
+        logger.debug("LiteLLM Langfuse tracing already enabled")
+        return
+
     # Load environment variables from .env file
     load_env()
 
@@ -68,10 +90,18 @@ def setup_langfuse_for_litellm() -> None:
         os.environ["LANGFUSE_HOST"] = host
 
     # Enable Langfuse callback in LiteLLM
+    # LiteLLM will automatically detect OpenTelemetry context set by LangFuseTracer
+    # and create properly nested spans in Langfuse
     try:
         import litellm  # type: ignore[import-not-found]
-        litellm.success_callback = ["langfuse"]
-        logger.info("Langfuse tracing enabled for LiteLLM")
+
+        # Use langfuse_otel callback for Langfuse SDK v3+ compatibility
+        # This uses OpenTelemetry integration and avoids the sdk_integration parameter issue
+        if "langfuse_otel" not in litellm.callbacks:
+            litellm.callbacks.append("langfuse_otel")
+
+        _litellm_tracing_enabled = True
+        logger.info("Langfuse tracing enabled for LiteLLM (langfuse_otel callback)")
     except Exception as e:
         logger.warning(f"Failed to enable Langfuse tracing: {e}")
 
@@ -142,6 +172,7 @@ class LLMClient:
     def __init__(
         self,
         model: str,
+        enable_tracing: bool = True,
         **default_params: Any
     ):
         """Initialize LLMClient.
@@ -150,16 +181,23 @@ class LLMClient:
             model: Model identifier (e.g., "gpt-4o-mini", "claude-3-5-sonnet-20241022").
                    This model is used as default for all completion() calls unless
                    overridden per call.
+            enable_tracing: If True, automatically setup Langfuse tracing (default: True).
+                          Requires LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY env vars.
+                          Set to False if you want to manually control tracing setup.
             **default_params: Default parameters for litellm.completion() (e.g.,
                              temperature, max_tokens)
 
         Raises:
             RuntimeError: If litellm is not installed
+            ValueError: If enable_tracing=True but Langfuse credentials are not found
 
         Example:
             ```python
-            # Create client with default model
+            # Create client with automatic tracing (default)
             client = LLMClient(model="gpt-4o-mini", temperature=0.7)
+
+            # Disable automatic tracing
+            client = LLMClient(model="gpt-4o-mini", enable_tracing=False)
 
             # Use default model
             client.completion([...])  # Uses gpt-4o-mini
@@ -167,9 +205,18 @@ class LLMClient:
             # Override model for specific call
             client.completion([...], model="gpt-4o")  # Uses gpt-4o
             ```
+
+        Note:
+            If enable_tracing=True (default), this will automatically call
+            setup_langfuse_for_litellm() to enable LiteLLM Langfuse callbacks.
         """
         if not LITELLM_AVAILABLE:
             raise RuntimeError("liteLLM is not installed. Install with: pip install litellm")
+
+        # Setup tracing if enabled (idempotent - safe to call multiple times)
+        if enable_tracing:
+            setup_langfuse_for_litellm()
+
         self.model = model
         self.default_params = default_params
 
