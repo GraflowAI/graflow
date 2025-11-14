@@ -48,6 +48,7 @@ extras = [
     "google-adk>=1.17.0",
     "opentelemetry-sdk>=1.37.0",
     "langfuse>=3.8.1",
+    "openinference-instrumentation-google-adk>=0.1.0",
 ]
 
 [build-system]

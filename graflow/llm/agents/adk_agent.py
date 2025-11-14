@@ -20,7 +20,69 @@ try:
 except ImportError:
     ADK_AVAILABLE = False
 
+# OpenInference instrumentation for ADK tracing
+try:
+    from openinference.instrumentation.google_adk import GoogleADKInstrumentor  # type: ignore[import-not-found]
+    OPENINFERENCE_AVAILABLE = True
+except ImportError:
+    OPENINFERENCE_AVAILABLE = False
+    GoogleADKInstrumentor = None  # type: ignore[misc,assignment]
+
 logger = logging.getLogger(__name__)
+
+# Global flag to track if instrumentation has been set up
+_adk_instrumented = False
+
+
+def setup_adk_tracing() -> None:
+    """Setup OpenInference instrumentation for Google ADK.
+
+    This enables automatic tracing of ADK agent calls to Langfuse via OpenTelemetry.
+    Should be called once at application startup.
+
+    Requires:
+        - openinference-instrumentation-google-adk package
+        - Langfuse tracing configured (LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY)
+        - LangFuseTracer active in workflow
+
+    Example:
+        ```python
+        from graflow.llm.agents.adk_agent import setup_adk_tracing
+
+        # Setup once at startup
+        setup_adk_tracing()
+
+        # Then use ADK agents in workflow
+        from google.adk.agents import LlmAgent
+        adk_agent = LlmAgent(name="assistant", model="gemini-2.0-flash-exp")
+        agent = AdkLLMAgent(adk_agent, app_name=context.session_id)
+        ```
+
+    Note:
+        - This function is idempotent (safe to call multiple times)
+        - Instrumentation is global and affects all ADK agents
+        - ADK traces will automatically nest under LangFuseTracer spans
+    """
+    global _adk_instrumented
+
+    if _adk_instrumented:
+        logger.debug("Google ADK instrumentation already set up")
+        return
+
+    if not OPENINFERENCE_AVAILABLE:
+        logger.warning(
+            "OpenInference instrumentation not available. "
+            "Install with: pip install openinference-instrumentation-google-adk"
+        )
+        return
+
+    try:
+        if GoogleADKInstrumentor is not None:
+            GoogleADKInstrumentor().instrument()  # type: ignore[misc]
+            _adk_instrumented = True
+            logger.info("Google ADK instrumentation enabled for tracing")
+    except Exception as e:
+        logger.warning(f"Failed to instrument Google ADK: {e}")
 
 class AdkLLMAgent(LLMAgent):
     """Wrapper for Google ADK LlmAgent.
@@ -75,6 +137,7 @@ class AdkLLMAgent(LLMAgent):
         adk_agent: LlmAgent,
         app_name: str,
         session_service: Optional[InMemorySessionService] = None,
+        enable_tracing: bool = True,
     ):
         """Initialize AdkLLMAgent.
 
@@ -83,6 +146,8 @@ class AdkLLMAgent(LLMAgent):
             app_name: Application name for Runner (typically workflow session_id).
                      This should be set to the workflow's session_id for proper identification.
             session_service: Session service (defaults to InMemorySessionService)
+            enable_tracing: If True, automatically setup ADK tracing (default: True).
+                          Set to False if you want to manually control instrumentation.
 
         Raises:
             RuntimeError: If Google ADK is not installed
@@ -103,6 +168,10 @@ class AdkLLMAgent(LLMAgent):
             # Register agent
             context.register_llm_agent("supervisor", agent)
             ```
+
+        Note:
+            If enable_tracing=True (default), this will automatically call
+            setup_adk_tracing() to enable OpenInference instrumentation.
         """
         if not ADK_AVAILABLE:
             raise RuntimeError(
@@ -114,6 +183,10 @@ class AdkLLMAgent(LLMAgent):
             raise TypeError(
                 f"adk_agent must be a LlmAgent instance, got {type(adk_agent)}"
             )
+
+        # Setup tracing if enabled (idempotent - safe to call multiple times)
+        if enable_tracing:
+            setup_adk_tracing()
 
         self._adk_agent: LlmAgent = adk_agent
         self._app_name = app_name
