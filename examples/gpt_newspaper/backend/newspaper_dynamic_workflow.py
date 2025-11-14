@@ -66,11 +66,8 @@ def create_article_workflow(query: str, article_id: str, output_dir: str, tracer
         Workflow context
     """
 
-    # Initialize agents
+    # Initialize non-LLM agents
     search_agent = SearchAgent()
-    curator_agent = CuratorAgent()
-    writer_agent = WriterAgent()
-    critique_agent = CritiqueAgent()
     designer_agent = DesignerAgent(output_dir)
 
     with workflow(f"article_{article_id}", tracer=tracer) as wf:
@@ -196,6 +193,9 @@ def create_article_workflow(query: str, article_id: str, output_dir: str, tracer
             image = channel.get("image") or DEFAULT_IMAGE_URL
             article_data = {"query": query, "sources": aggregated_sources, "image": image}
             print(f"[{article_id}] 📋 Curating {len(aggregated_sources)} raw sources...")
+
+            # Initialize curator agent with LLM client from context
+            curator_agent = CuratorAgent(context.llm_client)
             result = curator_agent.run(article_data)
             result.setdefault("image", image)
 
@@ -244,6 +244,9 @@ def create_article_workflow(query: str, article_id: str, output_dir: str, tracer
 
             payload = {**article, "style": style, "tone": tone}
             print(f"[{article_id}] ✍️  Writing {style} draft...")
+
+            # Initialize writer agent with LLM client from context
+            writer_agent = WriterAgent(context.llm_client)
             draft = writer_agent.run(payload)
             draft["style"] = style
             _store_draft(channel, style, draft)
@@ -319,6 +322,8 @@ def create_article_workflow(query: str, article_id: str, output_dir: str, tracer
             else:
                 print(f"\n[{article_id}] ✍️  Refining primary draft...")
 
+            # Initialize writer agent with LLM client from context
+            writer_agent = WriterAgent(context.llm_client)
             result = writer_agent.run(article)
             print(f"[{article_id}] ✅ Article: {result.get('title', 'Untitled')}")
 
@@ -338,6 +343,8 @@ def create_article_workflow(query: str, article_id: str, output_dir: str, tracer
             article["image"] = image
             iteration = channel.get("iteration", default=0)
 
+            # Initialize critique agent with LLM client from context
+            critique_agent = CritiqueAgent(context.llm_client)
             result = critique_agent.run(article)
 
             channel.set("article", result)
@@ -546,6 +553,9 @@ def run_newspaper_workflow(
 def main():
     """Run the newspaper workflow with example queries."""
 
+    # Note: Langfuse tracing is automatically enabled when LLMClient is initialized.
+    # To disable automatic tracing, pass enable_tracing=False to LLMClient constructor.
+
     # Check for required environment variables
     if not os.getenv("TAVILY_API_KEY"):
         print("❌ Error: TAVILY_API_KEY environment variable is required")
@@ -578,31 +588,39 @@ if __name__ == "__main__":
 # Key Graflow Patterns Demonstrated:
 # ============================================================================
 #
-# 1. **Declarative Task Graph**
-#    - All tasks defined upfront with @task decorator
-#    - Clean task chain: search >> curate >> write >> critique >> design
-#    - Each task is focused and independent
-#    - No dynamic TaskWrapper creation needed
+# 1. **Runtime Dynamic Task Creation**
+#    - context.next_task() for fan-out search tasks per angle
+#    - context.next_task() for supplemental research gap filling
+#    - context.next_iteration() for async coordination
+#    - Dynamic TaskWrapper creation at runtime
 #
-# 2. **Loop-Back Pattern with goto=True**
+# 2. **Parallel Task Groups with Policies**
+#    - Writer personas (feature/brief/data_digest) with BestEffortGroupPolicy
+#    - Quality gates (fact/compliance/risk) with AtLeastNGroupPolicy(min_success=2)
+#    - CoordinationBackend.THREADING for parallel execution
+#
+# 3. **Loop-Back Pattern with goto=True**
 #    - Critique uses goto=True to jump back to existing write_task
-#    - When critique approves, natural graph flow continues to design_task
-#    - Flow: write >> critique >> (goto write) >> critique >> design
-#    - Pattern from examples/07_dynamic_tasks/runtime_dynamic_tasks.py
+#    - When critique approves, natural graph flow continues to quality_gate
+#    - Flow: write >> critique >> (goto write) >> critique >> quality_gate
 #
-# 3. **Channel-Based State Management**
+# 4. **Channel-Based State Management**
 #    - Article state persists across task iterations via channels
+#    - Search results aggregation across dynamic tasks
+#    - Draft selection from multiple writer personas
 #    - Iteration counter tracked in channel for safety limits
-#    - Write task reads from channel when called via goto
 #
-# 4. **Parallel Execution with ThreadPoolExecutor**
-#    - Multiple article workflows execute concurrently
-#    - Each workflow has isolated channel state
-#    - Similar to original gpt-newspaper LangGraph implementation
+# 5. **Multi-Stage Workflow**
+#    - Topic profiling → Research fan-out → Curation with gap filling
+#    - Multiple writer personas → Draft selection → Refinement loop
+#    - Quality gate checks → Design and publishing
 #
-# 5. **Safety Limits**
-#    - Max 5 write-critique iterations to prevent infinite loops
-#    - Configurable via max_steps parameter (default: 30)
+# 6. **LLM Integration with Graflow**
+#    - Uses context.llm_client accessor for tasks with inject_context=True
+#    - Shared LLMClient instance across all tasks in workflow
+#    - Automatic LiteLLM integration with Langfuse tracing
+#    - Agents (WriterAgent, CuratorAgent, CritiqueAgent) accept LLMClient via DI
+#    - Pattern from docs/llm_integration_design.md and examples/12_llm_integration/
 #
 # ============================================================================
 # Real-World Use Cases:

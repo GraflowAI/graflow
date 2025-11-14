@@ -2,9 +2,15 @@
 
 # Core dependencies
 tavily-python>=0.3.0
-litellm>=1.0.0
+litellm>=1.72.6  # 1.72.6+ required for langfuse_otel callback
 python-dotenv>=1.0.0
+
+# LLM Observability (Langfuse + OpenTelemetry for context propagation)
+# Note: langfuse 3.8.1+ required for OpenTelemetry-based integration
 langfuse>=3.8.1
+opentelemetry-api>=1.37.0
+opentelemetry-sdk>=1.37.0
+opentelemetry-exporter-otlp>=1.37.0  # Required for langfuse_otel callback
 
 # Web API dependencies
 fastapi>=0.115.0

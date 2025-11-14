@@ -3,19 +3,21 @@
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from config import Config
-from utils.litellm import LiteLLMClient, make_message
+from graflow.llm.client import LLMClient, make_message
 
 
 class CritiqueAgent:
     """Agent that provides critique feedback on written articles."""
 
-    def __init__(self, model: str | None = None, *, client_params: Dict[str, Any] | None = None):
-        self.model = model or Config.DEFAULT_MODEL
-        params = dict(Config.DEFAULT_MODEL_PARAMS)
-        if client_params:
-            params.update(client_params)
-        self.client = LiteLLMClient(self.model, **params)
+    def __init__(self, llm_client: LLMClient, model: Optional[str] = None):
+        """Initialize CritiqueAgent with injected LLMClient.
+
+        Args:
+            llm_client: Injected LLMClient instance
+            model: Optional model override for this agent's completions
+        """
+        self.client = llm_client
+        self.model = model  # Optional model override
 
     def critique_article(self, article: Dict) -> Optional[str]:
         """
@@ -41,14 +43,15 @@ If you noticed the field 'message' in the article, it means the writer has revis
 Please return a string of your critique or the word "None".
 """
 
-        feedback = self.client.chat_text(
-            [
+        feedback = self.client.completion_text(
+            messages=[
                 make_message(
                     "system",
                     "You are a newspaper writing critique. Your sole purpose is to provide short feedback on a written article so the writer will know what to fix.",
                 ),
                 make_message("user", prompt),
-            ]
+            ],
+            model=self.model,
         ).strip()
 
         if feedback.lower() == "none" or not feedback:

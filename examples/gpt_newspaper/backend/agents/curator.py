@@ -2,21 +2,23 @@
 
 import json
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
-from config import Config
-from utils.litellm import LiteLLMClient, make_message
+from graflow.llm.client import LLMClient, make_message
 
 
 class CuratorAgent:
     """Agent that curates the most relevant sources for an article."""
 
-    def __init__(self, model: str | None = None, *, client_params: Dict[str, Any] | None = None):
-        self.model = model or Config.DEFAULT_MODEL
-        params = dict(Config.DEFAULT_MODEL_PARAMS)
-        if client_params:
-            params.update(client_params)
-        self.client = LiteLLMClient(self.model, **params)
+    def __init__(self, llm_client: LLMClient, model: Optional[str] = None):
+        """Initialize CuratorAgent with injected LLMClient.
+
+        Args:
+            llm_client: Injected LLMClient instance
+            model: Optional model override for this agent's completions
+        """
+        self.client = llm_client
+        self.model = model  # Optional model override
 
     def curate_sources(self, query: str, sources: List[Dict]) -> List[Dict]:
         """
@@ -41,14 +43,15 @@ Here is a list of articles:
 Please return nothing but a list of the URLs as a JSON array: ["url1", "url2", "url3", "url4", "url5"]
 """
 
-        response_text = self.client.chat_text(
-            [
+        response_text = self.client.completion_text(
+            messages=[
                 make_message(
                     "system",
                     "You are a personal newspaper editor. Your sole purpose is to choose 5 most relevant articles for me to read from a list of articles.",
                 ),
                 make_message("user", prompt),
-            ]
+            ],
+            model=self.model,
         )
 
         try:

@@ -282,7 +282,7 @@ def _ensure_generation_ready() -> None:
         raise HTTPException(
             status_code=500,
             detail="LLM credentials not configured. Provide OPENAI_API_KEY or set "
-            "GPT_NEWSPAPER_MODEL_PARAMS with connection details.",
+            "GRAFLOW_MODEL_PARAMS with connection details.",
         )
 
 

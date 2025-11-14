@@ -60,11 +60,8 @@ def create_article_workflow(query: str, article_id: str, output_dir: str, tracer
         Workflow context
     """
 
-    # Initialize agents
+    # Initialize non-LLM agents
     search_agent = SearchAgent()
-    curator_agent = CuratorAgent()
-    writer_agent = WriterAgent()
-    critique_agent = CritiqueAgent()
     designer_agent = DesignerAgent(output_dir)
 
     with workflow(f"article_{article_id}", tracer=tracer) as wf:
@@ -86,6 +83,8 @@ def create_article_workflow(query: str, article_id: str, output_dir: str, tracer
             if article_data is None:
                 raise ValueError(f"Search results missing for {article_id}, cannot curate.")
 
+            # Initialize curator agent with LLM client from context
+            curator_agent = CuratorAgent(context.llm_client)
             result = curator_agent.run(article_data)
             channel = context.get_channel()
             channel.set("article", result)
@@ -113,6 +112,8 @@ def create_article_workflow(query: str, article_id: str, output_dir: str, tracer
             else:
                 print(f"\n[{article_id}] ✍️  Writing article...")
 
+            # Initialize writer agent with LLM client from context
+            writer_agent = WriterAgent(context.llm_client)
             result = writer_agent.run(article)
             print(f"[{article_id}] ✅ Article: {result.get('title', 'Untitled')}")
 
@@ -143,6 +144,8 @@ def create_article_workflow(query: str, article_id: str, output_dir: str, tracer
 
             iteration = channel.get("iteration", default=0)
 
+            # Initialize critique agent with LLM client from context
+            critique_agent = CritiqueAgent(context.llm_client)
             result = critique_agent.run(article)
 
             channel.set("article", result)
@@ -311,6 +314,9 @@ def run_newspaper_workflow(
 def main():
     """Run the newspaper workflow with example queries."""
 
+    # Note: Langfuse tracing is automatically enabled when LLMClient is initialized.
+    # To disable automatic tracing, pass enable_tracing=False to LLMClient constructor.
+
     # Check for required environment variables
     if not os.getenv("TAVILY_API_KEY"):
         print("❌ Error: TAVILY_API_KEY environment variable is required")
@@ -368,6 +374,13 @@ if __name__ == "__main__":
 # 5. **Safety Limits**
 #    - Max 5 write-critique iterations to prevent infinite loops
 #    - Configurable via max_steps parameter (default: 30)
+#
+# 6. **LLM Integration with Graflow**
+#    - Uses context.llm_client accessor for tasks with inject_context=True
+#    - Shared LLMClient instance across all tasks in workflow
+#    - Automatic LiteLLM integration with Langfuse tracing
+#    - Agents (WriterAgent, CuratorAgent, CritiqueAgent) accept LLMClient via DI
+#    - Pattern from docs/llm_integration_design.md and examples/12_llm_integration/
 #
 # ============================================================================
 # Real-World Use Cases:

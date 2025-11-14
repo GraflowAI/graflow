@@ -1,5 +1,7 @@
 # GPT Newspaper - Graflow Workflow Examples
 
+> **📊 LangFuse Tracing**: For setup and troubleshooting, see [LANGFUSE_SETUP.md](LANGFUSE_SETUP.md)
+
 ## Overview
 
 This directory contains two versions of an **AI-powered newspaper article generation system**, designed to help you progressively understand Graflow's dynamic task generation capabilities.
