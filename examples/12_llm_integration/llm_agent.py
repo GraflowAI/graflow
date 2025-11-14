@@ -18,6 +18,7 @@ Concepts Covered:
 3. Google ADK LlmAgent for ReAct/Supervisor patterns
 4. Tool definition for agents
 5. Agent-based reasoning within tasks
+6. Two patterns: passing LlmAgent (simple) or App (advanced)
 
 Expected Output:
 ----------------
@@ -80,6 +81,7 @@ def main():
     with workflow("llm_agent") as ctx:
         # Register the agent so it is available when the workflow executes.
         # Use a factory to access the ExecutionContext (for session_id/app_name).
+        # Note: ADK may emit "app name mismatch" warnings (harmless, can be ignored).
         def create_research_agent(exec_context: ExecutionContext) -> LLMAgent:
             """Create Google ADK agent and wrap it for Graflow."""
             print("Registering research agent with tools...")
@@ -90,7 +92,14 @@ def main():
                     tools=[get_current_time, calculate]
                 )
 
+                # Pattern 1: Pass LlmAgent with app_name (simpler, backward compatible)
                 agent = AdkLLMAgent(adk_agent, app_name=exec_context.session_id)
+
+                # Pattern 2: Create App and pass it (recommended, more control)
+                # from google.adk.apps import App
+                # app = App(name=exec_context.session_id, root_agent=adk_agent)
+                # agent = AdkLLMAgent(app)
+
                 print("✅ Agent registered successfully\n")
                 return agent
             except ImportError:
@@ -145,6 +154,7 @@ if __name__ == "__main__":
 # 1. **LLMAgent Injection**
 #    # Register agent before execution (optional factory)
 #    def create_agent(exec_context):
+#        # Use session_id for proper workflow identification
 #        return AdkLLMAgent(..., app_name=exec_context.session_id)
 #
 #    ctx.register_llm_agent("agent_name", create_agent)
@@ -155,14 +165,19 @@ if __name__ == "__main__":
 #        result = llm_agent.send_message("...")
 #
 # 2. **Google ADK Integration**
-#    from google_adk.types import LlmAgent
+#    from google.adk.agents import LlmAgent
+#    from google.adk.apps import App
 #    from graflow.llm.agents.adk_agent import AdkLLMAgent
 #
 #    # Create ADK agent with tools
 #    adk_agent = LlmAgent(name="my_agent", model="gemini-2.0-flash-exp", tools=[...])
 #
-#    # Wrap for Graflow
+#    # Pattern 1: Pass LlmAgent with app_name (simpler)
 #    agent = AdkLLMAgent(adk_agent, app_name=exec_context.session_id)
+#
+#    # Pattern 2: Create and pass App (recommended, more control)
+#    app = App(name=exec_context.session_id, root_agent=adk_agent)
+#    agent = AdkLLMAgent(app)
 #
 # 3. **Tool Definition**
 #    def my_tool(param: str) -> str:

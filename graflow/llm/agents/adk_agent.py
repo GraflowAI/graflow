@@ -2,20 +2,23 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
-from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional, Union
 
 from .base import LLMAgent
 
 if TYPE_CHECKING:
     from google.adk.agents import LlmAgent
+    from google.adk.apps import App
     from google.adk.runners import Runner as AdkRunner
     from google.adk.sessions import InMemorySessionService
     from google.genai import types as genai_types
 
 try:
     from google.adk.agents import LlmAgent
+    from google.adk.apps import App
     from google.adk.runners import Runner as AdkRunner
     from google.adk.sessions import InMemorySessionService
     from google.genai import types as genai_types
@@ -133,48 +136,74 @@ class AdkLLMAgent(LLMAgent):
         When enable_tracing=True in LLMConfig and LangFuseTracer is active,
         ADK will automatically detect OpenTelemetry context and create nested
         spans in Langfuse.
+
+        This wrapper uses ADK's recommended App pattern internally. However,
+        ADK may still emit app_name mismatch warnings when importing LlmAgent
+        from google.adk.agents, as it infers app_name from the import path.
+        These warnings are harmless and can be safely ignored. Using session_id
+        as app_name (rather than the hardcoded "agents") provides proper workflow
+        identification and tracing.
     """
 
     def __init__(
         self,
-        adk_agent: LlmAgent,
-        app_name: str,
+        adk_agent_or_app: Union[LlmAgent, App],
+        app_name: Optional[str] = None,
         session_service: Optional[InMemorySessionService] = None,
         enable_tracing: bool = True,
+        user_id: str = "graflow-user",
     ):
         """Initialize AdkLLMAgent.
 
         Args:
-            adk_agent: Google ADK LlmAgent instance
-            app_name: Application name for Runner (typically workflow session_id).
-                     This should be set to the workflow's session_id for proper identification.
+            adk_agent_or_app: Either a Google ADK LlmAgent or App instance.
+                             If App is provided (recommended), app_name is ignored.
+                             If LlmAgent is provided, app_name must be specified.
+            app_name: Application name for Runner (required if adk_agent_or_app is LlmAgent).
+                     Typically set to workflow session_id for proper identification.
+                     Ignored if App is provided (uses App's name instead).
             session_service: Session service (defaults to InMemorySessionService)
             enable_tracing: If True, automatically setup ADK tracing (default: True).
                           Set to False if you want to manually control instrumentation.
+            user_id: Default user ID for ADK agent execution (defaults to "graflow-user")
 
         Raises:
             RuntimeError: If Google ADK is not installed
-            TypeError: If adk_agent is not a LlmAgent instance
+            TypeError: If adk_agent_or_app is not a LlmAgent or App instance
+            ValueError: If LlmAgent is provided without app_name
 
-        Example:
+        Examples:
+            **Pattern 1: Using LlmAgent (simpler, backward compatible)**
             ```python
             from graflow.core.context import ExecutionContext
             from google.adk.agents import LlmAgent
 
-            # Create context to get session_id
             context = ExecutionContext.create(...)
-
-            # Create agent with session_id as app_name
             adk_agent = LlmAgent(name="supervisor", model="gemini-2.0-flash-exp")
             agent = AdkLLMAgent(adk_agent, app_name=context.session_id)
-
-            # Register agent
             context.register_llm_agent("supervisor", agent)
             ```
 
         Note:
             If enable_tracing=True (default), this will automatically call
             setup_adk_tracing() to enable OpenInference instrumentation.
+            **Pattern 2: Using App (recommended, more control)**
+            ```python
+            from graflow.core.context import ExecutionContext
+            from google.adk.agents import LlmAgent
+            from google.adk.apps import App
+
+            context = ExecutionContext.create(...)
+            adk_agent = LlmAgent(name="supervisor", model="gemini-2.0-flash-exp")
+            app = App(name=context.session_id, root_agent=adk_agent)
+            agent = AdkLLMAgent(app, user_id="custom-user")
+            context.register_llm_agent("supervisor", agent)
+            ```
+
+        Note:
+            When passing LlmAgent, an App instance is created internally. Passing App
+            directly gives you more control over ADK configuration (plugins, caching, etc.)
+            and is ADK's recommended pattern.
         """
         if not ADK_AVAILABLE:
             raise RuntimeError(
@@ -182,17 +211,34 @@ class AdkLLMAgent(LLMAgent):
                 "Install with: pip install google-adk"
             )
 
-        if not isinstance(adk_agent, LlmAgent):
+        # Handle both App and LlmAgent inputs
+        if isinstance(adk_agent_or_app, App):
+            # Pattern 1: User provided App directly (recommended)
+            self._app: App = adk_agent_or_app
+            self._adk_agent: LlmAgent = adk_agent_or_app.root_agent  # type: ignore
+            self._app_name = adk_agent_or_app.name
+        elif isinstance(adk_agent_or_app, LlmAgent):
+            # Pattern 2: User provided LlmAgent (create App internally)
+            if app_name is None:
+                raise ValueError(
+                    "app_name is required when providing LlmAgent. "
+                    "Pass an App instance instead to use App's name."
+                )
+            self._adk_agent = adk_agent_or_app
+            self._app_name = app_name
+            # Create App instance internally
+            self._app = App(  # type: ignore
+                name=self._app_name,
+                root_agent=adk_agent_or_app
+            )
+        else:
             raise TypeError(
-                f"adk_agent must be a LlmAgent instance, got {type(adk_agent)}"
+                f"Expected LlmAgent or App instance, got {type(adk_agent_or_app)}"
             )
 
         # Setup tracing if enabled (idempotent - safe to call multiple times)
         if enable_tracing:
             setup_adk_tracing()
-
-        self._adk_agent: LlmAgent = adk_agent
-        self._app_name = app_name
 
         # Create session service if not provided
         if session_service is None:
@@ -201,15 +247,14 @@ class AdkLLMAgent(LLMAgent):
         # Store session service for future use
         self._session_service = session_service
 
-        # Create Runner with app_name
+        # Create Runner with App
         self._runner: AdkRunner = AdkRunner(  # type: ignore
-            agent=adk_agent,
-            app_name=self._app_name,
+            app=self._app,
             session_service=session_service
         )
 
-        # Default user for ADK execution
-        self._default_user_id = "graflow-user"
+        # Store user_id for ADK execution
+        self._user_id = user_id
 
     def run(
         self,
@@ -222,7 +267,7 @@ class AdkLLMAgent(LLMAgent):
 
         Args:
             input_text: Input query/prompt for the agent
-            user_id: User ID for ADK session (defaults to "graflow-user")
+            user_id: User ID for ADK session (defaults to user_id set in __init__)
             session_id: Session ID for ADK conversation history (defaults to generated UUID)
             **kwargs: Additional parameters forwarded to Runner.run()
 
@@ -246,11 +291,9 @@ class AdkLLMAgent(LLMAgent):
             separate from the app_name (set in __init__ from workflow trace_id).
         """
         try:
-            import asyncio
-
             # Set defaults
             if user_id is None:
-                user_id = self._default_user_id
+                user_id = self._user_id
             if session_id is None:
                 # Generate a new session ID for this execution
                 session_id = str(uuid.uuid4())
@@ -313,7 +356,7 @@ class AdkLLMAgent(LLMAgent):
             input_text: Input query/prompt for the agent
             **kwargs: Additional parameters forwarded to Runner.run_async()
                      Common parameters:
-                     - user_id: User identifier (defaults to "graflow-user")
+                     - user_id: User identifier (defaults to user_id set in __init__)
                      - session_id: Session identifier for conversation history
                      - invocation_id: Optional invocation identifier
                      - state_delta: Optional state changes
@@ -342,7 +385,7 @@ class AdkLLMAgent(LLMAgent):
             session_id = kwargs.pop("session_id", None)
 
             if user_id is None:
-                user_id = self._default_user_id
+                user_id = self._user_id
             if session_id is None:
                 session_id = str(uuid.uuid4())
 

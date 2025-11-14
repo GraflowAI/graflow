@@ -138,12 +138,19 @@ def my_tool(param: str) -> str:
     """Tool description."""
     return result
 
-# Create and register agent
-from google_adk.types import LlmAgent
+# Create and register agent (two patterns)
+from google.adk.agents import LlmAgent
+from google.adk.apps import App
 from graflow.llm.agents.adk_agent import AdkLLMAgent
 
+# Pattern 1: Pass LlmAgent with app_name (simpler)
 adk_agent = LlmAgent(name="assistant", model="gemini-2.0-flash-exp", tools=[my_tool])
 agent = AdkLLMAgent(adk_agent, app_name=exec_context.session_id)
+
+# Pattern 2: Create and pass App (recommended, more control)
+app = App(name=exec_context.session_id, root_agent=adk_agent)
+agent = AdkLLMAgent(app)  # Optional: user_id="custom-user"
+
 exec_context.register_llm_agent("assistant", agent)
 
 # Use in task
@@ -230,7 +237,8 @@ def smart_task(llm_client):
 
 ### Step 3: Add an Agent
 ```python
-from google_adk.types import LlmAgent
+from google.adk.agents import LlmAgent
+from google.adk.apps import App
 from graflow.llm.agents.adk_agent import AdkLLMAgent
 
 def my_tool(input: str) -> str:
@@ -240,7 +248,13 @@ def my_tool(input: str) -> str:
 with workflow("agent_workflow") as ctx:
     def create_agent(exec_context):
         adk_agent = LlmAgent(name="assistant", model="gemini-2.0-flash-exp", tools=[my_tool])
+
+        # Pattern 1: Pass LlmAgent with app_name
         return AdkLLMAgent(adk_agent, app_name=exec_context.session_id)
+
+        # Pattern 2: Create and pass App (recommended)
+        # app = App(name=exec_context.session_id, root_agent=adk_agent)
+        # return AdkLLMAgent(app)
 
     ctx.register_llm_agent("assistant", create_agent)
 
@@ -338,6 +352,9 @@ uv add google-adk
 
 ### Issue: Agent tools not working
 **Solution**: Ensure tools have proper docstrings with Args/Returns sections. Google ADK uses these for tool descriptions.
+
+### Issue: "App name mismatch detected" warning
+**Solution**: This warning is harmless and can be safely ignored. It occurs because ADK infers app_name from the import path (`google.adk.agents` → "agents"), while Graflow uses session_id for proper workflow identification. The warning doesn't affect functionality.
 
 ## Next Steps
 
