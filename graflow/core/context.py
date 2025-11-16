@@ -154,6 +154,10 @@ class TaskExecutionContext:
         """
         return self.execution_context.get_llm_agent(name)
 
+    def register_llm_agent(self, name: str, agent: LLMAgent) -> None:
+        """Register an LLMAgent via the underlying execution context."""
+        self.execution_context.register_llm_agent(name, agent)
+
     def set_local_data(self, key: str, value: Any) -> None:
         """Set task-local data."""
         self.local_data[key] = value
