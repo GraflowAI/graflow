@@ -16,6 +16,8 @@ if TYPE_CHECKING:
     from google.adk.sessions import InMemorySessionService
     from google.genai import types as genai_types
 
+logger = logging.getLogger(__name__)
+
 try:
     from google.adk.agents import LlmAgent
     from google.adk.apps import App
@@ -23,18 +25,18 @@ try:
     from google.adk.sessions import InMemorySessionService
     from google.genai import types as genai_types
     ADK_AVAILABLE = True
-except ImportError:
+except ImportError as e:
+    logger.warning("Google ADK is not installed. AdkLLMAgent will not be available.", exc_info=e)
     ADK_AVAILABLE = False
 
 # OpenInference instrumentation for ADK tracing
 try:
     from openinference.instrumentation.google_adk import GoogleADKInstrumentor  # type: ignore[import-not-found]
     OPENINFERENCE_AVAILABLE = True
-except ImportError:
+except ImportError as e:
+    logger.warning("OpenInference instrumentation for Google ADK is not available.", exc_info=e)
     OPENINFERENCE_AVAILABLE = False
     GoogleADKInstrumentor = None  # type: ignore[misc,assignment]
-
-logger = logging.getLogger(__name__)
 
 # Global flag to track if instrumentation has been set up
 _adk_instrumented = False
