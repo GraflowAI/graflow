@@ -75,19 +75,12 @@ def setup_langfuse_for_litellm() -> None:
     # Get credentials from environment
     public_key = os.getenv("LANGFUSE_PUBLIC_KEY")
     secret_key = os.getenv("LANGFUSE_SECRET_KEY")
-    host = os.getenv("LANGFUSE_HOST")
 
     if not public_key or not secret_key:
         raise ValueError(
             "Langfuse credentials not found. "
             "Set LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY environment variables."
         )
-
-    # Set environment variables for LiteLLM Langfuse callback
-    os.environ["LANGFUSE_PUBLIC_KEY"] = public_key
-    os.environ["LANGFUSE_SECRET_KEY"] = secret_key
-    if host:
-        os.environ["LANGFUSE_HOST"] = host
 
     # Enable Langfuse callback in LiteLLM
     # LiteLLM will automatically detect OpenTelemetry context set by LangFuseTracer
