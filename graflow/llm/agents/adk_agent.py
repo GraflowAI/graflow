@@ -7,6 +7,8 @@ import logging
 import uuid
 from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional, Union
 
+from opentelemetry import trace
+
 from .base import LLMAgent
 
 if TYPE_CHECKING:
@@ -83,6 +85,22 @@ def setup_adk_tracing() -> None:
             "Install with: pip install openinference-instrumentation-google-adk"
         )
         return
+
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+
+    # Create or get existing tracer provider
+    tracer_provider = trace.get_tracer_provider()
+    if not isinstance(tracer_provider, TracerProvider):
+        tracer_provider = TracerProvider()
+        trace.set_tracer_provider(tracer_provider)
+
+    # Add OTLP span processor
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    otlp_exporter = OTLPSpanExporter()  # Uses env vars for endpoint/headers
+    span_processor = SimpleSpanProcessor(otlp_exporter)
+    tracer_provider.add_span_processor(span_processor)
 
     try:
         if GoogleADKInstrumentor is not None:
@@ -298,7 +316,12 @@ class AdkLLMAgent(LLMAgent):
                 user_id = self._user_id
             if session_id is None:
                 # Generate a new session ID for this execution
-                session_id = str(uuid.uuid4())
+                span = trace.get_current_span()
+                if span:
+                    from openinference.instrumentation.helpers import get_trace_id
+                    session_id = get_trace_id(span)
+                else:
+                    session_id = str(uuid.uuid4())
 
             # Create session in session service (async in ADK 1.0+)
             # Use asyncio.run() to execute async session creation synchronously
@@ -389,7 +412,12 @@ class AdkLLMAgent(LLMAgent):
             if user_id is None:
                 user_id = self._user_id
             if session_id is None:
-                session_id = str(uuid.uuid4())
+                span = trace.get_current_span()
+                if span:
+                    from openinference.instrumentation.helpers import get_trace_id
+                    session_id = get_trace_id(span)
+                else:
+                    session_id = str(uuid.uuid4())
 
             # Create Content for ADK
             content = genai_types.Content(  # type: ignore
