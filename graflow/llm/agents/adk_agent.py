@@ -73,7 +73,7 @@ def setup_adk_tracing() -> None:
         - Instrumentation is global and affects all ADK agents
         - ADK traces will automatically nest under LangFuseTracer spans
     """
-    global _adk_instrumented
+    global _adk_instrumented  # noqa: PLW0603
 
     if _adk_instrumented:
         logger.debug("Google ADK instrumentation already set up")
@@ -85,22 +85,6 @@ def setup_adk_tracing() -> None:
             "Install with: pip install openinference-instrumentation-google-adk"
         )
         return
-
-    from opentelemetry import trace
-    from opentelemetry.sdk.trace import TracerProvider
-
-    # Create or get existing tracer provider
-    tracer_provider = trace.get_tracer_provider()
-    if not isinstance(tracer_provider, TracerProvider):
-        tracer_provider = TracerProvider()
-        trace.set_tracer_provider(tracer_provider)
-
-    # Add OTLP span processor
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-    otlp_exporter = OTLPSpanExporter()  # Uses env vars for endpoint/headers
-    span_processor = SimpleSpanProcessor(otlp_exporter)
-    tracer_provider.add_span_processor(span_processor)
 
     try:
         if GoogleADKInstrumentor is not None:
@@ -316,12 +300,7 @@ class AdkLLMAgent(LLMAgent):
                 user_id = self._user_id
             if session_id is None:
                 # Generate a new session ID for this execution
-                span = trace.get_current_span()
-                if span:
-                    from openinference.instrumentation.helpers import get_trace_id
-                    session_id = get_trace_id(span)
-                else:
-                    session_id = str(uuid.uuid4())
+                session_id = str(uuid.uuid4())
 
             # Create session in session service (async in ADK 1.0+)
             # Use asyncio.run() to execute async session creation synchronously
@@ -341,11 +320,13 @@ class AdkLLMAgent(LLMAgent):
 
             # Run agent via Runner (synchronous)
             # Runner.run() returns an iterable of events
+            # Filter out trace_id from kwargs (it's set via app_name in __init__, not runtime)
+            runner_kwargs = {k: v for k, v in kwargs.items() if k != 'trace_id'}
             events = self._runner.run(
                 user_id=user_id,
                 session_id=session_id,
                 new_message=content,
-                **kwargs
+                **runner_kwargs
             )
 
             # Collect all events and extract final response
@@ -427,11 +408,13 @@ class AdkLLMAgent(LLMAgent):
 
             # Run agent via Runner (asynchronous)
             # Runner.run_async() returns an async generator of events
+            # Filter out trace_id from kwargs (it's set via app_name in __init__, not runtime)
+            runner_kwargs = {k: v for k, v in kwargs.items() if k != 'trace_id'}
             async for event in self._runner.run_async(
                 user_id=user_id,
                 session_id=session_id,
                 new_message=content,
-                **kwargs
+                **runner_kwargs
             ):
                 yield event
 
