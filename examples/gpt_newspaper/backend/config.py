@@ -43,6 +43,12 @@ class Config:
         os.getenv("GRAFLOW_MODEL_PARAMS")
     )
 
+    # Agent Model Configuration
+    # GPT_NEWSPAPER_MODEL: Model for agent workflows (supports both Gemini and LiteLLM models)
+    # - For AdkLLMAgent: Use LiteLLM-compatible models (e.g., "gpt-4o-mini", "claude-3-5-sonnet-20241022")
+    # - For LiteLLM-based simple tasks: Any LiteLLM-compatible model
+    AGENT_MODEL = os.getenv("GPT_NEWSPAPER_MODEL", "gpt-5-mini")
+
     # Workflow Configuration
     MAX_CRITIQUE_ITERATIONS = int(os.getenv("MAX_CRITIQUE_ITERATIONS", "5"))
     DEFAULT_LAYOUT = os.getenv("NEWSPAPER_LAYOUT", "layout_1.html")
@@ -80,6 +86,7 @@ class Config:
         print(f"LLM Model: {cls.DEFAULT_MODEL} (via GRAFLOW_LLM_MODEL)")
         if cls.DEFAULT_MODEL_PARAMS:
             print(f"LLM Params: {cls.DEFAULT_MODEL_PARAMS}")
+        print(f"Agent Model: {cls.AGENT_MODEL} (via GPT_NEWSPAPER_MODEL)")
         print(f"Layout: {cls.DEFAULT_LAYOUT}")
         print(f"Max Iterations: {cls.MAX_CRITIQUE_ITERATIONS}")
         print(f"Output Directory: {cls.OUTPUT_BASE_DIR}")

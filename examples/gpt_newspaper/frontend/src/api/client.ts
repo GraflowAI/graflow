@@ -49,6 +49,6 @@ export class GPTNewspaperClient {
 }
 
 export const supportedLayouts: LayoutOption[] = ["single", "two-column"];
-export const supportedWorkflows: WorkflowOption[] = ["original", "dynamic"];
+export const supportedWorkflows: WorkflowOption[] = ["original", "dynamic", "agent"];
 
 export const newspaperClient = new GPTNewspaperClient();

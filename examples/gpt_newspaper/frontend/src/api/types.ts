@@ -1,5 +1,5 @@
 export type LayoutOption = "single" | "two-column";
-export type WorkflowOption = "original" | "dynamic";
+export type WorkflowOption = "original" | "dynamic" | "agent";
 
 export interface NewspaperRequest {
   queries: string[];

@@ -1,7 +1,7 @@
 """Critique Agent - Provides feedback on articles"""
 
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Dict, Optional
 
 from graflow.llm.client import LLMClient, make_message
 

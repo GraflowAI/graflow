@@ -433,7 +433,7 @@ def create_article_workflow(query: str, article_id: str, output_dir: str, tracer
             return design_result
 
         # Build workflow graph with dynamic stages and guarded parallel groups
-        topic_intake_task >> search_router_task >> curate_task >> writer_personas >> select_draft_task >> write_task >> critique_task >> quality_gate >> quality_gate_summary_task >> design_task
+        topic_intake_task >> search_router_task >> curate_task >> writer_personas >> select_draft_task >> write_task >> critique_task >> quality_gate >> quality_gate_summary_task >> design_task # type: ignore
 
         return wf
 
