@@ -589,7 +589,7 @@ def create_article_workflow(query: str, article_id: str, output_dir: str, tracer
             """
             print(f"\n[{article_id}] 🔍 Research Agent starting (autonomous multi-search)...")
 
-            # Pass trace_id from execution context to preserve LangFuse trace nesting
+            # Note: trace_id is set during agent initialization (via app_name), not passed at runtime
             result = llm_agent.run(
                 f"Research this topic thoroughly: '{query}'\n\n"
                 f"Instructions:\n"
@@ -598,8 +598,7 @@ def create_article_workflow(query: str, article_id: str, output_dir: str, tracer
                 f"3. If you find gaps, use refine_search_query to create follow-up queries and search again\n"
                 f"4. Aim for 3-5 high-quality sources\n"
                 f"5. Provide a structured summary with key findings and sources\n\n"
-                f"Focus on: factual information, recent developments, expert perspectives, data/statistics.",
-                trace_id=context.execution_context.trace_id
+                f"Focus on: factual information, recent developments, expert perspectives, data/statistics."
             )
 
             # Extract agent output
@@ -805,8 +804,8 @@ def create_article_workflow(query: str, article_id: str, output_dir: str, tracer
             )
 
             # Agent performs editorial review with tools (per docs/llm_integration_design.md)
-            # Pass trace_id from execution context to preserve LangFuse trace nesting
-            result = llm_agent.run(agent_input, trace_id=context.execution_context.trace_id)
+            # Note: trace_id is set during agent initialization (via app_name), not passed at runtime
+            result = llm_agent.run(agent_input)
 
             raw_output = ""
             if isinstance(result, dict):
