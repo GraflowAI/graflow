@@ -54,6 +54,11 @@ class TaskExecutionContext:
         self.local_data: dict[str, Any] = {}
 
     @property
+    def trace_id(self) -> str:
+        """Get trace ID from execution context."""
+        return self.execution_context.trace_id
+
+    @property
     def session_id(self) -> str:
         """Get session ID from execution context."""
         return self.execution_context.session_id
