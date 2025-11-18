@@ -84,6 +84,7 @@ import json
 import logging
 import os
 import re
+import sys
 import time
 from typing import TYPE_CHECKING, Any, Dict, List
 
@@ -96,11 +97,24 @@ from graflow.core.workflow import workflow
 from graflow.llm.agents.base import LLMAgent as BaseLLMAgent
 from graflow.trace.langfuse import LangFuseTracer
 
+# Configure logging FIRST to capture all logs including imports
+# This must be done BEFORE any graflow imports
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    stream=sys.stdout
+)
+
+# Enable DEBUG for ADK agent logger to see trace propagation logs
+logging.getLogger("graflow.llm.agents.adk_agent").setLevel(logging.DEBUG)
+
+# Set workflow logger level
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)  # Keep workflow logs at INFO to avoid clutter
+
 if TYPE_CHECKING:
     import textstat  # type: ignore
     from tavily import TavilyClient  # type: ignore
-
-logger = logging.getLogger(__name__)
 
 # Check for optional dependencies availability
 try:
@@ -123,7 +137,14 @@ try:
 
     import graflow.llm.agents.adk_agent
     import graflow.llm.agents.base  # noqa: F401
+    from graflow.llm.agents.adk_agent import setup_adk_tracing
+
     ADK_AVAILABLE = True
+
+    # Setup ADK tracing with threading instrumentation
+    # This enables OpenTelemetry context propagation across threads
+    setup_adk_tracing()
+    logger.info("ADK tracing setup complete")
 except ImportError as e:
     logger.warning("Google ADK is not installed. AdkLLMAgent will not be available.", exc_info=e)
     ADK_AVAILABLE = False
@@ -131,7 +152,6 @@ except ImportError as e:
 
 MAX_REVISION_ITERATIONS = 3
 DEFAULT_IMAGE_URL = "https://images.unsplash.com/photo-1542281286-9e0a16bb7366"
-
 
 # ============================================================================
 # Tool Functions for Research Agent
@@ -598,7 +618,9 @@ def create_article_workflow(query: str, article_id: str, output_dir: str, tracer
                 f"3. If you find gaps, use refine_search_query to create follow-up queries and search again\n"
                 f"4. Aim for 3-5 high-quality sources\n"
                 f"5. Provide a structured summary with key findings and sources\n\n"
-                f"Focus on: factual information, recent developments, expert perspectives, data/statistics."
+                f"Focus on: factual information, recent developments, expert perspectives, data/statistics.",
+                trace_id=context.trace_id,
+                session_id=context.session_id
             )
 
             # Extract agent output
