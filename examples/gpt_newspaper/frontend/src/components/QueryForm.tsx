@@ -18,6 +18,7 @@ import { supportedLayouts, supportedWorkflows } from "../api/client";
 import type { LayoutOption, WorkflowOption } from "../api/types";
 import originalWorkflowImg from "../assets/original_wf.png";
 import dynamicWorkflowImg from "../assets/dynamic_wf.svg";
+import agentWorkflowImg from "../assets/agent_workflow.svg";
 
 export interface QueryFormPayload {
   queries: string[];
@@ -43,7 +44,7 @@ const QueryForm = ({ onSubmit, disabled = false }: QueryFormProps) => {
   const workflowImages: Record<WorkflowOption, string> = {
     original: originalWorkflowImg,
     dynamic: dynamicWorkflowImg,
-    agent: dynamicWorkflowImg  // Using dynamic workflow image as placeholder for agent workflow
+    agent: agentWorkflowImg
   };
 
   const workflowTitles: Record<WorkflowOption, string> = {
@@ -173,7 +174,9 @@ const QueryForm = ({ onSubmit, disabled = false }: QueryFormProps) => {
             <Link
               component="button"
               type="button"
-              onClick={() => setPreviewWorkflow("agent")}
+              onClick={() => {
+                window.open(agentWorkflowImg, "_blank", "noopener,noreferrer");
+              }}
               underline="hover"
             >
               View agent
@@ -209,36 +212,14 @@ const QueryForm = ({ onSubmit, disabled = false }: QueryFormProps) => {
                 <Typography variant="body2" color="text.secondary">
                   {workflowDescriptions[previewWorkflow]}
                 </Typography>
-                {previewWorkflow === "agent" ? (
-                  <Box>
-                    <Typography variant="h6" gutterBottom>Agent Workflow Architecture</Typography>
-                    <Typography variant="body2" component="div">
-                      <strong>Research Agent:</strong>
-                      <ul>
-                        <li>Autonomous web search with Tavily API</li>
-                        <li>Extract key facts from multiple sources</li>
-                        <li>Refine queries based on findings (ReAct pattern)</li>
-                      </ul>
-                      <strong>Editorial Agent:</strong>
-                      <ul>
-                        <li>Check factual claims against sources</li>
-                        <li>Assess readability with textstat metrics</li>
-                        <li>Verify source credibility</li>
-                        <li>Autonomously decide: APPROVE or REVISE</li>
-                      </ul>
-                      <strong>Flow:</strong> topic_intake → research_agent → curate → write → editorial_agent → design
-                    </Typography>
-                  </Box>
-                ) : (
-                  <Box sx={{ display: "flex", justifyContent: "center" }}>
-                    <Box
-                      component="img"
-                      src={workflowImages[previewWorkflow]}
-                      alt={`${previewWorkflow} workflow diagram`}
-                      sx={{ width: "100%", maxHeight: 500, objectFit: "contain" }}
-                    />
-                  </Box>
-                )}
+                <Box sx={{ display: "flex", justifyContent: "center" }}>
+                  <Box
+                    component="img"
+                    src={workflowImages[previewWorkflow]}
+                    alt={`${previewWorkflow} workflow diagram`}
+                    sx={{ width: "100%", maxHeight: 500, objectFit: "contain" }}
+                  />
+                </Box>
               </Stack>
             </DialogContent>
             <DialogActions>
