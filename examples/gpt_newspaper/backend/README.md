@@ -4,64 +4,104 @@
 
 ## Overview
 
-This directory contains two versions of an **AI-powered newspaper article generation system**, designed to help you progressively understand Graflow's dynamic task generation capabilities.
+This directory contains **three versions** of an **AI-powered newspaper article generation system**, each demonstrating different Graflow patterns and use cases.
 
-## Two Workflow Versions
+## Workflow Comparison
 
-### 1. `newspaper_workflow.py` - **Basic Version**
+| Feature | Simple | Dynamic | **Agent** |
+|---------|--------|---------|-----------|
+| **File** | `newspaper_workflow.py` | `newspaper_dynamic_workflow.py` | `newspaper_agent_workflow.py` |
+| **Task Count** | 5 tasks | 15+ tasks (dynamic) | 6 tasks |
+| **Complexity** | 🟢 Low | 🟡 High | 🟡 Medium |
+| **LLM Agents** | 0 (pure LLM tasks) | 0 (pure LLM tasks) | **2 (researcher, editor)** |
+| **Tool Calling** | ❌ No | ❌ No | **✅ Yes (8 tools)** |
+| **Research** | Single search | Multi-angle fan-out | **Autonomous multi-search** |
+| **Writing** | Single LLM call | 3 parallel personas | Single LLM with revision |
+| **Quality Control** | Simple critique | Critique + 3 gates | **Agent-driven editorial** |
+| **Revision Loop** | Fixed logic (goto) | Fixed logic (goto) | **Agent-controlled** |
+| **Dynamic Tasks** | None (goto only) | Search expansion, gap filling | None (agents decide) |
+| **Parallel Execution** | Article level | Task + article level | Article level |
+| **Error Handling** | Iteration limit | Partial success (2/3) | Agent judgment |
+| **Latency** | ~30s | ~45s | ~60s |
+| **LLM Calls** | 4-6 | 10-15 | 8-12 + tools |
+| **Cost (relative)** | 1x | 2-3x | 1.5-2x |
+| **Quality** | Good | Very Good | **Excellent** |
+| **Autonomy** | Low | Medium | **High** |
+| **Transparency** | Medium | Medium | **High (tools visible)** |
+| **Lines of Code** | ~325 | ~604 | ~1100 |
+| **Learning Curve** | 🟢 Beginner | 🟡 Intermediate | 🟡 Intermediate |
 
-A simple, easy-to-understand workflow perfect for learning Graflow's core features.
+## Decision Guide
 
-**Processing Flow:**
-```
-Search → Curation → Writing → Critique → Design
-```
+### Choose Simple Workflow if:
+- ✅ Learning Graflow basics
+- ✅ Cost is primary concern
+- ✅ Simple content generation
+- ✅ No complex requirements
 
-**Key Features:**
-- ✅ Write-critique loop using `goto=True`
-- ✅ Channel-based state management
-- ✅ Parallel processing of multiple articles with ThreadPoolExecutor
+### Choose Dynamic Workflow if:
+- ✅ Need parallel execution
+- ✅ Multiple processing approaches
+- ✅ Quality gates and validation
+- ✅ Production scale
 
-### 2. `newspaper_dynamic_workflow.py` - **Advanced Version**
-
-A production-ready advanced workflow leveraging all of Graflow's capabilities.
-
-**Processing Flow:**
-```
-Topic Analysis → Multi-angle Search → Information Curation →
-Multi-style Writing → Critique-Improvement Loop → Quality Checks → Design
-```
-
-**Key Features:**
-- ✅ Runtime dynamic task expansion (`context.next_task()`)
-- ✅ Dynamic gap filling (`context.next_iteration()`)
-- ✅ Parallel writer personas (BestEffortGroupPolicy)
-- ✅ Quality gates (AtLeastNGroupPolicy)
+### Choose Agent Workflow if:
+- ✅ Quality is critical (fact-checking/verification)
+- ✅ Need autonomous decision-making
+- ✅ Want transparent tool usage (visible in traces)
+- ✅ Building agentic systems
+- ✅ Exploring LLM agent patterns
 
 ---
 
 ## How to Run
 
+### Simple Workflow
 ```bash
 # Set environment variables
 export TAVILY_API_KEY="your_tavily_api_key"
 export OPENAI_API_KEY="your_openai_api_key"
 
-# Run basic version
+# Run
 PYTHONPATH=. uv run python examples/gpt_newspaper/backend/newspaper_workflow.py
+```
 
-# Run advanced version
+### Dynamic Workflow
+```bash
+# Same environment variables as simple
+export TAVILY_API_KEY="your_tavily_api_key"
+export OPENAI_API_KEY="your_openai_api_key"
+
+# Run
 PYTHONPATH=. uv run python examples/gpt_newspaper/backend/newspaper_dynamic_workflow.py
 ```
+
+### Agent Workflow
+```bash
+# Install additional dependencies
+uv add google-adk textstat tavily-python
+
+# Set environment variables
+export TAVILY_API_KEY="your_tavily_api_key"
+export GPT_NEWSPAPER_MODEL="gpt-4o-mini"  # Agent model (optional)
+export GRAFLOW_LLM_MODEL="gpt-4o-mini"    # LLM tasks (optional)
+export OPENAI_API_KEY="your_openai_api_key"  # Or other provider
+
+# Run
+PYTHONPATH=. uv run python examples/gpt_newspaper/backend/newspaper_agent_workflow.py
+```
+
+**For detailed agent workflow setup:** See [agent_workflow.md](agent_workflow.md)
 
 ---
 
 ## Learning Path
 
-**Recommended Learning Order:**
+**Recommended Order:** Simple → Dynamic → Agent
 
-1. **Start with `newspaper_workflow.py`** - Understand basic patterns
-2. **Progress to `newspaper_dynamic_workflow.py`** - Learn advanced features
+1. **`newspaper_workflow.py`** - Learn goto loops, channels, state management
+2. **`newspaper_dynamic_workflow.py`** - Learn dynamic task generation, parallel execution, group policies
+3. **`newspaper_agent_workflow.py`** - Learn LLM agents, tool calling, autonomous decision-making
 
 ---
 
@@ -349,19 +389,19 @@ quality_gate = (
 
 ---
 
-## Workflow Comparison
+## Key Insights
 
-| Feature | Basic (`newspaper_workflow.py`) | Advanced (`newspaper_dynamic_workflow.py`) |
-|---------|--------------------------------|-------------------------------------------|
-| **Task Count** | 5 tasks | 15+ tasks (dynamically grows) |
-| **Search Strategy** | Single query | Multi-angle search based on topic analysis |
-| **Dynamic Task Generation** | None (goto=True only) | Search expansion, gap filling, supplemental research |
-| **Writing Approach** | Single style | 3 personas in parallel → select best |
-| **Quality Assurance** | Critique loop only | Critique + 3-stage quality gate |
-| **Parallel Execution** | Article level (ThreadPoolExecutor) | Task level + article level |
-| **Error Handling** | Iteration limit only | Partial success tolerance (AtLeastNGroupPolicy) |
-| **Lines of Code** | ~325 lines | ~604 lines |
-| **Learning Curve** | 🟢 Beginner-friendly | 🟡 Intermediate to Advanced |
+### Simple → Dynamic
+**Progression**: Learn parallel execution, runtime task generation, group policies
+
+### Simple → Agent
+**Progression**: Learn LLM agents, tool calling, autonomous decision-making
+
+### Dynamic → Agent
+**Comparison**: Dynamic has more parallel tasks, Agent has autonomous reasoning
+
+### All Three
+**Study**: See evolution from fixed logic → parallel complexity → autonomous agents
 
 ---
 
@@ -399,41 +439,35 @@ channel.get("gap_fill_requested", default=False)
 
 ## Summary
 
-These two workflows are designed to progressively understand **Graflow's dynamic task generation capabilities**.
+These workflows demonstrate **Graflow's evolution from simple loops to autonomous agents**, each building on the previous pattern.
 
-### What You Learn from the Basic Version
+### Graflow vs Traditional Workflow Engines
 
-- ✅ Loop-back to existing tasks with `goto=True`
-- ✅ State management with channels
-- ✅ Iteration control (prevent infinite loops)
-- ✅ Parallel execution of multiple workflows
-
-### What You Learn from the Advanced Version
-
-- ✅ Dynamic task generation at runtime (`context.next_task()`)
-- ✅ Self-iteration for waiting/retry (`context.next_iteration()`)
-- ✅ Parallel groups and execution policies (BestEffortGroupPolicy, AtLeastNGroupPolicy)
-- ✅ Complex state management and task coordination
-
-### Comparison with Traditional Workflow Engines
-
-| Feature | Traditional Workflow | Graflow (Basic) | Graflow (Advanced) |
-|---------|---------------------|-----------------|-------------------|
-| Task Definition | All pre-defined | Pre-defined + goto | Runtime dynamic generation |
-| Cyclic Flows | Not supported (DAG only) | Loop-back with `goto=True` | Multiple loop patterns |
-| Conditional Branching | Pre-definition required | Runtime state-based | Dynamic task addition for branching |
-| Parallel Execution | Fixed parallel tasks | Workflow level | Task level + workflow level |
-| Error Handling | Fixed retry | Iteration limits | Dynamic gap-filling task addition + partial success tolerance |
+| Feature | Traditional | Graflow (Simple) | Graflow (Dynamic) | Graflow (Agent) |
+|---------|------------|-----------------|-------------------|-----------------|
+| **Task Definition** | All pre-defined | Pre-defined + goto | Runtime dynamic generation | Pre-defined + agents |
+| **Cyclic Flows** | Not supported (DAG only) | Loop-back with `goto=True` | Multiple loop patterns | Agent-controlled loops |
+| **Conditional Branching** | Pre-definition required | Runtime state-based | Dynamic task addition | Agent decides |
+| **Parallel Execution** | Fixed parallel tasks | Workflow level | Task + workflow level | Workflow level |
+| **Error Handling** | Fixed retry | Iteration limits | Dynamic gap-filling + partial success | Agent judgment |
+| **Autonomy** | None | Low | Medium | **High** |
 
 ### Real-World Use Cases
 
-These design patterns can be applied to real-world use cases such as:
+**Simple Workflow:**
+- 📰 Basic content generation with review cycle
+- 📝 Document processing with quality checks
 
-- 📰 **Content Generation Pipelines**: Iterative generation with quality checks
-- 🤖 **Multi-Agent Systems**: Agent collaboration with feedback loops
-- 🔄 **Iterative Improvement Workflows**: Automatic improvement until quality standards are met
-- 📊 **Data Analysis Pipelines**: Dynamic processing expansion based on data quality
-- ⚙️ **ETL Pipelines**: Automatic gap-filling when data sources are insufficient
+**Dynamic Workflow:**
+- 🔄 Complex content pipelines with multi-angle research
+- 📊 Data analysis with dynamic processing expansion
+- ⚙️ ETL pipelines with automatic gap-filling
+
+**Agent Workflow:**
+- 🔍 Research automation with autonomous verification
+- 🤖 Agentic systems with self-directed tool usage
+- ✅ Quality-critical tasks (fact-checking, compliance)
+- 🧠 Decision support with transparent reasoning
 
 ---
 
