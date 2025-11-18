@@ -301,7 +301,7 @@ def setup_adk_tracing() -> None:
         - Applies monkeypatches to Runner.run(), _PassthroughTracer, and _RunnerRunAsync
           BEFORE instrumentation for proper context propagation
     """
-    global _adk_instrumented
+    global _adk_instrumented  # noqa: PLW0603
 
     if _adk_instrumented:
         logger.debug("Google ADK instrumentation already set up")
@@ -340,7 +340,7 @@ def setup_adk_tracing() -> None:
             _patch_runner_run_async()    # Fix async generator protocol
 
             # Now instrument ADK with the patched classes
-            GoogleADKInstrumentor().instrument()  # type: ignore[misc]
+            GoogleADKInstrumentor().instrument()
             _adk_instrumented = True
             logger.info("Google ADK instrumentation enabled for tracing")
         else:

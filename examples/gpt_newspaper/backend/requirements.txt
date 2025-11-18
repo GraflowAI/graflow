@@ -27,3 +27,16 @@ python-multipart>=0.0.9
 # Optional: Additional LLM providers
 openai>=1.0.0  # For OpenAI models
 # anthropic>=0.7.0  # For Claude models
+
+# To avoid Resolution too deep errors and speed up installs
+urllib3>=1.26.19, <3.0
+# requests>=2.32.4, <2.33
+#idna>=3.10, <4
+#charset_normalizer>=3.4.2, <3.5.0
+#protobuf>=6.33.0, <6.34
+#packaging>=25.0, <26.0
+#wrapt>=1.17.3, <1.18.0
+#googleapis_common_protos>=1.71.0, <1.72.0
+#importlib_metadata>=8.7.0, <8.8.0
+#httpcore>=1.0.9, <1.1.0
+#opentelemetry_proto>=1.37.0, <1.38.0
