@@ -16,6 +16,7 @@ opentelemetry-exporter-otlp>=1.37.0  # Required for langfuse_otel callback
 google-adk>=1.17.0  # For LLM agents with tool calling
 textstat>=0.7.0  # For readability assessment
 openinference-instrumentation-google-adk>=0.1.0  # For ADK tracing/observability
+nest-asyncio>=1.6.0  # For nested asyncio event loops compatibility
 
 # Web API dependencies
 fastapi>=0.115.0
