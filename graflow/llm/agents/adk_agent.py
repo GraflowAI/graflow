@@ -5,9 +5,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional, Union
+from contextlib import contextmanager
+from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Dict, Iterator, List, Optional, Union
 
+from opentelemetry import context as context_api
 from opentelemetry import trace
+from opentelemetry import trace as trace_api
+from opentelemetry.trace import Span, get_current_span
 
 from .base import LLMAgent
 
@@ -44,6 +48,228 @@ except ImportError as e:
 _adk_instrumented = False
 
 
+
+def _patch_passthrough_tracer() -> None:
+    """Patch _PassthroughTracer to properly propagate OpenTelemetry context.
+
+    This monkeypatch fixes the _PassthroughTracer.start_as_current_span method
+    to preserve trace context propagation while passing through spans.
+    It also adds debug logging to track trace_id propagation.
+
+    The patch ensures that:
+    1. OpenTelemetry context is properly managed (attach/detach)
+    2. Current span is passed through without creating new spans
+    3. Trace IDs are logged for debugging purposes
+    """
+    try:
+        # Import the _PassthroughTracer class from the instrumentation package
+        from openinference.instrumentation.google_adk import (  # type: ignore[import-not-found]
+            _PassthroughTracer,
+        )
+        from openinference.instrumentation.helpers import get_trace_id  # type: ignore[import-not-found]
+
+        @contextmanager
+        def patched_start_as_current_span(
+            _self: Any,
+            *_args: Any,
+            **_kwargs: Any
+        ) -> Iterator[Span]:
+            """Patched version that properly propagates OpenTelemetry context.
+
+            This method:
+            1. Gets the current span from the active context
+            2. Attaches it to a new context token (preserves context stack)
+            3. Yields the current span (passthrough behavior)
+            4. Detaches the context token on exit (cleanup)
+
+            Args:
+                _self: Self reference (unused, for compatibility)
+                _args: Positional arguments (unused, for compatibility)
+                _kwargs: Keyword arguments (unused, for compatibility)
+
+            Yields:
+                Current OpenTelemetry span
+            """
+            # Get current span from active context
+            current_span = trace.get_current_span()
+
+            # Attach current span to context and save token for cleanup
+            token = context_api.attach(
+                trace_api.set_span_in_context(current_span)
+            )
+
+            try:
+                # Log trace information for debugging
+                if current_span.is_recording():
+                    span_context = current_span.get_span_context()
+                    trace_id = get_trace_id(current_span)
+                    logger.debug(
+                        f"_PassthroughTracer: Passing through span "
+                        f"(trace_id={trace_id}, span_id={span_context.span_id:016x})"
+                    )
+
+                # Yield current span without creating a new one
+                yield current_span
+            finally:
+                # Detach context token to restore previous context
+                context_api.detach(token)
+
+        # Apply monkeypatch
+        _PassthroughTracer.start_as_current_span = patched_start_as_current_span  # type: ignore[method-assign]
+        logger.debug("Successfully patched _PassthroughTracer.start_as_current_span")
+
+    except ImportError as e:
+        logger.warning(
+            f"Could not patch _PassthroughTracer: {e}. "
+            "This is expected if openinference-instrumentation-google-adk is not installed."
+        )
+    except Exception as e:
+        logger.warning(f"Failed to patch _PassthroughTracer: {e}")
+
+
+def _patch_runner_run_async() -> None:
+    """Patch _RunnerRunAsync to fix async generator wrapper compatibility.
+
+    This monkeypatch fixes the _AsyncGenerator wrapper to properly implement
+    the async generator protocol, including the aclose() method required by ADK.
+
+    Note on OpenTelemetry context propagation:
+        Context propagation across the thread created by Runner.run() is handled
+        by ThreadingInstrumentor (enabled in setup_adk_tracing). This ensures
+        ADK invocation spans correctly nest under LangFuseTracer spans.
+    """
+    try:
+        # Import the _RunnerRunAsync class from the instrumentation package
+        import wrapt
+        from openinference.instrumentation.google_adk._wrappers import _RunnerRunAsync
+
+        # Save original __call__
+        original_call = _RunnerRunAsync.__call__
+
+        def patched_call(
+            self: Any,
+            wrapped: Callable[..., AsyncIterator[Any]],
+            instance: Any,
+            args: tuple[Any, ...],
+            kwargs: Dict[str, Any],
+        ) -> Any:
+            """Patched version that fixes async generator wrapper compatibility."""
+            # Call original to get the wrapped generator
+            result = original_call(self, wrapped, instance, args, kwargs) # type: ignore
+
+            # If result is already a proper async generator proxy, return it
+            if isinstance(result, wrapt.ObjectProxy):
+                return result
+
+            # Otherwise, wrap it properly with wrapt.ObjectProxy
+            # This ensures aclose() and other async generator methods are available
+            return wrapt.ObjectProxy(result)
+
+        # Apply monkeypatch
+        _RunnerRunAsync.__call__ = patched_call  # type: ignore[method-assign]
+        logger.debug("Successfully patched _RunnerRunAsync.__call__ for async generator compatibility")
+
+    except ImportError as e:
+        logger.warning(
+            f"Could not patch _RunnerRunAsync: {e}. "
+            "This is expected if openinference-instrumentation-google-adk is not installed."
+        )
+    except Exception as e:
+        logger.warning(f"Failed to patch _RunnerRunAsync: {e}")
+
+
+def _patch_runner_run() -> None:
+    """Patch threading.Thread to propagate OpenTelemetry context across threads.
+
+    This implements manual threading instrumentation by patching Thread.__init__
+    and Thread.run() to capture and restore context, similar to what
+    opentelemetry-instrumentation-threading does but without the dependency.
+    """
+    try:
+        import contextvars
+        import threading
+
+        original_init = threading.Thread.__init__
+        original_run = threading.Thread.run
+
+        def patched_init(self, *args, **kwargs):
+            """Capture context when thread is created."""
+            # Call original __init__
+            original_init(self, *args, **kwargs)
+
+            # Capture current context and store it on the thread instance
+            self._otel_context = contextvars.copy_context()
+
+            # Log for debugging
+            current_span = get_current_span()
+            if current_span and current_span.get_span_context().is_valid:
+                try:
+                    from openinference.instrumentation.helpers import get_trace_id  # type: ignore[import-not-found]
+                    trace_id = get_trace_id(current_span)
+                    logger.debug(f"Thread.__init__: Captured context with trace_id={trace_id}")
+                except ImportError:
+                    pass
+
+        def patched_run(self):
+            """Restore context when thread runs."""
+            # Get the captured context (if any)
+            ctx = getattr(self, '_otel_context', None)
+
+            if ctx is not None:
+                # Run the original thread target within the captured context
+                ctx.run(original_run, self)
+            else:
+                # No context captured, run normally
+                original_run(self)
+
+        # Apply patches
+        threading.Thread.__init__ = patched_init
+        threading.Thread.run = patched_run
+
+        logger.debug("Successfully patched threading.Thread for manual context propagation")
+
+    except Exception as e:
+        logger.warning(f"Failed to patch threading.Thread: {e}")
+
+
+def _patch_asyncio_run() -> None:
+    """Patch asyncio.run() to propagate contextvars across event loops.
+
+    This is critical because Runner.run() creates a new thread that calls asyncio.run(),
+    which creates a new event loop with a fresh context. We need to copy the parent
+    context into the new event loop.
+    """
+    try:
+        import asyncio
+        import contextvars
+
+        original_run = asyncio.run
+
+        def patched_run(main, *, debug=None):
+            """Capture parent context and run coroutine in that context."""
+            # Get the context from the calling thread
+            ctx = contextvars.copy_context()
+
+            # Log for debugging
+            current_span = get_current_span()
+            if current_span and current_span.get_span_context().is_valid:
+                try:
+                    from openinference.instrumentation.helpers import get_trace_id  # type: ignore[import-not-found]
+                    trace_id = get_trace_id(current_span)
+                    logger.debug(f"asyncio.run() captured context with trace_id={trace_id}")
+                except ImportError:
+                    pass
+
+            # Run the coroutine within the captured context
+            return ctx.run(original_run, main, debug=debug)
+
+        asyncio.run = patched_run
+        logger.debug("Successfully patched asyncio.run() for context propagation across event loops")
+
+    except Exception as e:
+        logger.warning(f"Failed to patch asyncio.run(): {e}")
+
+
 def setup_adk_tracing() -> None:
     """Setup OpenInference instrumentation for Google ADK.
 
@@ -72,8 +298,10 @@ def setup_adk_tracing() -> None:
         - This function is idempotent (safe to call multiple times)
         - Instrumentation is global and affects all ADK agents
         - ADK traces will automatically nest under LangFuseTracer spans
+        - Applies monkeypatches to Runner.run(), _PassthroughTracer, and _RunnerRunAsync
+          BEFORE instrumentation for proper context propagation
     """
-    global _adk_instrumented  # noqa: PLW0603
+    global _adk_instrumented
 
     if _adk_instrumented:
         logger.debug("Google ADK instrumentation already set up")
@@ -87,10 +315,39 @@ def setup_adk_tracing() -> None:
         return
 
     try:
+        # Apply nest_asyncio to allow nested event loops
+        # This is needed for ADK which may run asyncio.run() in nested contexts
+        try:
+            import nest_asyncio  # type: ignore[import-not-found]
+
+            nest_asyncio.apply()
+            logger.debug("nest_asyncio applied - nested event loops are now supported")
+        except ImportError:
+            logger.warning(
+                "nest_asyncio is not available. "
+                "Install with: pip install nest-asyncio\n"
+                "This may cause issues if ADK is used in nested asyncio contexts."
+            )
+        except Exception as e:
+            logger.warning(f"Failed to apply nest_asyncio: {e}")
+
         if GoogleADKInstrumentor is not None:
+            # Apply monkeypatches BEFORE ADK instrumentation
+            # This ensures classes are already patched when instrument() runs
+            _patch_asyncio_run()         # Propagate context across asyncio.run() calls
+            _patch_runner_run()          # Manual context propagation for threading.Thread
+            _patch_passthrough_tracer()  # Fix PassthroughTracer context management
+            _patch_runner_run_async()    # Fix async generator protocol
+
+            # Now instrument ADK with the patched classes
             GoogleADKInstrumentor().instrument()  # type: ignore[misc]
             _adk_instrumented = True
             logger.info("Google ADK instrumentation enabled for tracing")
+        else:
+            logger.warning(
+                "GoogleADKInstrumentor is None. "
+                "Cannot instrument Google ADK for tracing."
+            )
     except Exception as e:
         logger.warning(f"Failed to instrument Google ADK: {e}")
 
@@ -264,6 +521,7 @@ class AdkLLMAgent(LLMAgent):
         self,
         input_text: str,
         user_id: Optional[str] = None,
+        trace_id: Optional[str] = None,
         session_id: Optional[str] = None,
         **kwargs: Any
     ) -> Dict[str, Any]:
@@ -272,7 +530,8 @@ class AdkLLMAgent(LLMAgent):
         Args:
             input_text: Input query/prompt for the agent
             user_id: User ID for ADK session (defaults to user_id set in __init__)
-            session_id: Session ID for ADK conversation history (defaults to generated UUID)
+            trace_id: Trace ID for OpenTelemetry tracing (used as session_id if session_id not provided)
+            session_id: Session ID for ADK conversation history (defaults to trace_id, then generated UUID)
             **kwargs: Additional parameters forwarded to Runner.run()
 
         Returns:
@@ -285,22 +544,27 @@ class AdkLLMAgent(LLMAgent):
             ```python
             result = agent.run(
                 "Analyze the sales data and create a report",
+                trace_id="workflow-trace-123",
                 session_id="conversation-123"
             )
             print(result["output"])
             ```
 
         Note:
-            The session_id parameter here is for ADK's conversation history,
-            separate from the app_name (set in __init__ from workflow trace_id).
+            The session_id parameter is for ADK's conversation history,
+            separate from the app_name (set in __init__).
+            If trace_id is provided but session_id is not, trace_id will be used as session_id.
         """
         try:
             # Set defaults
             if user_id is None:
                 user_id = self._user_id
             if session_id is None:
-                # Generate a new session ID for this execution
-                session_id = str(uuid.uuid4())
+                # Use trace_id as session_id if provided, otherwise generate UUID
+                session_id = trace_id if trace_id else str(uuid.uuid4())
+
+            # Log trace information for debugging
+            logger.debug(f"Running ADK agent with trace_id={trace_id}, session_id={session_id}")
 
             # Create session in session service (async in ADK 1.0+)
             # Use asyncio.run() to execute async session creation synchronously
@@ -319,14 +583,14 @@ class AdkLLMAgent(LLMAgent):
             )
 
             # Run agent via Runner (synchronous)
-            # Runner.run() returns an iterable of events
-            # Filter out trace_id from kwargs (it's set via app_name in __init__, not runtime)
-            runner_kwargs = {k: v for k, v in kwargs.items() if k != 'trace_id'}
+            # Note: Runner.run() creates a separate thread for async execution.
+            # OpenTelemetry context is propagated via ThreadingInstrumentor (if available).
+            # The app_name (set in __init__) identifies the agent in traces.
             events = self._runner.run(
                 user_id=user_id,
                 session_id=session_id,
                 new_message=content,
-                **runner_kwargs
+                **kwargs
             )
 
             # Collect all events and extract final response
@@ -350,6 +614,9 @@ class AdkLLMAgent(LLMAgent):
     async def run_async(
         self,
         input_text: str,
+        user_id: Optional[str] = None,
+        trace_id: Optional[str] = None,
+        session_id: Optional[str] = None,
         **kwargs: Any
     ) -> AsyncIterator[Any]:
         """Run the ADK agent asynchronously with streaming events.
@@ -360,10 +627,11 @@ class AdkLLMAgent(LLMAgent):
 
         Args:
             input_text: Input query/prompt for the agent
+            user_id: User identifier (defaults to user_id set in __init__)
+            trace_id: Trace ID for OpenTelemetry tracing (used as session_id if session_id not provided)
+            session_id: Session identifier for conversation history (defaults to trace_id, then current span trace_id, then UUID)
             **kwargs: Additional parameters forwarded to Runner.run_async()
                      Common parameters:
-                     - user_id: User identifier (defaults to user_id set in __init__)
-                     - session_id: Session identifier for conversation history
                      - invocation_id: Optional invocation identifier
                      - state_delta: Optional state changes
                      - run_config: Optional RunConfig
@@ -376,7 +644,10 @@ class AdkLLMAgent(LLMAgent):
 
         Example:
             ```python
-            async for event in agent.run_async("Tell me about Python"):
+            async for event in agent.run_async(
+                "Tell me about Python",
+                trace_id="workflow-trace-123"
+            ):
                 if hasattr(event, 'partial') and event.partial:
                     # Streaming chunk
                     print(event.content, end="", flush=True)
@@ -386,19 +657,15 @@ class AdkLLMAgent(LLMAgent):
             ```
         """
         try:
-            # Prepare parameters
-            user_id = kwargs.pop("user_id", None)
-            session_id = kwargs.pop("session_id", None)
-
+            # Set defaults
             if user_id is None:
                 user_id = self._user_id
             if session_id is None:
-                span = trace.get_current_span()
-                if span:
-                    from openinference.instrumentation.helpers import get_trace_id
-                    session_id = get_trace_id(span)
-                else:
-                    session_id = str(uuid.uuid4())
+                # Use trace_id as session_id if provided, otherwise generate UUID
+                session_id = trace_id if trace_id else str(uuid.uuid4())
+
+            # Log trace information for debugging
+            logger.debug(f"Running ADK agent async with trace_id={trace_id}, session_id={session_id}")
 
             # Create Content for ADK
             content = genai_types.Content(  # type: ignore
@@ -408,13 +675,11 @@ class AdkLLMAgent(LLMAgent):
 
             # Run agent via Runner (asynchronous)
             # Runner.run_async() returns an async generator of events
-            # Filter out trace_id from kwargs (it's set via app_name in __init__, not runtime)
-            runner_kwargs = {k: v for k, v in kwargs.items() if k != 'trace_id'}
             async for event in self._runner.run_async(
                 user_id=user_id,
                 session_id=session_id,
                 new_message=content,
-                **runner_kwargs
+                **kwargs
             ):
                 yield event
 
