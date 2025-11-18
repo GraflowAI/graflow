@@ -232,44 +232,6 @@ def _patch_runner_run() -> None:
         logger.warning(f"Failed to patch threading.Thread: {e}")
 
 
-def _patch_asyncio_run() -> None:
-    """Patch asyncio.run() to propagate contextvars across event loops.
-
-    This is critical because Runner.run() creates a new thread that calls asyncio.run(),
-    which creates a new event loop with a fresh context. We need to copy the parent
-    context into the new event loop.
-    """
-    try:
-        import asyncio
-        import contextvars
-
-        original_run = asyncio.run
-
-        def patched_run(main, *, debug=None):
-            """Capture parent context and run coroutine in that context."""
-            # Get the context from the calling thread
-            ctx = contextvars.copy_context()
-
-            # Log for debugging
-            current_span = get_current_span()
-            if current_span and current_span.get_span_context().is_valid:
-                try:
-                    from openinference.instrumentation.helpers import get_trace_id  # type: ignore[import-not-found]
-                    trace_id = get_trace_id(current_span)
-                    logger.debug(f"asyncio.run() captured context with trace_id={trace_id}")
-                except ImportError:
-                    pass
-
-            # Run the coroutine within the captured context
-            return ctx.run(original_run, main, debug=debug)
-
-        asyncio.run = patched_run
-        logger.debug("Successfully patched asyncio.run() for context propagation across event loops")
-
-    except Exception as e:
-        logger.warning(f"Failed to patch asyncio.run(): {e}")
-
-
 def setup_adk_tracing() -> None:
     """Setup OpenInference instrumentation for Google ADK.
 
@@ -301,7 +263,7 @@ def setup_adk_tracing() -> None:
         - Applies monkeypatches to Runner.run(), _PassthroughTracer, and _RunnerRunAsync
           BEFORE instrumentation for proper context propagation
     """
-    global _adk_instrumented  # noqa: PLW0603
+    global _adk_instrumented
 
     if _adk_instrumented:
         logger.debug("Google ADK instrumentation already set up")
@@ -318,7 +280,7 @@ def setup_adk_tracing() -> None:
         # Apply nest_asyncio to allow nested event loops
         # This is needed for ADK which may run asyncio.run() in nested contexts
         try:
-            import nest_asyncio  # type: ignore[import-not-found]
+            import nest_asyncio
 
             nest_asyncio.apply()
             logger.debug("nest_asyncio applied - nested event loops are now supported")
@@ -334,10 +296,10 @@ def setup_adk_tracing() -> None:
         if GoogleADKInstrumentor is not None:
             # Apply monkeypatches BEFORE ADK instrumentation
             # This ensures classes are already patched when instrument() runs
-            _patch_asyncio_run()         # Propagate context across asyncio.run() calls
-            _patch_runner_run()          # Manual context propagation for threading.Thread
-            _patch_passthrough_tracer()  # Fix PassthroughTracer context management
-            _patch_runner_run_async()    # Fix async generator protocol
+            # _patch_asyncio_run()       # Propagate context across asyncio.run() calls
+            _patch_runner_run()          # Propagates context across the thread boundary created by Runner.run()
+            _patch_passthrough_tracer()  # Fixes a bug in OpenInference instrumentation's _PassthroughTracer
+            _patch_runner_run_async()    # Fixes async generator protocol (aclose() method), required for run_async()
 
             # Now instrument ADK with the patched classes
             GoogleADKInstrumentor().instrument()
