@@ -9,7 +9,6 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Dict, Iterator, List, Optional, Union
 
 from opentelemetry import context as context_api
-from opentelemetry import trace
 from opentelemetry import trace as trace_api
 from opentelemetry.trace import Span, get_current_span
 
@@ -91,7 +90,7 @@ def _patch_passthrough_tracer() -> None:
                 Current OpenTelemetry span
             """
             # Get current span from active context
-            current_span = trace.get_current_span()
+            current_span = trace_api.get_current_span()
 
             # Attach current span to context and save token for cleanup
             token = context_api.attach(
