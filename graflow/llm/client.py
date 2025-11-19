@@ -62,7 +62,8 @@ def _patch_litellm_get_span_name() -> None:
 
             # Append current span_id to make span name unique
             current_span = get_span_id(trace.get_current_span())
-            if current_span:
+            # Only add span_id if it's valid (not all zeros = invalid span)
+            if current_span and current_span != "0000000000000000":
                 return f"{span_name} [{current_span}]"
             return span_name
 
@@ -126,7 +127,8 @@ def _patch_litellm_maybe_log_raw_request() -> None:
 
             # Append current span_id to make span name unique
             current_span_id = get_span_id(otel_trace.get_current_span())
-            if current_span_id:
+            # Only add span_id if it's valid (not all zeros = invalid span)
+            if current_span_id and current_span_id != "0000000000000000":
                 raw_span_name = f"{raw_span_name} [{current_span_id}]"
 
             # Create raw request span with unique name
