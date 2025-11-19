@@ -211,7 +211,7 @@ def extract_key_facts(sources_json: str, focus: str) -> str:
     Extract key facts from search results focusing on a specific aspect.
 
     Args:
-        sources_json: JSON string of search results from web_search
+        sources_json: JSON string of search results (either {"results": [...]} or [...])
         focus: What aspect to focus on (e.g., "statistics", "expert opinions", "timeline")
 
     Returns:
@@ -219,7 +219,13 @@ def extract_key_facts(sources_json: str, focus: str) -> str:
     """
     try:
         data = json.loads(sources_json)
-        sources = data.get("results", [])
+        # Handle both dict with "results" key and direct list
+        if isinstance(data, list):
+            sources = data
+        elif isinstance(data, dict):
+            sources = data.get("results", [])
+        else:
+            sources = []
 
         if not sources:
             return f"No sources available to extract facts about: {focus}"
@@ -271,7 +277,7 @@ def check_factual_claims(article_json: str, sources_json: str) -> str:
 
     Args:
         article_json: JSON with article content
-        sources_json: JSON with source materials
+        sources_json: JSON with source materials (either {"results": [...]} or [...])
 
     Returns:
         JSON string with verification results
@@ -281,7 +287,13 @@ def check_factual_claims(article_json: str, sources_json: str) -> str:
         sources = json.loads(sources_json)
 
         content = article.get("content", "")
-        source_list = sources.get("results", [])
+        # Handle both dict with "results" key and direct list
+        if isinstance(sources, list):
+            source_list = sources
+        elif isinstance(sources, dict):
+            source_list = sources.get("results", [])
+        else:
+            source_list = []
 
         # Simple keyword matching for fact verification
         # In production, this would use more sophisticated NLP
@@ -380,14 +392,20 @@ def verify_sources(sources_json: str) -> str:
     Verify source quality and credibility.
 
     Args:
-        sources_json: JSON string with source data
+        sources_json: JSON string with source data (either {"results": [...]} or [...])
 
     Returns:
         JSON string with source verification results
     """
     try:
         data = json.loads(sources_json)
-        sources = data.get("results", [])
+        # Handle both dict with "results" key and direct list
+        if isinstance(data, list):
+            sources = data
+        elif isinstance(data, dict):
+            sources = data.get("results", [])
+        else:
+            sources = []
 
         verified_sources = []
         flagged_sources = []
