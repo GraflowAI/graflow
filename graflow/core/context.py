@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import time
 import uuid
@@ -23,6 +24,8 @@ from graflow.trace.noop import NoopTracer
 
 if TYPE_CHECKING:
     from graflow.core.task import Executable
+    from graflow.llm.agents.base import LLMAgent
+    from graflow.llm.client import LLMClient
     from graflow.trace.base import Tracer
 
 T = TypeVar('T')
@@ -49,6 +52,11 @@ class TaskExecutionContext:
         self.retries = 0
         self.max_retries = execution_context.default_max_retries
         self.local_data: dict[str, Any] = {}
+
+    @property
+    def trace_id(self) -> str:
+        """Get trace ID from execution context."""
+        return self.execution_context.trace_id
 
     @property
     def session_id(self) -> str:
@@ -103,6 +111,57 @@ class TaskExecutionContext:
     def get_result(self, node: str, default: Any = None) -> Any:
         """Get execution result for a node from channel."""
         return self.execution_context.get_result(node, default)
+
+    # === LLM integration accessors ===
+
+    @property
+    def llm_client(self) -> LLMClient:
+        """Get shared LLMClient instance from execution context.
+
+        Returns:
+            LLMClient instance (auto-created with default model if not set)
+
+        Example:
+            ```python
+            @task(inject_context=True)
+            def my_task(context: TaskExecutionContext):
+                # Access LLMClient through context
+                llm = context.llm_client
+                response = llm.completion(
+                    messages=[{"role": "user", "content": "Hello"}]
+                )
+                return response.choices[0].message.content
+            ```
+        """
+        return self.execution_context.llm_client
+
+    def get_llm_agent(self, name: str) -> LLMAgent:
+        """Get registered LLMAgent by name from execution context.
+
+        Args:
+            name: Agent identifier
+
+        Returns:
+            LLMAgent instance
+
+        Raises:
+            KeyError: If agent not registered
+
+        Example:
+            ```python
+            @task(inject_context=True)
+            def my_task(context: TaskExecutionContext):
+                # Access registered agent through context
+                agent = context.get_llm_agent("researcher")
+                result = agent.run("Research topic X")
+                return result["output"]
+            ```
+        """
+        return self.execution_context.get_llm_agent(name)
+
+    def register_llm_agent(self, name: str, agent: LLMAgent) -> None:
+        """Register an LLMAgent via the underlying execution context."""
+        self.execution_context.register_llm_agent(name, agent)
 
     def set_local_data(self, key: str, value: Any) -> None:
         """Set task-local data."""
@@ -196,7 +255,8 @@ class ExecutionContext:
         parent_context: Optional[ExecutionContext] = None,
         session_id: Optional[str] = None,
         trace_id: Optional[str] = None,
-        tracer: Optional[Tracer] = None
+        tracer: Optional[Tracer] = None,
+        llm_client: Optional[LLMClient] = None
     ):
         """Initialize ExecutionContext with configurable queue backend."""
         self.parent_context = parent_context
@@ -263,6 +323,11 @@ class ExecutionContext:
         self.checkpoint_request_metadata: Optional[dict[str, Any]] = None
         self.checkpoint_request_path: Optional[str] = None
 
+        # LLM integration
+        self._llm_client: Optional[LLMClient] = llm_client
+        self._llm_agents: Dict[str, Any] = {}  # LLMAgent registry
+        self._llm_agents_yaml: Dict[str, str] = {}  # YAML serialization cache
+
     def create_branch_context(self, branch_id: str) -> ExecutionContext:
         """Create a child execution context for parallel execution.
 
@@ -328,7 +393,8 @@ class ExecutionContext:
         default_max_retries: int = 3,
         channel_backend: str = "memory",
         config: Optional[Dict[str, Any]] = None,
-        tracer: Optional[Tracer] = None
+        tracer: Optional[Tracer] = None,
+        llm_client: Optional[LLMClient] = None
     ) -> ExecutionContext:
         """Create a new execution context with configurable channel backend.
 
@@ -341,6 +407,21 @@ class ExecutionContext:
             channel_backend: Backend for inter-task communication (default: memory)
             config: Configuration applied to both queue and channel (e.g., redis_client, key_prefix)
             tracer: Optional tracer for workflow execution tracking (default: creates new NoopTracer)
+            llm_client: Optional LLMClient instance for LLM integration
+
+        Example:
+            ```python
+            from graflow.llm import LLMClient
+
+            # Create LLMClient
+            llm_client = LLMClient(model="gpt-5-mini", temperature=0.7)
+
+            # Create context with LLMClient
+            context = ExecutionContext.create(
+                graph, start_node,
+                llm_client=llm_client
+            )
+            ```
         """
         return cls(
             graph=graph,
@@ -351,6 +432,7 @@ class ExecutionContext:
             channel_backend=channel_backend,
             config=config,
             tracer=tracer,
+            llm_client=llm_client,
         )
 
     @property
@@ -437,6 +519,140 @@ class ExecutionContext:
         """Get the currently executing task ID (backward compatibility)."""
         ctx = self.current_task_context
         return ctx.task_id if ctx else None
+
+    # === LLM integration ===
+
+    @property
+    def llm_client(self) -> LLMClient:
+        """Get LLM client instance.
+
+        Lazily creates a default LLMClient if not explicitly set.
+        Default model is resolved from GRAFLOW_LLM_MODEL environment variable,
+        falling back to "gpt-5-mini".
+
+        Returns:
+            LLMClient instance
+
+        Example:
+            ```python
+            # .env file:
+            # GRAFLOW_LLM_MODEL=gpt-4o
+
+            # Access LLM client (auto-created with default model)
+            client = context.llm_client
+            response = client.completion([{"role": "user", "content": "Hello"}])
+
+            # Or inject explicitly
+            from graflow.llm import LLMClient
+            llm_client = LLMClient(model="gpt-5-mini", temperature=0.7)
+            context = ExecutionContext.create(
+                graph, start_node,
+                llm_client=llm_client
+            )
+            ```
+        """
+        if self._llm_client is None:
+            # Lazy initialization: create default LLMClient
+            from graflow.llm.client import LLMClient
+            from graflow.utils.dotenv import load_env
+
+            # Load environment variables from .env file
+            load_env()
+
+            # Get default model from environment or use fallback
+            default_model = os.getenv("GRAFLOW_LLM_MODEL", "gpt-5-mini")
+
+            self._llm_client = LLMClient(model=default_model)
+
+        return self._llm_client
+
+    def register_llm_agent(self, name: str, agent: LLMAgent) -> None:
+        """Register LLM Agent for use in tasks.
+
+        For distributed execution, agents are serialized to YAML using Google ADK's
+        built-in serialization and stored in _llm_agents_yaml for worker processes.
+
+        Args:
+            name: Agent identifier (used in @task(inject_llm_agent=True, agent_name=...))
+            agent: LLMAgent instance (e.g., AdkLLMAgent)
+
+        Example:
+            ```python
+            from google.adk.agents import BaseAgent
+            from graflow.llm import AdkLLMAgent
+
+            # Create ADK agent
+            adk_agent = BaseAgent(
+                name="supervisor",
+                model="gemini-2.0-flash-exp",
+                tools=[search_tool]
+            )
+            agent = AdkLLMAgent(adk_agent)
+
+            # Register for use in tasks
+            context.register_llm_agent("supervisor", agent)
+            ```
+        """
+        self._llm_agents[name] = agent
+
+        # Serialize agent to YAML for distributed execution (if AdkLLMAgent)
+        try:
+            from graflow.llm.agents.adk_agent import AdkLLMAgent
+            from graflow.llm.serialization import agent_to_yaml
+
+            if isinstance(agent, AdkLLMAgent):
+                yaml_str = agent_to_yaml(agent._adk_agent)
+                self._llm_agents_yaml[name] = yaml_str
+        except (ImportError, AttributeError):
+            # ADK not available or agent is not AdkLLMAgent, skip serialization
+            pass
+
+    def get_llm_agent(self, name: str) -> LLMAgent:
+        """Get registered LLM Agent by name.
+
+        For distributed execution, agents are lazily restored from YAML in worker
+        processes on first access.
+
+        Args:
+            name: Agent identifier
+
+        Returns:
+            LLMAgent instance
+
+        Raises:
+            KeyError: If agent not found in registry
+
+        Example:
+            ```python
+            @task(inject_llm_agent=True, agent_name="supervisor")
+            def run_analysis(agent: LLMAgent, query: str) -> str:
+                # Agent is automatically injected by decorator
+                result = agent.run(query)
+                return result["output"]
+            ```
+        """
+        # Check if agent is already in memory
+        if name in self._llm_agents:
+            return self._llm_agents[name]
+
+        # Try to restore from YAML (distributed execution scenario)
+        if name in self._llm_agents_yaml:
+            try:
+                from graflow.llm.agents.adk_agent import AdkLLMAgent
+                from graflow.llm.serialization import yaml_to_agent
+
+                # Restore ADK agent from YAML
+                adk_agent = yaml_to_agent(self._llm_agents_yaml[name])
+                agent = AdkLLMAgent._from_adk_agent(adk_agent, self.session_id)
+
+                # Cache for future access
+                self._llm_agents[name] = agent
+                return agent
+            except (ImportError, Exception):
+                # ADK not available or deserialization failed
+                pass
+
+        raise KeyError(f"LLMAgent '{name}' not found in registry")
 
     # === Checkpoint helpers ===
 
@@ -700,6 +916,9 @@ class ExecutionContext:
         state.pop('group_executor', None)
         state.pop('_task_resolver', None)
 
+        # LLM: Exclude agent instances (only keep YAML for distributed execution)
+        state['_llm_agents'] = {}  # Agent instances not serialized
+
         # Ensure backend config is saved (should already be set in __init__)
         if '_channel_backend_type' not in state:
             state['_channel_backend_type'] = 'memory'
@@ -786,6 +1005,14 @@ class ExecutionContext:
         self.checkpoint_requested = False
         self.checkpoint_request_metadata = None
         self.checkpoint_request_path = None
+
+        # Ensure LLM attributes exist for older checkpoints
+        if not hasattr(self, '_llm_client'):
+            self._llm_client = None
+        if not hasattr(self, '_llm_agents'):
+            self._llm_agents = {}
+        if not hasattr(self, '_llm_agents_yaml'):
+            self._llm_agents_yaml = {}
 
     def save(self, path: str = "execution_context.pkl") -> None:
         """Save execution context to a pickle file using cloudpickle.

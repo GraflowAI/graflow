@@ -4,7 +4,7 @@ Welcome to the Graflow examples! This directory contains progressive examples to
 
 ## 🎉 What's Available
 
-**29 comprehensive, production-ready examples** covering:
+**33 comprehensive, production-ready examples** covering:
 - ✅ **Task Basics** - Define and execute tasks with parameters
 - ✅ **Workflow Orchestration** - Sequential and parallel task composition
 - ✅ **Data Flow** - Channels, typed communication, and result storage
@@ -13,6 +13,7 @@ Welcome to the Graflow examples! This directory contains progressive examples to
 - ✅ **Advanced Patterns** - Dynamic tasks, lambdas, and custom serialization
 - ✅ **Real-World Use Cases** - Production-ready ETL, ML, and batch processing
 - ✅ **Workflow Visualization** - ASCII, Mermaid, and PNG graph visualizations
+- ✅ **LLM Integration** - AI-powered workflows with LLMClient and agents
 
 All examples include detailed documentation, real-world use cases, and hands-on experiments!
 
@@ -139,6 +140,20 @@ Visualize workflows and graphs in multiple formats:
 
 **Note**: Some features require optional dependencies (grandalf, pygraphviz). See directory README for details.
 
+### ✅ 12_llm_integration - LLM Integration
+**Status**: Complete | **Difficulty**: Intermediate to Advanced
+
+Build AI-powered workflows with LLM integration:
+- LLMClient injection for direct LLM API access (OpenAI, Anthropic, Google, etc.)
+- Per-task model override for cost/performance optimization
+- LLMAgent injection with Google ADK for ReAct/Supervisor patterns
+- Multi-agent workflows with specialized agents
+- Unified tracing with Langfuse integration
+
+[View LLM integration examples →](12_llm_integration/)
+
+**Note**: Requires LiteLLM (`uv add litellm`). Agent examples require Google ADK (`uv add google-adk`).
+
 ## Learning Path
 
 **Recommended order for beginners:**
@@ -213,7 +228,15 @@ Visualize workflows and graphs in multiple formats:
 1. `workflow_visualization.py` - Visualizing Graflow workflows (20 min)
 2. `graph_utilities.py` - Graph visualization utilities (25 min)
 
-**Total Learning Time**: ~8.75 hours to complete all examples
+### Level 11: LLM Integration 🤖
+
+**12_llm_integration/** - AI-powered workflows
+1. `simple_llm_client.py` - Basic LLMClient injection (15 min)
+2. `model_override.py` - Cost optimization with model selection (20 min)
+3. `llm_agent.py` - ReAct patterns with Google ADK (25 min)
+4. `multi_agent_workflow.py` - Multi-agent collaboration (30 min)
+
+**Total Learning Time**: ~10.25 hours to complete all examples
 
 ### Quick Start Path (30 minutes)
 
@@ -226,22 +249,57 @@ For a quick overview, follow this fast-track:
 ## Prerequisites
 
 - Python 3.11 or higher
-- Graflow installed (`pip install -e .` from the project root)
+- Graflow installed (see Setup below)
+
+### Setup
+
+**Option 1: Using uv (recommended)**
+```bash
+# Create virtual environment
+uv venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install Graflow
+uv pip install -e .
+
+# Install example-specific dependencies (e.g., for LLM integration)
+cd examples/12_llm_integration
+uv pip install -r requirements.txt
+```
+
+**Option 2: Using pip**
+```bash
+# Install Graflow
+pip install -e .
+
+# Install optional dependencies as needed
+pip install redis docker litellm google-adk
+```
 
 ### Optional Dependencies
 
 Some examples require additional packages:
 
-- **Redis examples**: `pip install redis`
-- **Docker examples**: `pip install docker`
-- **Visualization**: `pip install grandalf pygraphviz requests`
+- **Redis examples**: `redis`
+- **Docker examples**: `docker`
+- **Visualization**: `grandalf`, `pygraphviz`, `requests`
+- **LLM integration**: `litellm` (for LLMClient), `google-adk` (for agents)
 
 ## Running Examples
 
-Each example is self-contained and can be run directly:
-
+**Option 1: Direct execution**
 ```bash
 python examples/01_basics/hello_world.py
+```
+
+**Option 2: Using uv run (with dependencies)**
+```bash
+# Run with inline dependencies
+uv run --with litellm python examples/12_llm_integration/simple_llm_client.py
+
+# Or install from requirements.txt
+cd examples/12_llm_integration
+uv run --with-requirements requirements.txt python simple_llm_client.py
 ```
 
 Expected output is documented in each example file's docstring.
@@ -310,12 +368,19 @@ examples/
 │   ├── workflow_visualization.py
 │   └── graph_utilities.py
 │
+├── 12_llm_integration/  # LLM integration
+│   ├── README.md       # Category documentation
+│   ├── simple_llm_client.py
+│   ├── model_override.py
+│   ├── llm_agent.py
+│   └── multi_agent_workflow.py
+│
 └── README.md           # This file
 ```
 
 ## Development Status
 
-✅ **Completed** (29 examples): Fully functional and tested with comprehensive documentation
+✅ **Completed** (33 examples): Fully functional and tested with comprehensive documentation
 
 ### Progress Overview
 
@@ -331,8 +396,9 @@ examples/
 | 08_workflow_composition | ✅ Complete | 2/2 | Workflow composition |
 | 09_real_world | ✅ Complete | 4/4 | Production use cases |
 | 10_visualization | ✅ Complete | 2/2 | Workflow visualization |
+| 12_llm_integration | ✅ Complete | 4/4 | LLM-powered workflows |
 
-**Total Progress**: 29/29 examples (100% complete) 🎉
+**Total Progress**: 33/33 examples (100% complete) 🎉
 
 ## Troubleshooting
 
@@ -396,7 +462,7 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md) for details.
 
 All planned examples are now complete! 🎉
 
-The **29 examples** provide comprehensive coverage from basic concepts to production-ready applications. You can now:
+The **33 examples** provide comprehensive coverage from basic concepts to AI-powered production applications. You can now:
 
 1. **Build Production Workflows** - Use patterns from 09_real_world
 2. **Scale with Redis** - Deploy distributed workflows from 05_distributed
@@ -405,12 +471,13 @@ The **29 examples** provide comprehensive coverage from basic concepts to produc
 5. **Compose Workflows** - Create reusable templates from 08_workflow_composition
 6. **Analyze Data** - Build data analysis pipelines with anomaly detection
 7. **Visualize Workflows** - Document and debug with ASCII, Mermaid, and PNG from 10_visualization
+8. **Integrate LLMs** - Build AI-powered workflows with LLMClient and agents from 12_llm_integration
 
 Additional examples may be added based on community feedback and emerging use cases.
 
 ## API Notes
 
-**Important**: The examples in this directory use stable, tested API patterns. All 29 examples are fully functional and production-ready. See [docs/examples_api_issues.md](../docs/examples_api_issues.md) for historical notes on API evolution.
+**Important**: The examples in this directory use stable, tested API patterns. All 33 examples are fully functional and production-ready. See [docs/examples_api_issues.md](../docs/examples_api_issues.md) for historical notes on API evolution.
 
 ## Getting Help
 

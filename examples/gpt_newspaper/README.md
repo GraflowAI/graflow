@@ -7,6 +7,7 @@ Multi-agent workflow that researches topics, drafts and critiques articles, then
 - **FastAPI gateway** – `/api/generate` endpoint plus static serving of generated HTML under `/outputs`.
 - **Modern frontend** – Material UI + Vite with Storybook-driven components.
 - **Live log streaming** – WebSocket console mirrors backend stdout while the workflow runs so you can watch each agent step.
+- **LLM observability** – Optional Langfuse integration with automatic trace propagation for workflows, LLM calls, and agent tools.
 - **Container-first** – reproducible Dockerfiles and a compose script scoped to this example directory.
 
 ## Requirements
@@ -14,6 +15,7 @@ Multi-agent workflow that researches topics, drafts and critiques articles, then
 - Node.js ≥ 20 (frontend) with npm
 - Tavily and LLM provider credentials (see `.env.example`)
 - Optional: Docker + Docker Compose v2 for containerized runs
+- Optional: Langfuse account for LLM observability and tracing
 
 ## Configure Secrets
 ```bash
@@ -21,8 +23,58 @@ cp examples/gpt_newspaper/backend/.env.example examples/gpt_newspaper/backend/.e
 # edit the file and add:
 # TAVILY_API_KEY=<your key>
 # OPENAI_API_KEY=<or any LiteLLM-compatible key>
+
+# Optional: Langfuse credentials for LLM observability
+# LANGFUSE_PUBLIC_KEY=pk-lf-...
+# LANGFUSE_SECRET_KEY=sk-lf-...
+# LANGFUSE_HOST=https://cloud.langfuse.com  # or http://localhost:3000 for local
 ```
 The backend reads this file automatically via `python-dotenv`. Frontend dev server can point to any backend via the `VITE_API_BASE_URL` env var (defaults to `http://localhost:8000` in `vite.config.ts`).
+
+### Langfuse Setup (Optional)
+
+Graflow integrates with [Langfuse](https://langfuse.com/) for complete observability of your LLM workflows using **OpenTelemetry context propagation** to automatically link:
+- **Graflow workflow/task traces** (via `LangFuseTracer`)
+- **LLM API calls** (via LiteLLM's Langfuse callback for simple/dynamic workflows, or Google ADK for agent workflow)
+
+**No manual trace ID passing needed** - traces are automatically nested!
+
+#### Quick Start
+1. **Get API keys** from [cloud.langfuse.com](https://cloud.langfuse.com/) (free tier available)
+2. **Add to `.env`**:
+   ```bash
+   LANGFUSE_PUBLIC_KEY=pk-lf-...
+   LANGFUSE_SECRET_KEY=sk-lf-...
+   LANGFUSE_HOST=https://cloud.langfuse.com
+   ```
+3. **Run any workflow** - traces appear automatically in Langfuse UI
+
+#### What You'll See
+- **Workflow structure**: Task hierarchy with dependencies
+- **LLM calls**: Prompts, completions, tokens, latency
+- **Agent tool usage**: Tool calls with inputs/outputs (agent workflow only)
+- **Performance metrics**: Task durations, costs, token usage
+- **Error tracking**: Failed tasks with stack traces
+
+#### Dependencies
+Required packages (already in `requirements.txt`):
+```bash
+langfuse>=3.8.1              # Langfuse SDK
+opentelemetry-api>=1.37.0    # OpenTelemetry context API
+opentelemetry-sdk>=1.37.0    # OpenTelemetry SDK
+litellm>=1.72.6              # LLM wrapper with langfuse_otel callback
+```
+
+For agent workflow (Google ADK):
+```bash
+google-adk>=0.9.0            # Agent Development Kit
+```
+
+#### Reference Documentation
+- [LiteLLM Langfuse Integration](https://docs.litellm.ai/docs/observability/langfuse_integration)
+- [Google ADK Langfuse Integration](https://langfuse.com/integrations/frameworks/google-adk)
+- [Graflow LLM Integration Design](../../docs/llm_integration_design.md)
+- [Full Setup Guide](backend/LANGFUSE_SETUP.md)
 
 ## Running Locally (without Docker)
 1. **Backend**
@@ -89,3 +141,10 @@ When you click "Open HTML file" or an item in "Recent outputs", the frontend con
 - If live logs show "Waiting for backend output…", check the browser console (F12) for WebSocket connection errors. The WebSocket should connect to `ws://localhost:8000/ws/logs/{runId}`.
 - If the frontend cannot connect to the API, verify that `VITE_API_BASE_URL` in docker-compose.yml is set to `http://localhost:8000` (not `http://backend:8000`).
 - If clicking "Open HTML file" or "Recent outputs" opens a blank page or 404, ensure the backend is running on port 8000 and the outputs directory is mounted correctly.
+
+### Langfuse Tracing Issues
+- **Traces not appearing**: Verify `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` are set correctly in `.env`. Check backend logs for "Langfuse initialized" message.
+- **Missing LLM traces**: Ensure `langfuse>=3.8.1` and `litellm>=1.72.6` are installed. LiteLLM's `langfuse_otel` callback requires OpenTelemetry packages.
+- **Disconnected traces**: If workflow traces and LLM calls appear separately, check that OpenTelemetry context propagation is working (automatic with `LangFuseTracer`).
+- **Agent tool traces missing**: For agent workflow, ensure `google-adk>=0.9.0` is installed and ADK tracing is configured via `setup_adk_tracing()`.
+- **Local Langfuse**: If using self-hosted Langfuse, set `LANGFUSE_HOST=http://localhost:3000` and ensure the server is running.

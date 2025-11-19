@@ -36,8 +36,8 @@ class TestLangFuseTracerBasics:
 
     @patch("graflow.trace.langfuse.LANGFUSE_AVAILABLE", True)
     @patch("graflow.trace.langfuse.Langfuse")
-    @patch("graflow.trace.langfuse.load_dotenv")
-    def test_initialization_from_env(self, mock_load_dotenv, mock_langfuse_class):
+    @patch("graflow.trace.langfuse.load_env")
+    def test_initialization_from_env(self, mock_load_env, mock_langfuse_class):
         """Test LangFuseTracer loads config from .env."""
         from graflow.trace.langfuse import LangFuseTracer
 
@@ -51,7 +51,7 @@ class TestLangFuseTracerBasics:
         }):
             tracer = LangFuseTracer()
 
-        mock_load_dotenv.assert_called_once()
+        mock_load_env.assert_called_once()
         assert tracer.enabled is True
 
 

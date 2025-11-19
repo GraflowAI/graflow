@@ -8,27 +8,34 @@ import os
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from graflow.trace.base import Tracer
+from graflow.utils.dotenv import load_env
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
+    from langfuse import Langfuse, LangfuseSpan
+    from langfuse.types import TraceContext
+    from opentelemetry import context as otel_context
+    from opentelemetry import trace
+    from opentelemetry.trace import NonRecordingSpan, SpanContext, TraceFlags
+
     from graflow.core.context import ExecutionContext
 
 # Optional imports
 try:
-    from langfuse import Langfuse, LangfuseSpan  # type: ignore[import-not-found]
+    from langfuse import Langfuse  # type: ignore[import-not-found]
     LANGFUSE_AVAILABLE = True
 except ImportError:
     LANGFUSE_AVAILABLE = False
-    Langfuse = None  # type: ignore
-    LangfuseSpan = None  # type: ignore
 
+# OpenTelemetry imports for context propagation
 try:
-    from dotenv import load_dotenv  # type: ignore[import-not-found]
-    DOTENV_AVAILABLE = True
+    from opentelemetry import context as otel_context
+    from opentelemetry import trace
+    from opentelemetry.trace import NonRecordingSpan, SpanContext, TraceFlags
+    OTEL_AVAILABLE = True
 except ImportError:
-    DOTENV_AVAILABLE = False
-    load_dotenv = None  # type: ignore
+    OTEL_AVAILABLE = False
 
 
 class LangFuseTracer(Tracer):
@@ -81,7 +88,7 @@ class LangFuseTracer(Tracer):
             enabled: If False, acts as no-op (useful for testing)
 
         Raises:
-            ImportError: If langfuse or python-dotenv is not installed
+            ImportError: If langfuse is not installed
             ValueError: If credentials are not provided
         """
         super().__init__(enable_runtime_graph=enable_runtime_graph)
@@ -92,25 +99,20 @@ class LangFuseTracer(Tracer):
                 "Install with: pip install langfuse"
             )
 
-        if not DOTENV_AVAILABLE:
-            raise ImportError(
-                "python-dotenv package is required for LangFuseTracer. "
-                "Install with: pip install python-dotenv"
-            )
-
         self.enabled = enabled
 
         # Initialize attributes with type hints
         self.client: Optional[Langfuse] = None # type: ignore
         self._root_span: Optional[LangfuseSpan] = None # type: ignore
         self._span_stack: List[LangfuseSpan] = [] # type: ignore
+        self._otel_context_tokens: List[Any] = []  # OpenTelemetry context tokens for cleanup
 
         if not enabled:
             # No-op mode for testing
             return
 
         # Load environment variables from .env file
-        load_dotenv() # type: ignore
+        load_env()
 
         # Get credentials (parameters override env vars)
         final_public_key = public_key or os.getenv("LANGFUSE_PUBLIC_KEY")
@@ -146,7 +148,7 @@ class LangFuseTracer(Tracer):
         try:
             # In v3, create a root span to represent the trace
             # Use plain dict for trace_context as per v3 API
-            trace_context = None
+            trace_context: Optional[TraceContext] = None
             if trace_id:
                 trace_context = {"trace_id": trace_id}
 
@@ -192,7 +194,12 @@ class LangFuseTracer(Tracer):
         parent_name: Optional[str],
         metadata: Optional[Dict[str, Any]]
     ) -> None:
-        """Output span start to LangFuse."""
+        """Output span start to LangFuse and set OpenTelemetry context.
+
+        This method creates a Langfuse span and sets OpenTelemetry context
+        with the span's trace_id and span_id. This allows LiteLLM and Google ADK
+        to automatically detect the parent span and create nested traces.
+        """
         if not self.enabled or not self._root_span:
             return
 
@@ -217,6 +224,35 @@ class LangFuseTracer(Tracer):
 
             # Push to stack
             self._span_stack.append(span)
+
+            # Set OpenTelemetry context for LiteLLM/ADK automatic propagation
+            if OTEL_AVAILABLE and hasattr(span, 'trace_id') and hasattr(span, 'id'):
+                try:
+                    # Convert Langfuse hex IDs to OpenTelemetry int IDs
+                    # Langfuse v3: trace_id is 32-char hex, span.id is 16-char hex
+                    trace_id_int = int(span.trace_id, 16)
+                    span_id_int = int(span.id, 16)
+
+                    # Create OpenTelemetry SpanContext
+                    span_context = SpanContext(
+                        trace_id=trace_id_int,
+                        span_id=span_id_int,
+                        is_remote=False,
+                        trace_flags=TraceFlags(0x01)  # Sampled
+                    )
+
+                    # Set as current context (for LiteLLM/ADK to detect)
+                    ctx = trace.set_span_in_context(NonRecordingSpan(span_context))
+                    token = otel_context.attach(ctx)
+                    self._otel_context_tokens.append(token)
+
+                    logger.debug(
+                        f"Set OpenTelemetry context for span '{name}': "
+                        f"trace_id={span.trace_id[:8]}..., span_id={span.id[:8]}..."
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to set OpenTelemetry context for span '{name}': {e}")
+
         except Exception as e:
             logger.warning(f"Failed to start LangFuse span '{name}': {e}")
 
@@ -226,7 +262,7 @@ class LangFuseTracer(Tracer):
         output: Optional[Any],
         metadata: Optional[Dict[str, Any]]
     ) -> None:
-        """Output span end to LangFuse."""
+        """Output span end to LangFuse and clear OpenTelemetry context."""
         if not self.enabled or not self._span_stack:
             return
 
@@ -247,6 +283,16 @@ class LangFuseTracer(Tracer):
 
             # End the span
             span.end()
+
+            # Clear OpenTelemetry context
+            if OTEL_AVAILABLE and self._otel_context_tokens:
+                try:
+                    token = self._otel_context_tokens.pop()
+                    otel_context.detach(token)
+                    logger.debug(f"Cleared OpenTelemetry context for span '{name}'")
+                except Exception as e:
+                    logger.warning(f"Failed to clear OpenTelemetry context for span '{name}': {e}")
+
         except Exception as e:
             logger.warning(f"Failed to end LangFuse span '{name}': {e}")
 
@@ -296,7 +342,7 @@ class LangFuseTracer(Tracer):
         try:
             # In v3, use trace_context dict to attach to existing trace
             # Create root span attached to the existing trace with parent span if provided
-            trace_context: Dict[str, str] = {"trace_id": trace_id}
+            trace_context: TraceContext = {"trace_id": trace_id}
             if parent_span_id:
                 trace_context["parent_span_id"] = parent_span_id
 
@@ -390,6 +436,7 @@ class LangFuseTracer(Tracer):
         branch_tracer.enabled = True
         branch_tracer.client = self.client  # Share the Langfuse client
         branch_tracer._span_stack = []  # New stack for this branch
+        branch_tracer._otel_context_tokens = []  # New OTel context tokens for this branch
         branch_tracer._current_trace_id = trace_id
 
         # Set root span to parent's current span (from span stack)
@@ -417,5 +464,4 @@ class LangFuseTracer(Tracer):
         """
         self.flush()
         self._root_span = None
-        self._span_stack = []
 

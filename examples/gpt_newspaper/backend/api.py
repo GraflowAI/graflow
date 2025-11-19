@@ -36,6 +36,7 @@ from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnec
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from newspaper_agent_workflow import run_newspaper_workflow as run_agent_newspaper_workflow
 from newspaper_dynamic_workflow import run_newspaper_workflow as run_dynamic_newspaper_workflow
 from newspaper_workflow import run_newspaper_workflow as run_original_newspaper_workflow
 from pydantic import BaseModel, ConfigDict, Field
@@ -67,11 +68,12 @@ SUPPORTED_LAYOUTS: dict[str, str] = {
     "two-column": "layout_2.html",
 }
 
-SupportedWorkflow = Literal["original", "dynamic"]
+SupportedWorkflow = Literal["original", "dynamic", "agent"]
 DEFAULT_WORKFLOW: SupportedWorkflow = "original"
 WORKFLOW_RUNNERS: Dict[SupportedWorkflow, Callable[..., str]] = {
     "original": run_original_newspaper_workflow,
     "dynamic": run_dynamic_newspaper_workflow,
+    "agent": run_agent_newspaper_workflow,
 }
 
 
@@ -198,12 +200,12 @@ class NewspaperRequest(BaseModel):
         max_length=10,
         description="List of article topics",
         example=["AI developments", "Climate change"],
-    )
+    ) # type: ignore
     layout: Literal["single", "two-column", "layout_1.html", "layout_2.html"] = Field(
         default="two-column",
         description="Layout template to use (friendly name or template file)",
         example="two-column",
-    )
+    ) # type: ignore
     output_dir: str | None = Field(
         default=None,
         alias="outputDir",
@@ -225,9 +227,9 @@ class NewspaperRequest(BaseModel):
     )
     workflow: SupportedWorkflow = Field(
         default=DEFAULT_WORKFLOW,
-        description="Workflow variant to execute: 'original' (static) or 'dynamic'",
+        description="Workflow variant to execute: 'original' (simple LLM tasks), 'dynamic' (parallel execution), or 'agent' (LLM agents with tools)",
         example=DEFAULT_WORKFLOW,
-    )
+    ) # type: ignore
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -242,7 +244,7 @@ class NewspaperResponse(BaseModel):
         alias="outputPath",
         description="Relative path to the generated newspaper HTML file",
         example="/outputs/run_1234567890/newspaper.html",
-    )
+    ) # type: ignore
     html: str = Field(..., description="The rendered newspaper HTML content")
     created_at: str = Field(alias="createdAt", description="ISO timestamp of creation")
     layout: str = Field(description="Layout option used to generate the newspaper")
@@ -282,7 +284,7 @@ def _ensure_generation_ready() -> None:
         raise HTTPException(
             status_code=500,
             detail="LLM credentials not configured. Provide OPENAI_API_KEY or set "
-            "GPT_NEWSPAPER_MODEL_PARAMS with connection details.",
+            "GRAFLOW_MODEL_PARAMS with connection details.",
         )
 
 

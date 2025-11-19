@@ -2,10 +2,9 @@
 
 import json
 from datetime import datetime
-from typing import Any, Dict
+from typing import Dict, Optional
 
-from config import Config
-from utils.litellm import LiteLLMClient, make_message
+from graflow.llm.client import LLMClient, make_message
 
 ARTICLE_JSON_FORMAT = """
 {
@@ -39,12 +38,15 @@ REVISE_JSON_FORMAT = """
 class WriterAgent:
     """Agent that writes and revises news articles."""
 
-    def __init__(self, model: str | None = None, *, client_params: Dict[str, Any] | None = None):
-        self.model = model or Config.DEFAULT_MODEL
-        params = dict(Config.DEFAULT_MODEL_PARAMS)
-        if client_params:
-            params.update(client_params)
-        self.client = LiteLLMClient(self.model, **params)
+    def __init__(self, llm_client: LLMClient, model: Optional[str] = None):
+        """Initialize WriterAgent with injected LLMClient.
+
+        Args:
+            llm_client: Injected LLMClient instance
+            model: Optional model override for this agent's completions
+        """
+        self.client = llm_client
+        self.model = model  # Optional model override
 
     @staticmethod
     def _strip_code_fence(text: str) -> str:
@@ -106,14 +108,15 @@ Please return nothing but a JSON in the following format:
 {ARTICLE_JSON_FORMAT}
 """
 
-        response_text = self.client.chat_text(
-            [
+        response_text = self.client.completion_text(
+            messages=[
                 make_message(
                     "system",
                     "You are a newspaper writer. Your sole purpose is to write a well-written article about a topic using a list of articles.",
                 ),
                 make_message("user", prompt),
             ],
+            model=self.model,
             response_format={"type": "json_object"},
         )
 
@@ -140,14 +143,15 @@ Please return nothing but a JSON in the following format:
 {REVISE_JSON_FORMAT}
 """
 
-        response_text = self.client.chat_text(
-            [
+        response_text = self.client.completion_text(
+            messages=[
                 make_message(
                     "system",
                     "You are a newspaper editor. Your sole purpose is to edit a well-written article based on given critique.",
                 ),
                 make_message("user", prompt),
             ],
+            model=self.model,
             response_format={"type": "json_object"},
         )
 
