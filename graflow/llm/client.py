@@ -87,6 +87,49 @@ def setup_langfuse_for_litellm() -> None:
     # and create properly nested spans in Langfuse
     try:
         import litellm  # type: ignore[import-not-found]
+        from litellm.integrations.opentelemetry import (
+            LITELLM_REQUEST_SPAN_NAME,
+            OpenTelemetry,
+        )
+
+        # Monkey patch _get_span_name to use generation_name for unique span names.
+        # This prevents all litellm_request spans from being grouped in the Langfuse UI.
+        if not hasattr(OpenTelemetry, "_get_span_name_original"):
+
+            def _get_span_name_patched(self: OpenTelemetry, kwargs: dict) -> str:
+                """
+                Patched version of _get_span_name to generate more specific span names.
+                It uses 'generation_name' from metadata if available.
+                """
+                litellm_params = kwargs.get("litellm_params", {})
+                metadata = litellm_params.get("metadata", {}) or {}
+                generation_name = metadata.get("generation_name")
+
+                # Use generation_name for the span if provided, otherwise fallback
+                span_name = str(
+                    generation_name
+                    if generation_name
+                    else LITELLM_REQUEST_SPAN_NAME
+                )
+
+                # This logic is based on user feedback to handle nested spans
+                from openinference.instrumentation.helpers import get_span_id
+                from opentelemetry import trace
+                current_span = get_span_id(trace.get_current_span())
+                logger.debug(
+                    f"LiteLLM generation_name span: {span_name}, "
+                    f"current_span: {current_span}"
+                )
+                if current_span:
+                    return f"{span_name} [{current_span}]"
+                return span_name
+
+            # Store the original method and apply the patch
+            OpenTelemetry._get_span_name_original = OpenTelemetry._get_span_name  # type: ignore
+            OpenTelemetry._get_span_name = _get_span_name_patched  # type: ignore
+            logger.info(
+                "Applied monkey patch to litellm's _get_span_name for unique span names in Langfuse."
+            )
 
         # Use langfuse_otel callback for Langfuse SDK v3+ compatibility
         # This uses OpenTelemetry integration and avoids the sdk_integration parameter issue
