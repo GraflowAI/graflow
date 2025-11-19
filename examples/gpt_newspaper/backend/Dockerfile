@@ -29,4 +29,6 @@ WORKDIR /workspace/examples/gpt_newspaper/backend
 
 EXPOSE 8000
 
-CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]
+# nest_asyncio: Can't patch loop of type <class 'uvloop.Loop'>
+# https://github.com/NVIDIA-NeMo/Guardrails/issues/112#issuecomment-1744171237
+CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000", "--loop", "asyncio"]
