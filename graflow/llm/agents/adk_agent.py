@@ -294,6 +294,62 @@ def _patch_adk_llm_call_span_name() -> None:
         logger.error(f"Failed to patch base_llm_flow.tracer: {e}", exc_info=True)
 
 
+def _patch_adk_execute_tool_span_name() -> None:
+    """
+    Patch the tracer used in google.adk.flows.llm_flows.functions
+    to rewrite 'execute_tool' span names to be unique.
+
+    This directly wraps the `functions.tracer` object (not the get_tracer function)
+    because the tracer is already instantiated at module import time.
+
+    Targets two span names:
+    - 'execute_tool (merged)' -> 'execute_tool (merged) [span_id]'
+    - 'execute_tool {tool_name}' -> 'execute_tool {tool_name} [span_id]'
+    """
+    try:
+        import wrapt
+        from google.adk.flows.llm_flows import functions
+        from openinference.instrumentation.helpers import get_span_id
+
+        # Check if already patched by our custom wrapper (using marker attribute)
+        if hasattr(functions.tracer, '_graflow_execute_tool_patched'):  # type: ignore[attr-defined]
+            logger.debug("functions.tracer already patched - skipping")
+            return
+
+        class ExecuteToolSpanNameRewriter(wrapt.ObjectProxy):
+            """A proxy to wrap the tracer and rewrite execute_tool span names."""
+
+            # Marker attribute to indicate this is our wrapper
+            _graflow_execute_tool_patched = True
+
+            def start_as_current_span(self, name, *args, **kwargs):
+                # Patch both "execute_tool (merged)" and "execute_tool {tool_name}"
+                if name.startswith("execute_tool"):
+                    current_span = trace_api.get_current_span()
+                    span_id = get_span_id(current_span)
+
+                    if span_id:
+                        # Add span_id to make the name unique for better UI grouping
+                        name = f"{name} [{span_id}]"
+                    else:
+                        logger.debug(f"span_id is None - cannot rewrite '{name}' span name")
+
+                return self.__wrapped__.start_as_current_span(name, *args, **kwargs)
+
+        # Wrap the existing tracer object directly
+        functions.tracer = ExecuteToolSpanNameRewriter(functions.tracer)  # type: ignore[attr-defined]
+
+        logger.info("Successfully patched functions.tracer to rewrite 'execute_tool' span names")
+
+    except (ImportError, AttributeError) as e:
+        logger.warning(
+            f"Could not patch functions.tracer: {e}. "
+            "This is expected if google-adk is not installed."
+        )
+    except Exception as e:
+        logger.error(f"Failed to patch functions.tracer: {e}", exc_info=True)
+
+
 def setup_adk_tracing() -> None:
     """Setup OpenInference instrumentation for Google ADK.
 
@@ -325,7 +381,7 @@ def setup_adk_tracing() -> None:
         - Applies monkeypatches in the following order:
           1. First: _patch_runner_run(), _patch_passthrough_tracer(), _patch_runner_run_async()
           2. Then: GoogleADKInstrumentor().instrument() (OpenInference sets up its tracer)
-          3. Finally: _patch_adk_llm_call_span_name() (wrap OpenInference's tracer)
+          3. Finally: _patch_adk_llm_call_span_name(), _patch_adk_execute_tool_span_name() (wrap OpenInference's tracers)
     """
     global _adk_instrumented
 
@@ -367,11 +423,12 @@ def setup_adk_tracing() -> None:
             # Phase 2: Instrument ADK with OpenInference (this sets base_llm_flow.tracer)
             GoogleADKInstrumentor().instrument()
 
-            # Phase 3: Apply span name patch AFTER instrumentation
-            # This wraps the tracer that OpenInference just installed
+            # Phase 3: Apply span name patches AFTER instrumentation
+            # These wrap the tracers that OpenInference just installed
             # IMPORTANT: Must be done AFTER instrument() because OpenInference's
             # _patch_trace_call_llm() does: setattr(base_llm_flow, "tracer", self._tracer)
-            _patch_adk_llm_call_span_name()
+            _patch_adk_llm_call_span_name()         # Patch 'call_llm' spans
+            # _patch_adk_execute_tool_span_name()   # Patch 'execute_tool' spans
 
             _adk_instrumented = True
             logger.info("Google ADK instrumentation enabled for tracing")
