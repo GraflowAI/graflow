@@ -86,7 +86,7 @@ import os
 import re
 import sys
 import time
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import Any, Dict, List
 
 from agents import DesignerAgent, PublisherAgent
 from config import Config
@@ -112,17 +112,14 @@ logging.getLogger("graflow.llm.agents.adk_agent").setLevel(logging.DEBUG)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)  # Keep workflow logs at INFO to avoid clutter
 
-if TYPE_CHECKING:
-    import textstat  # type: ignore
-    from tavily import TavilyClient  # type: ignore
-
 # Check for optional dependencies availability
 try:
-    import tavily  # type: ignore # noqa: F401
+    from tavily import TavilyClient  # type: ignore
     TAVILY_AVAILABLE = True
 except ImportError as e:
     logger.warning("tavily-python is not installed. Web search will not be available.", exc_info=e)
     TAVILY_AVAILABLE = False
+    TavilyClient = None  # type: ignore
 
 try:
     import textstat  # type: ignore
@@ -130,6 +127,7 @@ try:
 except ImportError as e:
     logger.warning("textstat is not installed. Readability assessment will not be available.", exc_info=e)
     TEXTSTAT_AVAILABLE = False
+    textstat = None  # type: ignore
 
 try:
     import google.adk.agents
