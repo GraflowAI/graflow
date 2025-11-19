@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Dict, Iterator, 
 
 from opentelemetry import context as context_api
 from opentelemetry import trace as trace_api
-from opentelemetry.trace import Span, get_current_span
+from opentelemetry.trace import Span
 
 from .base import LLMAgent
 
@@ -53,7 +53,6 @@ def _patch_passthrough_tracer() -> None:
 
     This monkeypatch fixes the _PassthroughTracer.start_as_current_span method
     to preserve trace context propagation while passing through spans.
-    It also adds debug logging to track trace_id propagation.
 
     The patch ensures that:
     1. OpenTelemetry context is properly managed (attach/detach)
@@ -65,11 +64,15 @@ def _patch_passthrough_tracer() -> None:
         from openinference.instrumentation.google_adk import (  # type: ignore[import-not-found]
             _PassthroughTracer,
         )
-        from openinference.instrumentation.helpers import get_trace_id  # type: ignore[import-not-found]
+
+        # Save original method if not already patched
+        if not hasattr(_PassthroughTracer, '_original_start_as_current_span'):
+            _PassthroughTracer._original_start_as_current_span = _PassthroughTracer.start_as_current_span
 
         @contextmanager
         def patched_start_as_current_span(
             _self: Any,
+            name: str,  # Add name parameter for logging
             *_args: Any,
             **_kwargs: Any
         ) -> Iterator[Span]:
@@ -83,6 +86,7 @@ def _patch_passthrough_tracer() -> None:
 
             Args:
                 _self: Self reference (unused, for compatibility)
+                name: Span name (for logging purposes)
                 _args: Positional arguments (unused, for compatibility)
                 _kwargs: Keyword arguments (unused, for compatibility)
 
@@ -98,15 +102,6 @@ def _patch_passthrough_tracer() -> None:
             )
 
             try:
-                # Log trace information for debugging
-                if current_span.is_recording():
-                    span_context = current_span.get_span_context()
-                    trace_id = get_trace_id(current_span)
-                    logger.debug(
-                        f"_PassthroughTracer: Passing through span "
-                        f"(trace_id={trace_id}, span_id={span_context.span_id:016x})"
-                    )
-
                 # Yield current span without creating a new one
                 yield current_span
             finally:
@@ -123,14 +118,16 @@ def _patch_passthrough_tracer() -> None:
             "This is expected if openinference-instrumentation-google-adk is not installed."
         )
     except Exception as e:
-        logger.warning(f"Failed to patch _PassthroughTracer: {e}")
+        logger.error(f"Failed to patch _PassthroughTracer: {e}", exc_info=True)
 
 
 def _patch_runner_run_async() -> None:
-    """Patch _RunnerRunAsync to fix async generator wrapper compatibility.
+    """Patch _RunnerRunAsync to fix async generator wrapper compatibility and rewrite span names.
 
-    This monkeypatch fixes the _AsyncGenerator wrapper to properly implement
-    the async generator protocol, including the aclose() method required by ADK.
+    This monkeypatch:
+    1. Wraps _RunnerRunAsync._tracer to rewrite 'invocation [app_name]' span names
+    2. Fixes the _AsyncGenerator wrapper to properly implement the async generator protocol,
+       including the aclose() method required by ADK.
 
     Note on OpenTelemetry context propagation:
         Context propagation across the thread created by Runner.run() is handled
@@ -141,6 +138,12 @@ def _patch_runner_run_async() -> None:
         # Import the _RunnerRunAsync class from the instrumentation package
         import wrapt
         from openinference.instrumentation.google_adk._wrappers import _RunnerRunAsync
+        from openinference.instrumentation.helpers import get_span_id
+
+        # Check if already patched
+        if hasattr(_RunnerRunAsync, '_graflow_patched'):
+            logger.debug("_RunnerRunAsync already patched - skipping")
+            return
 
         # Save original __call__
         original_call = _RunnerRunAsync.__call__
@@ -152,7 +155,24 @@ def _patch_runner_run_async() -> None:
             args: tuple[Any, ...],
             kwargs: Dict[str, Any],
         ) -> Any:
-            """Patched version that fixes async generator wrapper compatibility."""
+            """Patched version that wraps tracer and fixes async generator compatibility."""
+            # Wrap the tracer to rewrite invocation span names
+            if not hasattr(self._tracer, '_graflow_invocation_patched'):
+                class TracerWrapper(wrapt.ObjectProxy):
+                    """Wrapper to rewrite invocation span names."""
+                    _graflow_invocation_patched = True
+
+                    def start_as_current_span(self, name, *args, **kwargs):
+                        # Rewrite invocation span names to include span_id
+                        if name.startswith("invocation ["):
+                            current_span_id = get_span_id(trace_api.get_current_span())
+                            if current_span_id:
+                                name = f"invocation [{current_span_id}]"
+
+                        return self.__wrapped__.start_as_current_span(name, *args, **kwargs)
+
+                self._tracer = TracerWrapper(self._tracer)
+
             # Call original to get the wrapped generator
             result = original_call(self, wrapped, instance, args, kwargs) # type: ignore
 
@@ -166,7 +186,9 @@ def _patch_runner_run_async() -> None:
 
         # Apply monkeypatch
         _RunnerRunAsync.__call__ = patched_call  # type: ignore[method-assign]
-        logger.debug("Successfully patched _RunnerRunAsync.__call__ for async generator compatibility")
+        _RunnerRunAsync._graflow_patched = True  # type: ignore[attr-defined]
+
+        logger.debug("Successfully patched _RunnerRunAsync.__call__ for async generator compatibility and span name rewriting")
 
     except ImportError as e:
         logger.warning(
@@ -174,7 +196,7 @@ def _patch_runner_run_async() -> None:
             "This is expected if openinference-instrumentation-google-adk is not installed."
         )
     except Exception as e:
-        logger.warning(f"Failed to patch _RunnerRunAsync: {e}")
+        logger.error(f"Failed to patch _RunnerRunAsync: {e}", exc_info=True)
 
 
 def _patch_runner_run() -> None:
@@ -199,16 +221,6 @@ def _patch_runner_run() -> None:
             # Capture current context and store it on the thread instance
             self._otel_context = contextvars.copy_context()
 
-            # Log for debugging
-            current_span = get_current_span()
-            if current_span and current_span.get_span_context().is_valid:
-                try:
-                    from openinference.instrumentation.helpers import get_trace_id  # type: ignore[import-not-found]
-                    trace_id = get_trace_id(current_span)
-                    logger.debug(f"Thread.__init__: Captured context with trace_id={trace_id}")
-                except ImportError:
-                    pass
-
         def patched_run(self):
             """Restore context when thread runs."""
             # Get the captured context (if any)
@@ -229,6 +241,57 @@ def _patch_runner_run() -> None:
 
     except Exception as e:
         logger.warning(f"Failed to patch threading.Thread: {e}")
+
+
+def _patch_adk_llm_call_span_name() -> None:
+    """
+    Patch the tracer used in google.adk.flows.llm_flows.base_llm_flow
+    to rewrite 'call_llm' span names to be unique.
+
+    This directly wraps the `base_llm_flow.tracer` object (not the get_tracer function)
+    because the tracer is already instantiated at module import time.
+    """
+    try:
+        import wrapt
+        from google.adk.flows.llm_flows import base_llm_flow
+        from openinference.instrumentation.helpers import get_span_id
+
+        # Check if already patched by our custom wrapper (using marker attribute)
+        if hasattr(base_llm_flow.tracer, '_graflow_span_name_patched'):  # type: ignore[attr-defined]
+            logger.debug("base_llm_flow.tracer already patched - skipping")
+            return
+
+        class SpanNameRewriter(wrapt.ObjectProxy):
+            """A proxy to wrap the tracer and rewrite span names."""
+
+            # Marker attribute to indicate this is our wrapper
+            _graflow_span_name_patched = True
+
+            def start_as_current_span(self, name, *args, **kwargs):
+                if name == "call_llm":
+                    current_span = trace_api.get_current_span()
+                    span_id = get_span_id(current_span)
+
+                    if span_id:
+                        # Add span_id to make the name unique for better UI grouping
+                        name = f"call_llm [{span_id}]"
+                    else:
+                        logger.debug(f"span_id is None - cannot rewrite '{name}' span name")
+
+                return self.__wrapped__.start_as_current_span(name, *args, **kwargs)
+
+        # Wrap the existing tracer object directly
+        base_llm_flow.tracer = SpanNameRewriter(base_llm_flow.tracer)  # type: ignore[attr-defined]
+
+        logger.info("Successfully patched base_llm_flow.tracer to rewrite 'call_llm' span names")
+
+    except (ImportError, AttributeError) as e:
+        logger.warning(
+            f"Could not patch base_llm_flow.tracer: {e}. "
+            "This is expected if google-adk is not installed."
+        )
+    except Exception as e:
+        logger.error(f"Failed to patch base_llm_flow.tracer: {e}", exc_info=True)
 
 
 def setup_adk_tracing() -> None:
@@ -259,8 +322,10 @@ def setup_adk_tracing() -> None:
         - This function is idempotent (safe to call multiple times)
         - Instrumentation is global and affects all ADK agents
         - ADK traces will automatically nest under LangFuseTracer spans
-        - Applies monkeypatches to Runner.run(), _PassthroughTracer, and _RunnerRunAsync
-          BEFORE instrumentation for proper context propagation
+        - Applies monkeypatches in the following order:
+          1. First: _patch_runner_run(), _patch_passthrough_tracer(), _patch_runner_run_async()
+          2. Then: GoogleADKInstrumentor().instrument() (OpenInference sets up its tracer)
+          3. Finally: _patch_adk_llm_call_span_name() (wrap OpenInference's tracer)
     """
     global _adk_instrumented
 
@@ -293,15 +358,21 @@ def setup_adk_tracing() -> None:
             logger.warning(f"Failed to apply nest_asyncio: {e}")
 
         if GoogleADKInstrumentor is not None:
-            # Apply monkeypatches BEFORE ADK instrumentation
-            # This ensures classes are already patched when instrument() runs
-            # _patch_asyncio_run()       # Propagate context across asyncio.run() calls
+            # Phase 1: Apply infrastructure patches BEFORE ADK instrumentation
+            # These patches fix context propagation and async compatibility issues
             _patch_runner_run()          # Propagates context across the thread boundary created by Runner.run()
             _patch_passthrough_tracer()  # Fixes a bug in OpenInference instrumentation's _PassthroughTracer
             _patch_runner_run_async()    # Fixes async generator protocol (aclose() method), required for run_async()
 
-            # Now instrument ADK with the patched classes
+            # Phase 2: Instrument ADK with OpenInference (this sets base_llm_flow.tracer)
             GoogleADKInstrumentor().instrument()
+
+            # Phase 3: Apply span name patch AFTER instrumentation
+            # This wraps the tracer that OpenInference just installed
+            # IMPORTANT: Must be done AFTER instrument() because OpenInference's
+            # _patch_trace_call_llm() does: setattr(base_llm_flow, "tracer", self._tracer)
+            _patch_adk_llm_call_span_name()
+
             _adk_instrumented = True
             logger.info("Google ADK instrumentation enabled for tracing")
         else:
