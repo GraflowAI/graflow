@@ -764,7 +764,7 @@ def extract_source_3():
     return {"source": "db3", "records": 2000}
 
 @task(inject_context=True)
-def aggregate(context):
+def aggregate(context: TaskExecutionContext):
     """全データソースの結果を集約"""
     r1 = context.get_result("extract_source_1")
     r2 = context.get_result("extract_source_2")
@@ -779,12 +779,12 @@ with workflow("etl_pipeline") as wf:
     ).with_execution(
         backend=CoordinationBackend.REDIS,
         backend_config={"key_prefix": "graflow"}
-    )
+    ).set_group_name("parallel_extract")
 
     parallel_extract >> aggregate
 
     # Workflow実行（この時点で graph_hash が計算され、Redisに保存される）
-    wf.execute(start_node="extract_source_1", max_steps=10)
+    wf.execute(start_node="extract_parallel_extract", max_steps=10)
 ```
 
 **実行フロー:**
