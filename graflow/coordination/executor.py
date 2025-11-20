@@ -98,7 +98,11 @@ class GroupExecutor:
         handler.set_group_policy(policy_instance)
 
         resolved_backend = self._resolve_backend(backend)
-        config = dict(backend_config or {})
+
+        # Merge context config with backend config
+        # backend_config takes precedence over context config
+        context_config = getattr(exec_context, 'config', {})
+        config = {**context_config, **(backend_config or {})}
 
         if resolved_backend == CoordinationBackend.DIRECT:
             return self.direct_execute(group_id, tasks, exec_context, handler)
