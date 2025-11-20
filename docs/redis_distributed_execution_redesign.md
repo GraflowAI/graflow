@@ -377,7 +377,6 @@ class WorkflowContext:
 - Workflow 開始時は **何もしない**（graph_hash計算も不要）
 - Redis への保存は行わない（Lazy Upload）
 - メモリキューで実行される場合、Graph は Redis に保存されない
-- **graph_modifiedフラグ不要**: ParallelGroup実行時に常に現在のGraphから計算するため
 
 #### 2.4.2 動的タスク生成への対応（Worker Local & Lazy Propagation）
 
