@@ -249,7 +249,9 @@ class GraphStore:
 
         # Load from Redis
         graph_key = f"{self.key_prefix}:graph:{graph_hash}"
-        compressed = self.redis.get(graph_key)
+        # Sliding TTL: Extend expire on every access
+        # 長時間実行ワークフロー（例: 数時間のML training）でもGraphが消えない
+        compressed = self.redis.getex(graph_key, ex=self.ttl)
 
         if not compressed:
             raise ValueError(
@@ -260,10 +262,6 @@ class GraphStore:
                 f"  - Missing graph upload (Lazy Upload not triggered)\n"
                 f"  - Redis eviction (memory pressure)"
             )
-
-        # Sliding TTL: Extend expire on every access
-        # 長時間実行ワークフロー（例: 数時間のML training）でもGraphが消えない
-        self.redis.expire(graph_key, self.ttl)
 
         # Decompress and deserialize
         graph_bytes = zlib.decompress(compressed)
