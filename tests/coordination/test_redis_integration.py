@@ -7,7 +7,18 @@ import time
 import pytest
 
 from graflow.coordination.redis import RedisCoordinator
-from graflow.coordination.task_spec import TaskSpec
+from graflow.core.context import ExecutionContext
+from graflow.core.graph import TaskGraph
+from graflow.core.task import TaskWrapper
+from graflow.queue.redis import RedisTaskQueue
+
+
+def create_coordinator(redis_client, key_prefix: str = "test") -> tuple[RedisCoordinator, ExecutionContext, RedisTaskQueue]:
+    """Helper to create coordinator with backing queue/context."""
+    graph = TaskGraph()
+    context = ExecutionContext(graph)
+    queue = RedisTaskQueue(context, redis_client=redis_client, key_prefix=key_prefix)
+    return RedisCoordinator(queue), context, queue
 
 
 @pytest.mark.integration
@@ -16,7 +27,7 @@ class TestRedisCoordinatorIntegration:
 
     def test_barrier_synchronization(self, clean_redis):
         """Test barrier synchronization with real Redis."""
-        coordinator = RedisCoordinator(clean_redis)
+        coordinator, _, _ = create_coordinator(clean_redis)
 
         # Create barrier for 2 participants
         barrier_id = "test_barrier"
@@ -50,7 +61,7 @@ class TestRedisCoordinatorIntegration:
 
     def test_barrier_timeout(self, clean_redis):
         """Test barrier timeout with real Redis."""
-        coordinator = RedisCoordinator(clean_redis)
+        coordinator, _, _ = create_coordinator(clean_redis)
 
         # Create barrier for 2 participants but only one waits
         coordinator.create_barrier("timeout_barrier", 2)
@@ -66,66 +77,63 @@ class TestRedisCoordinatorIntegration:
 
     def test_task_dispatch_and_queue(self, clean_redis):
         """Test task dispatching to Redis queue."""
-        coordinator = RedisCoordinator(clean_redis)
+        coordinator, context, queue = create_coordinator(clean_redis, key_prefix="integration")
+        graph = context.graph
+        task = TaskWrapper("test_task", lambda: "test_result", register_to_context=False)
+        graph.add_node(task)
+        # Producer would set graph_hash via GraphStore.save()
+        context.graph_hash = coordinator.graph_store.save(graph)
+        task.set_execution_context(context)
 
-        def test_function():
-            return "test_result"
-
-        task_spec = TaskSpec("test_task", test_function, args=(1, 2), kwargs={"key": "value"})
-
-        # Initially queue should be empty
         assert coordinator.get_queue_size("test_group") == 0
 
-        # Dispatch task
-        coordinator.dispatch_task(task_spec, "test_group")
+        coordinator.dispatch_task(task, "test_group")
 
         # Queue should have one task
         assert coordinator.get_queue_size("test_group") == 1
 
         # Retrieve task data from queue
-        queue_key = "task_queue:test_group"
-        task_data_json = clean_redis.rpop(queue_key)
+        task_data_json = clean_redis.rpop(queue.queue_key)
         task_data = json.loads(task_data_json)
 
         assert task_data["task_id"] == "test_task"
         assert task_data["group_id"] == "test_group"
-        assert task_data["args"] == [1, 2]  # JSON converts tuples to lists
-        assert task_data["kwargs"] == {"key": "value"}
         assert "timestamp" in task_data
+        assert task_data["graph_hash"] == context.graph_hash
 
     def test_multiple_task_dispatch(self, clean_redis):
         """Test dispatching multiple tasks to queue."""
-        coordinator = RedisCoordinator(clean_redis)
-
-        def task_func(n):
-            return f"result_{n}"
-
-        # Dispatch multiple tasks
+        coordinator, context, queue = create_coordinator(clean_redis, key_prefix="integration-multi")
         for i in range(5):
-            task_spec = TaskSpec(f"task_{i}", task_func, args=(i,))
-            coordinator.dispatch_task(task_spec, "multi_group")
+            task = TaskWrapper(f"task_{i}", lambda n=i: f"result_{n}", register_to_context=False)
+            context.graph.add_node(task)
+        context.graph_hash = coordinator.graph_store.save(context.graph)
+        for node in context.graph.nodes:
+            context.graph.get_node(node).set_execution_context(context)
+        for task_id in context.graph.nodes:
+            task = context.graph.get_node(task_id)
+            coordinator.dispatch_task(task, "multi_group")
 
         # Check queue size
         assert coordinator.get_queue_size("multi_group") == 5
 
         # Tasks should be retrievable in FIFO order (lpush + rpop)
-        queue_key = "task_queue:multi_group"
         for i in range(5):
-            task_data_json = clean_redis.rpop(queue_key)
+            task_data_json = clean_redis.rpop(queue.queue_key)
             task_data = json.loads(task_data_json)
             assert task_data["task_id"] == f"task_{i}"
 
     def test_queue_operations(self, clean_redis):
         """Test queue size and clear operations."""
-        coordinator = RedisCoordinator(clean_redis)
-
-        def test_func():
-            pass
-
-        # Add some tasks
+        coordinator, context, _ = create_coordinator(clean_redis, key_prefix="integration-queue")
         for i in range(3):
-            task_spec = TaskSpec(f"task_{i}", test_func)
-            coordinator.dispatch_task(task_spec, "queue_test")
+            task = TaskWrapper(f"task_{i}", lambda n=i: n, register_to_context=False)
+            context.graph.add_node(task)
+        context.graph_hash = coordinator.graph_store.save(context.graph)
+        for node in context.graph.nodes:
+            task = context.graph.get_node(node)
+            task.set_execution_context(context)
+            coordinator.dispatch_task(task, "queue_test")
 
         assert coordinator.get_queue_size("queue_test") == 3
 
@@ -135,13 +143,11 @@ class TestRedisCoordinatorIntegration:
 
     def test_barrier_cleanup(self, clean_redis):
         """Test proper barrier cleanup."""
-        coordinator = RedisCoordinator(clean_redis)
+        coordinator, _, queue = create_coordinator(clean_redis, key_prefix="integration-cleanup")
 
-        # Create barrier
         _barrier_id = coordinator.create_barrier("cleanup_test", 1)
 
-        # Verify barrier exists in Redis
-        barrier_key = "barrier:cleanup_test"
+        barrier_key = f"{queue.key_prefix}:barrier:cleanup_test"
         expected_key = f"{barrier_key}:expected"
 
         assert clean_redis.exists(barrier_key) or clean_redis.exists(expected_key)
@@ -158,7 +164,7 @@ class TestRedisCoordinatorIntegration:
     def test_concurrent_barrier_operations(self, clean_redis):
         """Test concurrent barrier operations."""
 
-        coordinator = RedisCoordinator(clean_redis)
+        coordinator, _, _ = create_coordinator(clean_redis, key_prefix="integration-concurrent")
 
         # Create barrier for 3 participants
         coordinator.create_barrier("concurrent_test", 3)

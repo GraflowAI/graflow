@@ -17,12 +17,11 @@ from graflow.queue.redis import RedisTaskQueue
 def mock_redis():
     """Mock Redis client for testing."""
     redis_mock = Mock()
-    redis_mock.hset.return_value = True
     redis_mock.rpush.return_value = 1
+    redis_mock.set.return_value = True
     redis_mock.lpop.return_value = None
     redis_mock.llen.return_value = 0
     redis_mock.lindex.return_value = None
-    redis_mock.hget.return_value = None
     redis_mock.delete.return_value = 2
     return redis_mock
 
@@ -109,6 +108,9 @@ class TestRedisTaskQueue:
             queue = RedisTaskQueue(execution_context, mock_redis)
 
             task = create_registered_task(execution_context, "test_node")
+            execution_context.session_id = "sess-1"
+            execution_context.trace_id = "trace-1"
+            execution_context.graph_hash = "graph-xyz"
             task_spec = TaskSpec(
                 executable=task,
                 execution_context=execution_context,
@@ -122,23 +124,18 @@ class TestRedisTaskQueue:
             assert queue._task_specs["test_node"] == task_spec
 
             # Verify Redis calls and serialized payload
-            mock_redis.hset.assert_called_once()
-            _, _, payload = mock_redis.hset.call_args[0]
-            spec_payload = json.loads(payload)
+            mock_redis.rpush.assert_called_once()
+            queue_key, payload = mock_redis.rpush.call_args[0]
+            assert queue_key == queue.queue_key
 
-            assert spec_payload['task_id'] == 'test_node'
-            assert spec_payload['status'] == TaskStatus.READY.value
-            assert spec_payload['created_at'] == 1234567890.0
-            assert spec_payload['strategy'] == 'reference'
-            assert spec_payload['retry_count'] == 0
-            assert spec_payload['max_retries'] == 3
-            assert spec_payload['last_error'] is None
-
-            task_data = spec_payload['task_data']
-            assert task_data['strategy'] == 'reference'
-            assert task_data['name'].startswith('dummy_test_node')
-
-            mock_redis.rpush.assert_called_once_with(queue.queue_key, "test_node")
+            record = json.loads(payload)
+            assert record["task_id"] == "test_node"
+            assert record["session_id"] == "sess-1"
+            assert record["graph_hash"] == "graph-xyz"
+            assert record["trace_id"] == "trace-1"
+            assert record["group_id"] is None
+            assert record["parent_span_id"] is None
+            assert record["created_at"] == 1234567890.0
 
     def test_dequeue_empty_queue(self, mock_redis, execution_context):
         """Test dequeue from empty queue."""
@@ -152,45 +149,44 @@ class TestRedisTaskQueue:
             assert result is None
             mock_redis.lpop.assert_called_once_with(queue.queue_key)
 
-    def test_dequeue_missing_spec(self, mock_redis, execution_context):
-        """Test dequeue when spec is missing from hash."""
-        mock_redis.lpop.return_value = "test_node"
-        mock_redis.hget.return_value = None
-
-        with patch('graflow.queue.redis.redis'):
-            queue = RedisTaskQueue(execution_context, mock_redis)
-
-            result = queue.dequeue()
-
-            assert result is None
-            mock_redis.lpop.assert_called_once_with(queue.queue_key)
-            mock_redis.hget.assert_called_once_with(queue.specs_key, "test_node")
-
     def test_dequeue_success(self, mock_redis, execution_context):
         """Test successful dequeue operation."""
-        mock_redis.lpop.return_value = "test_node"
-        spec_data = {
-            'node_id': 'test_node',
-            'status': 'ready',
-            'created_at': 1234567890.0
+        record = {
+            "task_id": "test_node",
+            "session_id": "sess-1",
+            "graph_hash": "graph-abc",
+            "trace_id": "trace-1",
+            "group_id": None,
+            "parent_span_id": "parent-1",
+            "created_at": 1234567890.0,
         }
-        mock_redis.hget.return_value = json.dumps(spec_data)
+        mock_redis.lpop.return_value = json.dumps(record)
 
         with patch('graflow.queue.redis.redis'):
             queue = RedisTaskQueue(execution_context, mock_redis)
-            create_registered_task(execution_context, "test_node")
+            executable = create_registered_task(execution_context, "test_node")
 
-            result = queue.dequeue()
+            with patch(
+                "graflow.queue.redis.ExecutionContextFactory.create_from_record",
+                return_value=(execution_context, executable),
+            ) as mock_factory:
+                result = queue.dequeue()
 
             assert result is not None
             assert result.task_id == "test_node"
             assert result.status == TaskStatus.RUNNING
             assert result.created_at == 1234567890.0
             assert result.execution_context == execution_context
+            assert result.trace_id == "trace-1"
+            assert result.parent_span_id == "parent-1"
             assert queue._task_specs["test_node"] == result
 
+            mock_factory.assert_called_once()
+            args, kwargs = mock_factory.call_args
+            assert args[0].task_id == "test_node"
+            assert args[0].graph_hash == "graph-abc"
+            assert mock_factory.call_args[0][1] is queue.graph_store
             mock_redis.lpop.assert_called_once_with(queue.queue_key)
-            mock_redis.hget.assert_called_once_with(queue.specs_key, "test_node")
 
     def test_is_empty(self, mock_redis, execution_context):
         """Test is_empty method."""
@@ -279,14 +275,6 @@ class TestRedisTaskQueueIntegration:
         """Test that Redis backend maintains compatibility with ExecutionContext."""
         graph = TaskGraph()
 
-        # Configure mock to return proper data for dequeue
-        spec_data = {
-            'task_id': 'start',
-            'status': 'ready',
-            'created_at': time.time()
-        }
-        mock_redis.hget.return_value = json.dumps(spec_data)
-
         with patch('graflow.queue.redis.redis'):
             context = ExecutionContext(
                 graph,
@@ -295,39 +283,51 @@ class TestRedisTaskQueueIntegration:
             )
 
             queue = RedisTaskQueue(context, redis_client=mock_redis)
+            context.graph_hash = "graph-123"
 
-            # Test compatibility methods - create simple tasks
             task_start = create_registered_task(context, "start")
             task1 = create_registered_task(context, "task1")
-            task2 = create_registered_task(context, "task2")
+
             queue.enqueue(TaskSpec(executable=task_start, execution_context=context))
             queue.enqueue(TaskSpec(executable=task1, execution_context=context))
-            queue.enqueue(TaskSpec(executable=task2, execution_context=context))
 
-            # Mock dequeue responses - lpop returns node_ids, hget returns spec data
-            mock_redis.lpop.side_effect = ["start", "task1", "task2", None]
+            mock_redis.lpop.side_effect = [
+                json.dumps(
+                    {
+                        "task_id": "start",
+                        "session_id": context.session_id,
+                        "graph_hash": "graph-123",
+                        "trace_id": context.trace_id,
+                        "group_id": None,
+                        "parent_span_id": None,
+                        "created_at": time.time(),
+                    }
+                ),
+                json.dumps(
+                    {
+                        "task_id": "task1",
+                        "session_id": context.session_id,
+                        "graph_hash": "graph-123",
+                        "trace_id": context.trace_id,
+                        "group_id": None,
+                        "parent_span_id": None,
+                        "created_at": time.time(),
+                    }
+                ),
+                None,
+            ]
 
-            # Setup hget to return appropriate spec data for each node
-            def mock_hget(specs_key, node_id):
-                spec_data = {
-                    'task_id': node_id,
-                    'status': 'ready',
-                    'created_at': time.time()
-                }
-                return json.dumps(spec_data)
-            mock_redis.hget.side_effect = mock_hget
-
-            # Test getting nodes
-            node1 = queue.get_next_task()
-            node2 = queue.get_next_task()
-            node3 = queue.get_next_task()
-            node4 = queue.get_next_task()
+            with patch(
+                "graflow.queue.redis.ExecutionContextFactory.create_from_record",
+                side_effect=[
+                    (context, task_start),
+                    (context, task1),
+                ],
+            ):
+                node1 = queue.get_next_task()
+                node2 = queue.get_next_task()
+                node3 = queue.get_next_task()
 
             assert node1 == "start"
             assert node2 == "task1"
-            assert node3 == "task2"
-            assert node4 is None
-
-            # Test is_completed
-            mock_redis.llen.return_value = 0
-            assert queue.is_empty() is True
+            assert node3 is None

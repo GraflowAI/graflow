@@ -73,7 +73,7 @@ def test_task_worker_rejects_non_redis_queue():
     queue = MockTaskQueue(execution_context)
 
     with pytest.raises(ValueError, match="RedisTaskQueue"):
-        TaskWorker(queue=queue, worker_id="invalid")
+        TaskWorker(queue=queue, worker_id="invalid") # type: ignore
 
 
 def test_task_worker_processes_tasks_with_redis_queue(clean_redis: Any):
@@ -83,6 +83,9 @@ def test_task_worker_processes_tasks_with_redis_queue(clean_redis: Any):
     queue.cleanup()
 
     try:
+        # Save initial graph snapshot for queue records
+        execution_context.graph_hash = queue.graph_store.save(execution_context.graph)
+
         # Enqueue a few tasks
         for idx in range(3):
             queue.enqueue(_create_task_spec(execution_context, f"task_{idx}"))

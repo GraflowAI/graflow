@@ -1,5 +1,6 @@
 """Pytest-style tests for coordination backends."""
 
+import json
 from types import SimpleNamespace
 from unittest.mock import call
 
@@ -8,7 +9,6 @@ import pytest
 from graflow.coordination.coordinator import CoordinationBackend
 from graflow.coordination.redis import RedisCoordinator, record_task_completion
 from graflow.coordination.threading import ThreadingCoordinator
-from graflow.queue.base import TaskSpec as QueueTaskSpec
 from graflow.queue.redis import RedisTaskQueue
 
 
@@ -127,6 +127,9 @@ class TestRedisCoordinator:
         """Provide a RedisTaskQueue mock with a redis client."""
         queue = mocker.Mock(spec=RedisTaskQueue)
         queue.redis_client = mocker.Mock()
+        queue.key_prefix = "test"
+        queue.queue_key = f"{queue.key_prefix}:queue"
+        queue.graph_store = None
         return queue
 
     @pytest.fixture
@@ -149,14 +152,14 @@ class TestRedisCoordinator:
         """Barrier metadata is stored and redis keys are prepared."""
         barrier_key = coordinator.create_barrier("test_barrier", 3)
 
-        assert barrier_key == "barrier:test_barrier"
+        assert barrier_key == f"{coordinator.task_queue.key_prefix}:barrier:test_barrier"
         assert "test_barrier" in coordinator.active_barriers
         barrier_info = coordinator.active_barriers["test_barrier"]
         assert barrier_info["expected"] == 3
         assert barrier_info["current"] == 0
 
-        mock_redis.delete.assert_called_with("barrier:test_barrier")
-        mock_redis.set.assert_called_with("barrier:test_barrier:expected", 3)
+        mock_redis.delete.assert_called_with(f"{coordinator.task_queue.key_prefix}:barrier:test_barrier")
+        mock_redis.set.assert_called_with(f"{coordinator.task_queue.key_prefix}:barrier:test_barrier:expected", 3)
 
     def test_wait_barrier_success(self, coordinator, mock_redis):
         """Last participant publishes completion event."""
@@ -166,8 +169,10 @@ class TestRedisCoordinator:
         result = coordinator.wait_barrier("test_barrier", timeout=1)
 
         assert result is True
-        mock_redis.incr.assert_called_with("barrier:test_barrier")
-        mock_redis.publish.assert_called_with("barrier_done:test_barrier", "complete")
+        mock_redis.incr.assert_called_with(f"{coordinator.task_queue.key_prefix}:barrier:test_barrier")
+        mock_redis.publish.assert_called_with(
+            f"{coordinator.task_queue.key_prefix}:barrier_done:test_barrier", "complete"
+        )
 
     def test_wait_barrier_with_pubsub(self, coordinator, mock_redis, mocker):
         """Participants block on pub/sub until completion message arrives."""
@@ -181,7 +186,9 @@ class TestRedisCoordinator:
         result = coordinator.wait_barrier("test_barrier", timeout=1)
 
         assert result is True
-        mock_pubsub.subscribe.assert_called_with("barrier_done:test_barrier")
+        mock_pubsub.subscribe.assert_called_with(
+            f"{coordinator.task_queue.key_prefix}:barrier_done:test_barrier"
+        )
         mock_pubsub.close.assert_called_once()
 
     def test_wait_barrier_timeout(self, coordinator, mock_redis, mocker):
@@ -209,31 +216,41 @@ class TestRedisCoordinator:
         """Waiting on a missing barrier returns False."""
         assert coordinator.wait_barrier("missing", timeout=1) is False
 
-    def test_dispatch_task_enqueues_queue_task_spec(self, coordinator, mock_task_queue, mocker):
-        """Dispatch translates executables into queue TaskSpec entries."""
+    def test_dispatch_task_serializes_record(self, coordinator, mock_task_queue, mocker):
+        """Dispatch pushes SerializedTaskRecord into Redis with graph hash."""
         exec_context = mocker.Mock()
-        exec_context.task_resolver.serialize_task.return_value = {}
+        exec_context.session_id = "sess-1"
+        exec_context.trace_id = "trace-1"
+        exec_context.graph_hash = "graph-123"
+        exec_context.span_id = None
         executable = mocker.Mock()
         executable.task_id = "task-123"
         executable.get_execution_context.return_value = exec_context
 
         coordinator.dispatch_task(executable, "group-1")
 
-        mock_task_queue.enqueue.assert_called_once()
-        task_spec = mock_task_queue.enqueue.call_args[0][0]
-        assert isinstance(task_spec, QueueTaskSpec)
-        assert task_spec.group_id == "group-1"
-        assert task_spec.execution_context is exec_context
-        assert task_spec.executable is executable
+        mock_task_queue.redis_client.lpush.assert_called_once()
+        queue_key, payload = mock_task_queue.redis_client.lpush.call_args[0]
+        assert queue_key == mock_task_queue.queue_key
+        record = json.loads(payload)
+        assert record["task_id"] == "task-123"
+        assert record["group_id"] == "group-1"
+        assert record["graph_hash"] == "graph-123"
+        assert record["session_id"] == "sess-1"
 
     def test_execute_group_success_flow(self, coordinator, mocker):
         """Parallel execution creates barrier, dispatches tasks, waits, and cleans up."""
         tasks = [SimpleNamespace(task_id="task1"), SimpleNamespace(task_id="task2")]
 
-        mock_create = mocker.patch.object(coordinator, "create_barrier", return_value="barrier:test_group")
+        mock_create = mocker.patch.object(
+            coordinator,
+            "create_barrier",
+            return_value=f"{coordinator.task_queue.key_prefix}:barrier:test_group",
+        )
         mock_dispatch = mocker.patch.object(coordinator, "dispatch_task")
         mock_wait = mocker.patch.object(coordinator, "wait_barrier", return_value=True)
         mock_cleanup = mocker.patch.object(coordinator, "cleanup_barrier")
+        mock_results = mocker.patch.object(coordinator, "_get_completion_results", return_value=[])
         mock_handler = mocker.Mock(name="handler")
 
         coordinator.execute_group("test_group", tasks, mocker.Mock(), mock_handler)
@@ -241,13 +258,18 @@ class TestRedisCoordinator:
         mock_create.assert_called_once_with("test_group", len(tasks))
         mock_dispatch.assert_has_calls([call(tasks[0], "test_group"), call(tasks[1], "test_group")])
         mock_wait.assert_called_once_with("test_group")
+        mock_results.assert_called_once_with("test_group")
         mock_cleanup.assert_called_once_with("test_group")
 
     def test_execute_group_timeout_triggers_cleanup(self, coordinator, mocker):
         """TimeoutError is raised and barrier cleanup still executes."""
         tasks = [SimpleNamespace(task_id="task1")]
 
-        mocker.patch.object(coordinator, "create_barrier", return_value="barrier:test_group")
+        mocker.patch.object(
+            coordinator,
+            "create_barrier",
+            return_value=f"{coordinator.task_queue.key_prefix}:barrier:test_group",
+        )
         mocker.patch.object(coordinator, "dispatch_task")
         mock_wait = mocker.patch.object(coordinator, "wait_barrier", return_value=False)
         mock_cleanup = mocker.patch.object(coordinator, "cleanup_barrier")
@@ -267,8 +289,8 @@ class TestRedisCoordinator:
         coordinator.cleanup_barrier("cleanup_barrier")
 
         expected_calls = [
-            call("barrier:cleanup_barrier"),
-            call("barrier:cleanup_barrier:expected")
+            call(f"{coordinator.task_queue.key_prefix}:barrier:cleanup_barrier"),
+            call(f"{coordinator.task_queue.key_prefix}:barrier:cleanup_barrier:expected")
         ]
         mock_redis.delete.assert_has_calls(expected_calls, any_order=True)
         assert "cleanup_barrier" not in coordinator.active_barriers
@@ -291,8 +313,8 @@ class TestRedisCoordinator:
 
         record_task_completion(redis_client, "prefix", "task", "group", True)
 
-        redis_client.incr.assert_called_with("barrier:group")
-        redis_client.publish.assert_called_with("barrier_done:group", "complete")
+        redis_client.incr.assert_called_with("prefix:barrier:group")
+        redis_client.publish.assert_called_with("prefix:barrier_done:group", "complete")
 
 
 class TestCoordinationBackend:
