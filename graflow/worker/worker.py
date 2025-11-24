@@ -315,11 +315,12 @@ class TaskWorker:
 
             duration = time.time() - start_time
 
-            return {
+            result_payload = {
                 "success": True,
                 "duration": duration,
-                "task_id": task_id
+                "task_id": task_id,
             }
+            return result_payload
 
         except FutureTimeoutError:
             duration = time.time() - start_time
@@ -346,7 +347,7 @@ class TaskWorker:
                 "success": False,
                 "error": str(e),
                 "duration": duration,
-                "task_id": task_id
+                "task_id": task_id,
             }
 
     def _task_completed(self, task_spec: TaskSpec, future: Future) -> None:

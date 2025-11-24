@@ -39,6 +39,19 @@ class Executable(ABC):
 
         return self._execution_context
 
+    def __getstate__(self):
+        """Custom serialization to exclude execution context."""
+        state = self.__dict__.copy()
+        # Remove execution context as it contains runtime state (connections, etc.)
+        # and should be re-injected on the worker side.
+        if '_execution_context' in state:
+            del state['_execution_context']
+        return state
+
+    def __setstate__(self, state):
+        """Restore state."""
+        self.__dict__.update(state)
+
     @abstractmethod
     def run(self, *args, **kwargs) -> Any:
         """Execute this executable."""

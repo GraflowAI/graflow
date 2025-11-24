@@ -511,6 +511,10 @@ class Tracer(ABC):
         """
         return self._execution_order.copy()
 
+    def get_current_span_id(self) -> Optional[str]:
+        """Return identifier for the currently active span if available."""
+        return None
+
     def export_runtime_graph(self, format: str = "dict") -> Optional[Dict[str, Any]]:
         """Export runtime graph in specified format.
 

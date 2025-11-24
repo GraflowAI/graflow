@@ -11,7 +11,8 @@ if TYPE_CHECKING:
     from graflow.core.task import Executable
 
 from graflow.coordination.coordinator import TaskCoordinator
-from graflow.queue.base import TaskSpec as QueueTaskSpec
+from graflow.coordination.graph_store import GraphStore
+from graflow.coordination.records import SerializedTaskRecord
 from graflow.queue.redis import RedisTaskQueue
 
 
@@ -28,6 +29,16 @@ class RedisCoordinator(TaskCoordinator):
         self.redis = task_queue.redis_client  # Use Redis client from task queue
         self.active_barriers: Dict[str, Dict[str, Any]] = {}
         self._lock = threading.Lock()
+
+        # Initialize GraphStore (reuse queue's instance when available)
+        if self.task_queue.graph_store:
+            self.graph_store = self.task_queue.graph_store
+        else:
+            self.graph_store = GraphStore(
+                self.redis,
+                self.task_queue.key_prefix
+            )
+            self.task_queue.graph_store = self.graph_store
 
     def execute_group(
         self,
@@ -46,18 +57,24 @@ class RedisCoordinator(TaskCoordinator):
         """
         from graflow.core.handler import TaskResult
 
+        # Lazy Upload: Save current graph state
+        graph_hash = self.graph_store.save(execution_context.graph)
+        execution_context.graph_hash = graph_hash
+
         self.create_barrier(group_id, len(tasks))
         try:
             for task in tasks:
                 self.dispatch_task(task, group_id)
+
             if not self.wait_barrier(group_id):
                 raise TimeoutError(f"Barrier wait timeout for group {group_id}")
 
             # Collect results from Redis
             completion_results = self._get_completion_results(group_id)
 
-            # Convert to TaskResult format
+            # Convert to TaskResult format and check for graph updates
             task_results: Dict[str, TaskResult] = {}
+
             for result_data in completion_results:
                 task_id = result_data["task_id"]
                 task_results[task_id] = TaskResult(
@@ -76,8 +93,8 @@ class RedisCoordinator(TaskCoordinator):
 
     def create_barrier(self, barrier_id: str, participant_count: int) -> str:
         """Create a barrier for parallel task synchronization."""
-        barrier_key = f"barrier:{barrier_id}"
-        completion_channel = f"barrier_done:{barrier_id}"
+        barrier_key = f"{self.task_queue.key_prefix}:barrier:{barrier_id}"
+        completion_channel = f"{self.task_queue.key_prefix}:barrier_done:{barrier_id}"
 
         with self._lock:
             # Reset barrier state
@@ -131,15 +148,28 @@ class RedisCoordinator(TaskCoordinator):
 
     def dispatch_task(self, executable: 'Executable', group_id: str) -> None:
         """Dispatch task to Redis queue for worker processing."""
-        # Create queue TaskSpec directly from Executable
-        queue_task_spec = QueueTaskSpec(
-            executable=executable,
-            execution_context=executable.get_execution_context(),
-        )
-        queue_task_spec.group_id = group_id  # Set group_id for barrier synchronization
+        context = executable.get_execution_context()
 
-        # Use RedisTaskQueue's enqueue method
-        self.task_queue.enqueue(queue_task_spec)
+        # graph_hash is set in execution_context by execute_group
+        graph_hash = getattr(context, 'graph_hash', None)
+        if graph_hash is None:
+            raise ValueError("graph_hash not set in ExecutionContext")
+
+        record = SerializedTaskRecord(
+            task_id=executable.task_id,
+            session_id=context.session_id,
+            graph_hash=graph_hash,
+            trace_id=context.trace_id,
+            parent_span_id=context.tracer.get_current_span_id() if context.tracer else None,
+            group_id=group_id,
+            created_at=time.time()
+        )
+
+        # Redis queue に push (bypass RedisTaskQueue.enqueue)
+        self.task_queue.redis_client.lpush(
+            self.task_queue.queue_key,
+            record.to_json()
+        )
 
     def _get_completion_results(self, group_id: str) -> List[Dict[str, Any]]:
         """Retrieve all completion records from Redis.
@@ -228,14 +258,17 @@ def record_task_completion(
     )
 
     # Trigger barrier signaling using existing pub/sub mechanism
-    barrier_key = f"barrier:{group_id}"
+    barrier_key = f"{key_prefix}:barrier:{group_id}"
     current_count = redis_client.incr(barrier_key)
 
     # Check if barrier is complete
     expected_key = f"{barrier_key}:expected"
     expected_count = redis_client.get(expected_key)
 
-    if expected_count and current_count >= int(expected_count):
+    if not expected_count:
+        return
+
+    if current_count >= int(expected_count):
         # All tasks completed - publish barrier completion
-        completion_channel = f"barrier_done:{group_id}"
+        completion_channel = f"{key_prefix}:barrier_done:{group_id}"
         redis_client.publish(completion_channel, "complete")

@@ -268,6 +268,9 @@ class ExecutionContext:
         self.session_id = session_id or uuid.uuid4().hex
         self.trace_id = trace_id or (parent_context.trace_id if parent_context else self.session_id)
 
+        # Graph hash for distributed execution (Content-Addressable)
+        self.graph_hash: Optional[str] = None
+
         # Each context gets its own tracer instance to avoid shared mutable state
         self.tracer = tracer if tracer is not None else NoopTracer()
 
@@ -444,6 +447,11 @@ class ExecutionContext:
     def task_resolver(self) -> TaskResolver:
         """Get the task resolver instance."""
         return self._task_resolver
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        """Get the configuration dictionary."""
+        return self._original_config
 
     def add_to_queue(self, executable: Executable) -> None:
         """Add executable to execution queue with trace context."""

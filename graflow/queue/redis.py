@@ -1,7 +1,8 @@
 """Redis distributed task queue implementation."""
 
 import json
-from typing import Optional, cast
+import logging
+from typing import Optional
 
 try:
     import redis
@@ -9,7 +10,10 @@ try:
 except ImportError:
     redis = None
 
+from graflow.coordination.graph_store import GraphStore
 from graflow.queue.base import TaskQueue, TaskSpec, TaskStatus
+
+logger = logging.getLogger(__name__)
 
 
 class RedisTaskQueue(TaskQueue):
@@ -17,13 +21,14 @@ class RedisTaskQueue(TaskQueue):
 
     def __init__(self, execution_context, redis_client: Optional['Redis'] = None,
                  host: str = "localhost", port: int = 6379, db: int = 0,
-                 key_prefix: str = "graflow"):
+                 key_prefix: str = "graflow", graph_store: Optional['GraphStore'] = None):
         """Initialize Redis task queue.
 
         Args:
             execution_context: ExecutionContext instance
             redis_client: Optional Redis client instance
             key_prefix: Key prefix for Redis keys
+            graph_store: Optional GraphStore for loading graphs (required for SerializedTaskRecord)
 
         Raises:
             ImportError: If redis library is not installed
@@ -39,38 +44,36 @@ class RedisTaskQueue(TaskQueue):
             self.redis_client = redis.Redis(host=host, port=port, db=db, decode_responses=True)
 
         self.key_prefix = key_prefix
+        self.graph_store = graph_store or GraphStore(self.redis_client, key_prefix)
 
         # Redis keys (prefix-only namespace)
         self.queue_key = f"{key_prefix}:queue"
+        # Retain specs_key for backward compatibility with cleanup/tests (unused for new records)
         self.specs_key = f"{key_prefix}:specs"
 
     def enqueue(self, task_spec: TaskSpec) -> bool:
-        """Add TaskSpec to Redis queue (FIFO)."""
-        # Serialize TaskSpec to JSON and store in hash
-        try:
-            task_data = task_spec.task_data
-        except ValueError:
-            # If task can't be serialized, store None
-            task_data = None
+        """Add TaskSpec to Redis queue (SerializedTaskRecord-based)."""
+        from graflow.coordination.records import SerializedTaskRecord
 
-        spec_data = {
-            'task_id': task_spec.task_id,
-            'status': task_spec.status.value,
-            'created_at': task_spec.created_at,
-            'strategy': task_spec.strategy,
-            'task_data': task_data,
-            # Phase 3: Advanced features
-            'retry_count': task_spec.retry_count,
-            'max_retries': task_spec.max_retries,
-            'last_error': task_spec.last_error,
-            # Phase 2: group_id support
-            'group_id': getattr(task_spec, 'group_id', None)
-        }
-        self.redis_client.hset(self.specs_key, task_spec.task_id, json.dumps(spec_data))
+        # Ensure graph_hash exists; save graph snapshot if missing
+        graph_hash = getattr(task_spec.execution_context, "graph_hash", None)
+        if graph_hash is None:
+            graph_hash = self.graph_store.save(task_spec.execution_context.graph)
+            task_spec.execution_context.graph_hash = graph_hash
+
+        trace_id = task_spec.trace_id or getattr(task_spec.execution_context, "trace_id", None)
+        record = SerializedTaskRecord(
+            task_id=task_spec.task_id,
+            session_id=task_spec.execution_context.session_id,
+            graph_hash=graph_hash,
+            trace_id=trace_id or task_spec.execution_context.session_id,
+            group_id=getattr(task_spec, "group_id", None),
+            parent_span_id=task_spec.parent_span_id,
+            created_at=task_spec.created_at,
+        )
+
+        self.redis_client.rpush(self.queue_key, record.to_json())
         self._task_specs[task_spec.task_id] = task_spec
-
-        # Add node ID to queue
-        self.redis_client.rpush(self.queue_key, task_spec.task_id)
 
         # Phase 3: Metrics
         if self.enable_metrics:
@@ -80,65 +83,64 @@ class RedisTaskQueue(TaskQueue):
 
     def dequeue(self) -> Optional[TaskSpec]:
         """Get next TaskSpec from Redis."""
-        # Get next node ID from queue
-        task_id = self.redis_client.lpop(self.queue_key)
-        if not task_id:
+        # Get next item from queue
+        item = self.redis_client.lpop(self.queue_key)
+        if not item:
             return None
-        task_id = cast(str, task_id)
 
-        # Get TaskSpec from hash and deserialize
-        spec_json = self.redis_client.hget(self.specs_key, task_id)
-        if not spec_json:
+        # Check if it's a SerializedTaskRecord (JSON)
+        try:
+            # Try to parse as JSON
+            data = json.loads(item) # type: ignore
+            if isinstance(data, dict) and 'graph_hash' in data:
+                # It's a SerializedTaskRecord
+                return self._dequeue_record(data)
+        except (json.JSONDecodeError, TypeError):
+            logger.warning(f"Could not decode queue item as SerializedTaskRecord: {item!r}")
+
+        # Unrecognized item
+        logger.error(f"Dropping unrecognized queue item: {item!r}")
+        return None
+
+    def _dequeue_record(self, data: dict) -> Optional[TaskSpec]:
+        """Handle SerializedTaskRecord."""
+        if not self.graph_store:
+            # If graph_store is missing, we can't process this record
+            # Should we re-enqueue? Or log error?
+            # For now, log error and return None (task lost)
+            print("Error: GraphStore not configured in RedisTaskQueue, cannot process SerializedTaskRecord")
             return None
-        spec_json = cast(str, spec_json)
 
-        spec_data = json.loads(spec_json)
+        from graflow.coordination.records import SerializedTaskRecord
+        from graflow.worker.context_factory import ExecutionContextFactory
 
-        # Try to reconstruct the executable with proper task data
-        task_id_from_spec = spec_data.get('task_id', spec_data.get('node_id', task_id))
-        task_data = spec_data.get('task_data')
+        try:
+            record = SerializedTaskRecord(**data)
+            context, task = ExecutionContextFactory.create_from_record(record, self.graph_store)
 
-        if task_data:
-            # Deserialize the task and create a proper executable
-            try:
-                func = self.execution_context.task_resolver.resolve_task(task_data)
+            task_spec = TaskSpec(
+                executable=task,
+                execution_context=context,
+                strategy="reference", # Default strategy
+                status=TaskStatus.RUNNING,
+                created_at=record.created_at
+            )
 
-                # Create a TaskWrapper with the resolved function
-                from graflow.core.task import TaskWrapper
-                placeholder_task = TaskWrapper(task_id_from_spec, func, register_to_context=False)
+            if record.group_id:
+                task_spec.group_id = record.group_id
+            task_spec.trace_id = record.trace_id
+            task_spec.parent_span_id = record.parent_span_id
 
-            except Exception:
-                # Fall back to placeholder if deserialization fails
-                from graflow.core.task import Task
-                placeholder_task = Task(task_id_from_spec, register_to_context=False)
-        else:
-            # No function data available, use placeholder
-            from graflow.core.task import Task
-            placeholder_task = Task(task_id_from_spec, register_to_context=False)
+            self._task_specs[record.task_id] = task_spec
 
-        task_spec = TaskSpec(
-            executable=placeholder_task,
-            execution_context=self.execution_context,
-            strategy=spec_data.get('strategy', 'reference'),
-            status=TaskStatus(spec_data['status']),
-            created_at=spec_data['created_at'],
-            # Phase 3: Advanced features
-            retry_count=spec_data.get('retry_count', 0),
-            max_retries=spec_data.get('max_retries', 3),
-            last_error=spec_data.get('last_error')
-        )
-        # Phase 2: Restore group_id
-        group_id = spec_data.get('group_id')
-        if group_id:
-            task_spec.group_id = group_id
-        task_spec.status = TaskStatus.RUNNING
-        self._task_specs[task_id] = task_spec
+            if self.enable_metrics:
+                self.metrics['dequeued'] += 1
 
-        # Phase 3: Metrics
-        if self.enable_metrics:
-            self.metrics['dequeued'] += 1
+            return task_spec
 
-        return task_spec
+        except Exception as e:
+            print(f"Error processing SerializedTaskRecord: {e}")
+            return None
 
     def is_empty(self) -> bool:
         """Check if Redis queue is empty."""
@@ -167,7 +169,7 @@ class RedisTaskQueue(TaskQueue):
         task_id: str,
         success: bool,
         group_id: Optional[str] = None,
-        error_message: Optional[str] = None
+        error_message: Optional[str] = None,
     ) -> None:
         """Notify task completion to redis.py functions.
 
@@ -180,8 +182,12 @@ class RedisTaskQueue(TaskQueue):
         if group_id:
             from graflow.coordination.redis import record_task_completion
             record_task_completion(
-                self.redis_client, self.key_prefix,
-                task_id, group_id, success, error_message
+                self.redis_client,
+                self.key_prefix,
+                task_id,
+                group_id,
+                success,
+                error_message,
             )
 
     def cleanup(self) -> None:
