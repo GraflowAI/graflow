@@ -141,7 +141,7 @@ def test_redis_backend():
     redis_queue = DistributedTaskQueue(redis_client=redis_client)
 
     print("✅ ExecutionContext created (in-memory queue, Redis channel)")
-    print("✅ RedisTaskQueue ready for distributed workers")
+    print("✅ DistributedTaskQueue ready for distributed workers")
     print(f"   Session ID: {context.session_id}")
     print("   Channel backend: redis")
 
