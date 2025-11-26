@@ -240,7 +240,7 @@ class ExecutionContext:
         self,
         graph: TaskGraph,
         start_node: Optional[str] = None,
-        max_steps: int = 10,
+        max_steps: int = 10000,
         default_max_cycles: int = 10,
         default_max_retries: int = 3,
         steps: int = 0,
