@@ -11,7 +11,7 @@ from graflow.coordination.redis import RedisCoordinator
 from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
 from graflow.core.task import Executable, TaskWrapper
-from graflow.queue.redis import DistributedTaskQueue
+from graflow.queue.distributed import DistributedTaskQueue
 
 
 class TestRedisExecution(unittest.TestCase):

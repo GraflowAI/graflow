@@ -7,7 +7,7 @@ from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
 from graflow.core.task import Task
 from graflow.queue.base import TaskSpec, TaskStatus
-from graflow.queue.memory import LocalTaskQueue
+from graflow.queue.local import LocalTaskQueue
 
 
 @pytest.fixture

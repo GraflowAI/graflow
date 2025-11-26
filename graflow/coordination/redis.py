@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 from graflow.coordination.coordinator import TaskCoordinator
 from graflow.coordination.graph_store import GraphStore
 from graflow.coordination.records import SerializedTaskRecord
-from graflow.queue.redis import DistributedTaskQueue
+from graflow.queue.distributed import DistributedTaskQueue
 
 
 class RedisCoordinator(TaskCoordinator):

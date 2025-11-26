@@ -116,7 +116,7 @@ def test_redis_backend():
     from graflow.core.context import ExecutionContext
     from graflow.core.decorators import task
     from graflow.core.graph import TaskGraph
-    from graflow.queue.redis import DistributedTaskQueue
+    from graflow.queue.distributed import DistributedTaskQueue
 
     # Create Redis client
     redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)

@@ -87,7 +87,7 @@ def main():
     from graflow.core.context import ExecutionContext
     from graflow.core.decorators import task
     from graflow.core.workflow import workflow
-    from graflow.queue.redis import DistributedTaskQueue
+    from graflow.queue.distributed import DistributedTaskQueue
 
     # Create workflow
     with workflow("distributed_etl") as ctx:

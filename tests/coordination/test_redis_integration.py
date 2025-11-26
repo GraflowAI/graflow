@@ -10,7 +10,7 @@ from graflow.coordination.redis import RedisCoordinator
 from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
 from graflow.core.task import TaskWrapper
-from graflow.queue.redis import DistributedTaskQueue
+from graflow.queue.distributed import DistributedTaskQueue
 
 
 def create_coordinator(redis_client, key_prefix: str = "test") -> tuple[RedisCoordinator, ExecutionContext, DistributedTaskQueue]:

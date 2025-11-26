@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 from graflow.coordination.coordinator import CoordinationBackend, TaskCoordinator
 from graflow.coordination.redis import RedisCoordinator
 from graflow.coordination.threading import ThreadingCoordinator
-from graflow.queue.redis import DistributedTaskQueue
+from graflow.queue.distributed import DistributedTaskQueue
 
 if TYPE_CHECKING:
     from graflow.core.context import ExecutionContext

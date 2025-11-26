@@ -9,7 +9,7 @@ from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
 from graflow.core.task import TaskWrapper
 from graflow.queue.base import TaskQueue, TaskSpec
-from graflow.queue.redis import DistributedTaskQueue
+from graflow.queue.distributed import DistributedTaskQueue
 from graflow.worker.worker import TaskWorker
 
 

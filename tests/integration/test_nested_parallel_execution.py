@@ -17,7 +17,7 @@ from graflow.core.context import ExecutionContext
 from graflow.core.decorators import task
 from graflow.core.engine import WorkflowEngine
 from graflow.core.workflow import workflow
-from graflow.queue.redis import DistributedTaskQueue
+from graflow.queue.distributed import DistributedTaskQueue
 from graflow.worker.worker import TaskWorker
 
 

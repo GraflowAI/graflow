@@ -9,7 +9,7 @@ import pytest
 from graflow.coordination.coordinator import CoordinationBackend
 from graflow.coordination.redis import RedisCoordinator, record_task_completion
 from graflow.coordination.threading import ThreadingCoordinator
-from graflow.queue.redis import DistributedTaskQueue
+from graflow.queue.distributed import DistributedTaskQueue
 
 
 class TestThreadingCoordinator:

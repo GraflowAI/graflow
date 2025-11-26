@@ -18,7 +18,7 @@ from graflow.core.engine import WorkflowEngine
 from graflow.core.graph import TaskGraph
 from graflow.exceptions import CycleLimitExceededError
 from graflow.queue.base import TaskSpec
-from graflow.queue.memory import LocalTaskQueue
+from graflow.queue.local import LocalTaskQueue
 from graflow.trace.noop import NoopTracer
 
 if TYPE_CHECKING:

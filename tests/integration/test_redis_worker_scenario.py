@@ -12,7 +12,7 @@ from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
 from graflow.core.task import Executable
 from graflow.queue.base import TaskSpec, TaskStatus
-from graflow.queue.redis import DistributedTaskQueue
+from graflow.queue.distributed import DistributedTaskQueue
 from graflow.worker.worker import TaskWorker
 
 CHANNEL_NAME = "task_channel"

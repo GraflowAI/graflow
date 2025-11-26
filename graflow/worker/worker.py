@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Set
 from graflow.core.engine import WorkflowEngine
 from graflow.exceptions import GraflowRuntimeError
 from graflow.queue.base import TaskSpec
-from graflow.queue.redis import DistributedTaskQueue
+from graflow.queue.distributed import DistributedTaskQueue
 
 if TYPE_CHECKING:
     from graflow.trace.base import Tracer

@@ -9,7 +9,7 @@ import sys
 import time
 from typing import Any, Dict
 
-from graflow.queue.redis import DistributedTaskQueue
+from graflow.queue.distributed import DistributedTaskQueue
 
 # Setup logging
 logging.basicConfig(
