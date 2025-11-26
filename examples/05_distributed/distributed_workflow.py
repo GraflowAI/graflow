@@ -146,7 +146,6 @@ def main():
         )
 
         redis_queue = DistributedTaskQueue(
-            exec_context,
             redis_client=redis_client,
             key_prefix="graflow:distributed_demo"
         )
