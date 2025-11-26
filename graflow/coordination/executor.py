@@ -54,7 +54,7 @@ class GroupExecutor:
             redis_kwargs["key_prefix"] = config.get("key_prefix", "graflow")
 
             try:
-                task_queue = DistributedTaskQueue(exec_context, **redis_kwargs)
+                task_queue = DistributedTaskQueue(**redis_kwargs)
             except ImportError as e:
                 raise ImportError("Redis backend requires 'redis' package") from e
 
