@@ -17,7 +17,7 @@ from graflow.core.context import ExecutionContext
 from graflow.core.decorators import task
 from graflow.core.engine import WorkflowEngine
 from graflow.core.workflow import workflow
-from graflow.queue.redis import RedisTaskQueue
+from graflow.queue.redis import DistributedTaskQueue
 from graflow.worker.worker import TaskWorker
 
 
@@ -69,7 +69,7 @@ class TestNestedParallelExecution:
 
             # Setup Worker
             context = ExecutionContext(wf.graph)
-            queue = RedisTaskQueue(
+            queue = DistributedTaskQueue(
                 context,
                 redis_client=clean_redis,
                 key_prefix="test_local"
@@ -181,7 +181,7 @@ class TestNestedParallelExecution:
 
             # Setup Workers (multiple for parallel processing)
             context = ExecutionContext(wf.graph)
-            queue = RedisTaskQueue(
+            queue = DistributedTaskQueue(
                 context,
                 redis_client=clean_redis,
                 key_prefix="test_nested"
@@ -311,7 +311,7 @@ class TestNestedParallelExecution:
 
             # Setup Workers (multiple for deep parallelism)
             context = ExecutionContext(wf.graph)
-            queue = RedisTaskQueue(
+            queue = DistributedTaskQueue(
                 context,
                 redis_client=clean_redis,
                 key_prefix="test_deep"
@@ -426,7 +426,7 @@ class TestNestedParallelExecution:
 
             # Setup Workers
             context = ExecutionContext(wf.graph)
-            queue = RedisTaskQueue(
+            queue = DistributedTaskQueue(
                 context,
                 redis_client=clean_redis,
                 key_prefix="test_dynamic"

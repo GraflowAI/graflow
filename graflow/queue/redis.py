@@ -16,7 +16,7 @@ from graflow.queue.base import TaskQueue, TaskSpec, TaskStatus
 logger = logging.getLogger(__name__)
 
 
-class RedisTaskQueue(TaskQueue):
+class DistributedTaskQueue(TaskQueue):
     """Redis distributed task queue with TaskSpec support."""
 
     def __init__(self, redis_client: Optional['Redis'] = None,

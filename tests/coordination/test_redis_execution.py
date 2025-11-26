@@ -11,7 +11,7 @@ from graflow.coordination.redis import RedisCoordinator
 from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
 from graflow.core.task import Executable, TaskWrapper
-from graflow.queue.redis import RedisTaskQueue
+from graflow.queue.redis import DistributedTaskQueue
 
 
 class TestRedisExecution(unittest.TestCase):
@@ -38,7 +38,7 @@ class TestRedisExecution(unittest.TestCase):
         self.task2.set_execution_context(self.context)
 
         # Setup RedisTaskQueue with mock
-        self.queue = RedisTaskQueue(
+        self.queue = DistributedTaskQueue(
             self.context,
             redis_client=self.redis_mock,
             key_prefix="test"

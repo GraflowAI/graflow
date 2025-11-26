@@ -116,7 +116,7 @@ def test_redis_backend():
     from graflow.core.context import ExecutionContext
     from graflow.core.decorators import task
     from graflow.core.graph import TaskGraph
-    from graflow.queue.redis import RedisTaskQueue
+    from graflow.queue.redis import DistributedTaskQueue
 
     # Create Redis client
     redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
@@ -138,7 +138,7 @@ def test_redis_backend():
         config={"redis_client": redis_client}
     )
 
-    redis_queue = RedisTaskQueue(redis_client=redis_client)
+    redis_queue = DistributedTaskQueue(redis_client=redis_client)
 
     print("✅ ExecutionContext created (in-memory queue, Redis channel)")
     print("✅ RedisTaskQueue ready for distributed workers")

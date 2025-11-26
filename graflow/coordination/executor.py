@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 from graflow.coordination.coordinator import CoordinationBackend, TaskCoordinator
 from graflow.coordination.redis import RedisCoordinator
 from graflow.coordination.threading import ThreadingCoordinator
-from graflow.queue.redis import RedisTaskQueue
+from graflow.queue.redis import DistributedTaskQueue
 
 if TYPE_CHECKING:
     from graflow.core.context import ExecutionContext
@@ -54,7 +54,7 @@ class GroupExecutor:
             redis_kwargs["key_prefix"] = config.get("key_prefix", "graflow")
 
             try:
-                task_queue = RedisTaskQueue(exec_context, **redis_kwargs)
+                task_queue = DistributedTaskQueue(exec_context, **redis_kwargs)
             except ImportError as e:
                 raise ImportError("Redis backend requires 'redis' package") from e
 

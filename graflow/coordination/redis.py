@@ -13,13 +13,13 @@ if TYPE_CHECKING:
 from graflow.coordination.coordinator import TaskCoordinator
 from graflow.coordination.graph_store import GraphStore
 from graflow.coordination.records import SerializedTaskRecord
-from graflow.queue.redis import RedisTaskQueue
+from graflow.queue.redis import DistributedTaskQueue
 
 
 class RedisCoordinator(TaskCoordinator):
     """Redis-based task coordination for distributed execution."""
 
-    def __init__(self, task_queue: RedisTaskQueue):
+    def __init__(self, task_queue: DistributedTaskQueue):
         """Initialize Redis coordinator with RedisTaskQueue.
 
         Args:

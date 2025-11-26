@@ -87,7 +87,7 @@ def main():
     from graflow.core.context import ExecutionContext
     from graflow.core.decorators import task
     from graflow.core.workflow import workflow
-    from graflow.queue.redis import RedisTaskQueue
+    from graflow.queue.redis import DistributedTaskQueue
 
     # Create workflow
     with workflow("distributed_etl") as ctx:
@@ -145,7 +145,7 @@ def main():
             config={"redis_client": redis_client}
         )
 
-        redis_queue = RedisTaskQueue(
+        redis_queue = DistributedTaskQueue(
             exec_context,
             redis_client=redis_client,
             key_prefix="graflow:distributed_demo"

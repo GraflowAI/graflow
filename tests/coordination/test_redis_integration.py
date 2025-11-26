@@ -10,14 +10,14 @@ from graflow.coordination.redis import RedisCoordinator
 from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
 from graflow.core.task import TaskWrapper
-from graflow.queue.redis import RedisTaskQueue
+from graflow.queue.redis import DistributedTaskQueue
 
 
-def create_coordinator(redis_client, key_prefix: str = "test") -> tuple[RedisCoordinator, ExecutionContext, RedisTaskQueue]:
+def create_coordinator(redis_client, key_prefix: str = "test") -> tuple[RedisCoordinator, ExecutionContext, DistributedTaskQueue]:
     """Helper to create coordinator with backing queue/context."""
     graph = TaskGraph()
     context = ExecutionContext(graph)
-    queue = RedisTaskQueue(redis_client=redis_client, key_prefix=key_prefix)
+    queue = DistributedTaskQueue(redis_client=redis_client, key_prefix=key_prefix)
     return RedisCoordinator(queue), context, queue
 
 

@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Set
 from graflow.core.engine import WorkflowEngine
 from graflow.exceptions import GraflowRuntimeError
 from graflow.queue.base import TaskSpec
-from graflow.queue.redis import RedisTaskQueue
+from graflow.queue.redis import DistributedTaskQueue
 
 if TYPE_CHECKING:
     from graflow.trace.base import Tracer
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class TaskWorker:
     """Worker that processes tasks from a queue using WorkflowEngine."""
 
-    def __init__(self, queue: RedisTaskQueue, worker_id: str,
+    def __init__(self, queue: DistributedTaskQueue, worker_id: str,
                  max_concurrent_tasks: int = 4, poll_interval: float = 0.1,
                  graceful_shutdown_timeout: float = 30.0,
                  tracer_config: Optional[Dict[str, Any]] = None):
@@ -37,7 +37,7 @@ class TaskWorker:
             tracer_config: Tracer configuration dict with "type" key
                           {"type": "langfuse", "enable_runtime_graph": False, ...}
         """
-        if not isinstance(queue, RedisTaskQueue):
+        if not isinstance(queue, DistributedTaskQueue):
             raise ValueError("TaskWorker requires a RedisTaskQueue instance")
 
         self.queue = queue

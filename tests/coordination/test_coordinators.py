@@ -9,7 +9,7 @@ import pytest
 from graflow.coordination.coordinator import CoordinationBackend
 from graflow.coordination.redis import RedisCoordinator, record_task_completion
 from graflow.coordination.threading import ThreadingCoordinator
-from graflow.queue.redis import RedisTaskQueue
+from graflow.queue.redis import DistributedTaskQueue
 
 
 class TestThreadingCoordinator:
@@ -125,7 +125,7 @@ class TestRedisCoordinator:
     @pytest.fixture
     def mock_task_queue(self, mocker):
         """Provide a RedisTaskQueue mock with a redis client."""
-        queue = mocker.Mock(spec=RedisTaskQueue)
+        queue = mocker.Mock(spec=DistributedTaskQueue)
         queue.redis_client = mocker.Mock()
         queue.key_prefix = "test"
         queue.queue_key = f"{queue.key_prefix}:queue"

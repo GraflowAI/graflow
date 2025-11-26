@@ -9,7 +9,7 @@ from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
 from graflow.core.task import TaskWrapper
 from graflow.queue.base import TaskQueue, TaskSpec
-from graflow.queue.redis import RedisTaskQueue
+from graflow.queue.redis import DistributedTaskQueue
 from graflow.worker.worker import TaskWorker
 
 
@@ -78,7 +78,7 @@ def test_task_worker_rejects_non_redis_queue():
 def test_task_worker_processes_tasks_with_redis_queue(clean_redis: Any):
     """Verify TaskWorker processes tasks correctly when using RedisTaskQueue."""
     execution_context = _create_execution_context()
-    queue = RedisTaskQueue(redis_client=clean_redis, key_prefix="test_worker_queue")
+    queue = DistributedTaskQueue(redis_client=clean_redis, key_prefix="test_worker_queue")
     queue.cleanup()
 
     try:

@@ -12,7 +12,7 @@ from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
 from graflow.core.task import Executable
 from graflow.queue.base import TaskSpec, TaskStatus
-from graflow.queue.redis import RedisTaskQueue
+from graflow.queue.redis import DistributedTaskQueue
 from graflow.worker.worker import TaskWorker
 
 CHANNEL_NAME = "task_channel"
@@ -194,7 +194,7 @@ def execution_context(clean_redis):
 @pytest.fixture
 def redis_queue(clean_redis, execution_context):
     """Create RedisTaskQueue bound to the execution context."""
-    queue = RedisTaskQueue(redis_client=clean_redis, key_prefix="test_graflow")
+    queue = DistributedTaskQueue(redis_client=clean_redis, key_prefix="test_graflow")
     queue.cleanup()
     yield queue
     queue.cleanup()

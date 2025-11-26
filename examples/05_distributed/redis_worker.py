@@ -126,7 +126,7 @@ def demonstrate_programmatic_worker(redis_client):
     from graflow.core.decorators import task
     from graflow.core.graph import TaskGraph
     from graflow.queue.base import TaskSpec
-    from graflow.queue.redis import RedisTaskQueue
+    from graflow.queue.redis import DistributedTaskQueue
     from graflow.worker.worker import TaskWorker
 
     # Build task graph
@@ -168,7 +168,7 @@ def demonstrate_programmatic_worker(redis_client):
         config={"redis_client": redis_client, "key_prefix": "graflow:worker_demo"}
     )
 
-    queue = RedisTaskQueue(
+    queue = DistributedTaskQueue(
         redis_client=redis_client,
         key_prefix="graflow:worker_demo"
     )

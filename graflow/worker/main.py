@@ -9,7 +9,7 @@ import sys
 import time
 from typing import Any, Dict
 
-from graflow.queue.redis import RedisTaskQueue
+from graflow.queue.redis import DistributedTaskQueue
 
 # Setup logging
 logging.basicConfig(
@@ -19,7 +19,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def create_redis_queue(redis_config: Dict[str, Any]) -> RedisTaskQueue:
+def create_redis_queue(redis_config: Dict[str, Any]) -> DistributedTaskQueue:
     """RedisTaskQueue factory from configuration."""
     try:
         import redis
@@ -38,7 +38,7 @@ def create_redis_queue(redis_config: Dict[str, Any]) -> RedisTaskQueue:
 
         # RedisTaskQueue no longer needs execution_context
         # Tasks are retrieved from Graph via GraphStore
-        return RedisTaskQueue(
+        return DistributedTaskQueue(
             redis_client=redis_client,
             key_prefix=redis_config.get('key_prefix', 'graflow')
         )

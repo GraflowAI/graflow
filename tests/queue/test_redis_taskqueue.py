@@ -10,7 +10,7 @@ from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
 from graflow.core.task import Executable
 from graflow.queue.base import TaskSpec, TaskStatus
-from graflow.queue.redis import RedisTaskQueue
+from graflow.queue.redis import DistributedTaskQueue
 
 
 @pytest.fixture
@@ -72,8 +72,8 @@ class TestRedisTaskQueue:
         """Test graceful handling when redis is not available."""
         with patch('graflow.queue.redis.redis', None):
             with pytest.raises(ImportError, match="Redis library not installed"):
-                from graflow.queue.redis import RedisTaskQueue
-                RedisTaskQueue()
+                from graflow.queue.redis import DistributedTaskQueue
+                DistributedTaskQueue()
 
     @patch('graflow.queue.redis.redis')
     def test_redis_taskqueue_creation_default_client(self, mock_redis_module, execution_context):
@@ -81,7 +81,7 @@ class TestRedisTaskQueue:
         mock_redis_client = Mock()
         mock_redis_module.Redis.return_value = mock_redis_client
 
-        queue = RedisTaskQueue()
+        queue = DistributedTaskQueue()
 
         # execution_context no longer stored in queue
         assert queue.redis_client == mock_redis_client
@@ -96,7 +96,7 @@ class TestRedisTaskQueue:
     def test_redis_taskqueue_creation_custom_client(self, mock_redis, execution_context):
         """Test RedisTaskQueue creation with custom client."""
         with patch('graflow.queue.redis.redis'):
-            queue = RedisTaskQueue(redis_client=mock_redis, key_prefix="test_prefix")
+            queue = DistributedTaskQueue(redis_client=mock_redis, key_prefix="test_prefix")
 
             assert queue.redis_client == mock_redis
             assert queue.key_prefix == "test_prefix"
@@ -106,7 +106,7 @@ class TestRedisTaskQueue:
     def test_enqueue(self, mock_redis, execution_context):
         """Test enqueuing TaskSpec to Redis."""
         with patch('graflow.queue.redis.redis'):
-            queue = RedisTaskQueue(mock_redis)
+            queue = DistributedTaskQueue(mock_redis)
 
             task = create_registered_task(execution_context, "test_node")
             execution_context.session_id = "sess-1"
@@ -143,7 +143,7 @@ class TestRedisTaskQueue:
         mock_redis.lpop.return_value = None
 
         with patch('graflow.queue.redis.redis'):
-            queue = RedisTaskQueue(mock_redis)
+            queue = DistributedTaskQueue(mock_redis)
 
             result = queue.dequeue()
 
@@ -164,7 +164,7 @@ class TestRedisTaskQueue:
         mock_redis.lpop.return_value = json.dumps(record)
 
         with patch('graflow.queue.redis.redis'):
-            queue = RedisTaskQueue(mock_redis)
+            queue = DistributedTaskQueue(mock_redis)
             executable = create_registered_task(execution_context, "test_node")
 
             with patch(
@@ -192,7 +192,7 @@ class TestRedisTaskQueue:
     def test_is_empty(self, mock_redis, execution_context):
         """Test is_empty method."""
         with patch('graflow.queue.redis.redis'):
-            queue = RedisTaskQueue(mock_redis)
+            queue = DistributedTaskQueue(mock_redis)
 
             # Test empty queue
             mock_redis.llen.return_value = 0
@@ -211,7 +211,7 @@ class TestRedisTaskQueue:
         mock_redis.llen.return_value = 5
 
         with patch('graflow.queue.redis.redis'):
-            queue = RedisTaskQueue(mock_redis)
+            queue = DistributedTaskQueue(mock_redis)
 
             result = queue.size()
 
@@ -221,7 +221,7 @@ class TestRedisTaskQueue:
     def test_peek_next_node(self, mock_redis, execution_context):
         """Test peek_next_node method."""
         with patch('graflow.queue.redis.redis'):
-            queue = RedisTaskQueue(mock_redis)
+            queue = DistributedTaskQueue(mock_redis)
 
             # Test empty queue
             mock_redis.lindex.return_value = None
@@ -240,7 +240,7 @@ class TestRedisTaskQueue:
     def test_cleanup(self, mock_redis, execution_context):
         """Test cleanup method."""
         with patch('graflow.queue.redis.redis'):
-            queue = RedisTaskQueue(mock_redis)
+            queue = DistributedTaskQueue(mock_redis)
 
             queue.cleanup()
 
@@ -269,9 +269,9 @@ class TestRedisTaskQueueIntegration:
 
             assert context.task_queue.__class__.__name__ == "InMemoryTaskQueue"
 
-            queue = RedisTaskQueue(redis_client=mock_redis, key_prefix="test")
+            queue = DistributedTaskQueue(redis_client=mock_redis, key_prefix="test")
 
-            assert isinstance(queue, RedisTaskQueue)
+            assert isinstance(queue, DistributedTaskQueue)
             assert queue.redis_client == mock_redis
             assert queue.key_prefix == 'test'
 
@@ -289,7 +289,7 @@ class TestRedisTaskQueueIntegration:
                 config={'redis_client': mock_redis}
             )
 
-            queue = RedisTaskQueue(redis_client=mock_redis)
+            queue = DistributedTaskQueue(redis_client=mock_redis)
             context.graph_hash = "graph-123"
 
             task1 = create_registered_task(context, "task1")
