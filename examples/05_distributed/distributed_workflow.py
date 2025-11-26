@@ -159,17 +159,16 @@ def main():
         # Here we demonstrate manual enqueueing for clarity.
         from graflow.queue.base import TaskSpec
 
-        # Register tasks so workers can resolve them
-        for task in [extract_source_1, extract_source_2, extract_source_3, aggregate_results]:
-            exec_context.task_resolver.register_task(task.task_id, task)
+        # Tasks are stored in Graph, no need to register separately
+        # Workers will retrieve tasks from Graph via GraphStore
 
         # Enqueue all extraction tasks (they can run in parallel)
+        # Tasks are retrieved from Graph (via GraphStore), no serialization strategy needed
         for task_id in ["extract_source_1", "extract_source_2", "extract_source_3"]:
             task_node = ctx.graph.get_node(task_id)
             task_spec = TaskSpec(
                 executable=task_node,
-                execution_context=exec_context,
-                strategy="pickle"
+                execution_context=exec_context
             )
             redis_queue.enqueue(task_spec)
 
@@ -207,8 +206,7 @@ def main():
         agg_task = ctx.graph.get_node("aggregate_results")
         agg_spec = TaskSpec(
             executable=agg_task,
-            execution_context=exec_context,
-            strategy="pickle"
+            execution_context=exec_context
         )
         print("✅ Extraction phase complete, enqueuing aggregation task")
         redis_queue.enqueue(agg_spec)

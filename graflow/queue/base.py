@@ -5,7 +5,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 if TYPE_CHECKING:
     from graflow.core.context import ExecutionContext
@@ -24,10 +24,14 @@ class TaskStatus(Enum):
 
 @dataclass
 class TaskSpec:
-    """Task specification and metadata with function serialization support."""
+    """Task specification and metadata for distributed task execution.
+
+    TaskSpec stores task execution metadata and maintains a reference to the
+    executable task. The actual task is stored in the Graph (via GraphStore)
+    and retrieved directly without additional serialization.
+    """
     executable: 'Executable'
     execution_context: 'ExecutionContext'
-    strategy: str = "reference"
     status: TaskStatus = TaskStatus.READY
     created_at: float = field(default_factory=time.time)
     # Phase 3: Advanced features
@@ -45,11 +49,6 @@ class TaskSpec:
         """Get task_id from executable."""
         return self.executable.task_id
 
-    @property
-    def task_data(self) -> Dict[str, Any]:
-        """Get task_data by serializing executable's task."""
-        return self.execution_context.task_resolver.serialize_task(self.executable, self.strategy)
-
     def __lt__(self, other: 'TaskSpec') -> bool:
         """For queue sorting (FIFO: older first)."""
         return self.created_at < other.created_at
@@ -65,27 +64,23 @@ class TaskSpec:
         self.status = TaskStatus.READY  # Reset to ready for retry
 
     def get_task(self) -> Optional['Executable']:
-        """Get task executable by deserializing stored data.
+        """Get task executable from TaskSpec.
+
+        The task is already resolved from the Graph, so this simply
+        returns the executable directly without additional serialization.
 
         Returns:
-            Executable object or None if no task data available
-
-        Raises:
-            TaskResolutionError: If task cannot be resolved
+            Executable object (already resolved from Graph)
         """
-        try:
-            task_data = self.task_data
-            return self.execution_context.task_resolver.resolve_task(task_data)
-        except ValueError:
-            return None
-        except Exception:
-            return None
+        return self.executable
 
 class TaskQueue(ABC):
     """Abstract base class for TaskQueue (TaskSpec support)."""
 
-    def __init__(self, execution_context: 'ExecutionContext'):
-        self.execution_context = execution_context
+    def __init__(self):
+        """
+        Initialize TaskQueue.
+        """
         self._task_specs: Dict[str, TaskSpec] = {}
         # Phase 3: Advanced features
         self.enable_retry: bool = False

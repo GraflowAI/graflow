@@ -324,52 +324,8 @@ class TestExecutionContextSerialization:
             # Test that queue is functional after reconstruction
             assert loaded_context.max_steps == 10
 
-    def test_task_resolver_preservation(self):
-        """Test that task resolver state is preserved during serialization.
-
-        This test validates that:
-        - TaskResolver registry survives pickle serialization
-        - Registered tasks remain available and callable after deserialization
-        - Task registration mappings are accurately preserved
-        - Task resolution and execution work correctly after reload
-        - Task resolver state integrity is maintained across serialization cycles
-        """
-        graph = TaskGraph()
-
-        # Use a simple Task instead of local function to avoid pickle issues
-        simple_task = Task("registered_function", register_to_context=False)
-        graph.add_node(simple_task, "registered_function")
-
-        context = ExecutionContext.create(
-            graph=graph,
-            start_node="registered_function",
-            max_steps=10
-        )
-
-        # Register some functions using global functions
-        context.task_resolver.register_task("test_func", global_test_func)
-        context.task_resolver.register_task("math_func", global_math_func)
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            context_path = os.path.join(tmpdir, "context.pkl")
-
-            # Save and load
-            context.save(context_path)
-            loaded_context = ExecutionContext.load(context_path)
-
-            # Verify task resolver
-            assert loaded_context.task_resolver is not None
-
-            # Verify registered functions are available
-            registered_tasks = loaded_context.task_resolver.get_registered_tasks()
-            assert "test_func" in registered_tasks
-            assert "math_func" in registered_tasks
-
-            test_func = registered_tasks["test_func"]
-            assert test_func() == "test"
-
-            math_func = registered_tasks["math_func"]
-            assert math_func(3, 4) == 7
+    # test_task_resolver_preservation removed - TaskResolver no longer exists
+    # Tasks are now stored in Graph (via GraphStore) and retrieved directly
 
     def test_serialization_error_handling(self):
         """Test error handling during serialization/deserialization.

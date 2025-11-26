@@ -230,12 +230,15 @@ class CheckpointManager:
 
     @staticmethod
     def _serialize_task_spec(task_spec: TaskSpec) -> Dict[str, Any]:
+        """Serialize TaskSpec for checkpoint storage.
+
+        Tasks are stored in the Graph, so we only need to save the task_id
+        and metadata. The task itself will be retrieved from the Graph on restore.
+        """
         return {
             "task_id": task_spec.task_id,
-            "task_data": task_spec.task_data,
             "status": task_spec.status.value,
             "created_at": task_spec.created_at,
-            "strategy": task_spec.strategy,
             "retry_count": task_spec.retry_count,
             "max_retries": task_spec.max_retries,
             "last_error": task_spec.last_error,
@@ -243,16 +246,21 @@ class CheckpointManager:
 
     @staticmethod
     def _deserialize_task_spec(data: Dict[str, Any], context: ExecutionContext) -> TaskSpec:
+        """Deserialize TaskSpec from checkpoint data.
+
+        Retrieves the task from the Graph using task_id. If the task is not
+        found in the graph, creates a placeholder Task object.
+        """
         task_id = data["task_id"]
-        task_data = data.get("task_data")
 
+        # Try to get task from Graph
         executable = None
-        if task_data:
-            try:
-                executable = context.task_resolver.resolve_task(task_data)
-            except Exception:
-                executable = None
+        try:
+            executable = context.graph.get_node(task_id)
+        except (KeyError, AttributeError):
+            executable = None
 
+        # Create placeholder if not found in graph
         if executable is None:
             from graflow.core.task import Task
 
@@ -261,7 +269,6 @@ class CheckpointManager:
         task_spec = TaskSpec(
             executable=executable,
             execution_context=context,
-            strategy=data.get("strategy", "reference"),
             status=TaskStatus.READY,
             created_at=data.get("created_at", time.time()),
             retry_count=data.get("retry_count", 0),

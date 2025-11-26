@@ -9,7 +9,6 @@ import sys
 import time
 from typing import Any, Dict
 
-from graflow.core.task_registry import TaskResolver
 from graflow.queue.redis import RedisTaskQueue
 
 # Setup logging
@@ -37,16 +36,9 @@ def create_redis_queue(redis_config: Dict[str, Any]) -> RedisTaskQueue:
         redis_client.ping()
         logger.info(f"Connected to Redis at {redis_config['host']}:{redis_config['port']}")
 
-        # Create dummy ExecutionContext
-        class DummyContext:
-            def __init__(self):
-                self.session_id = "worker_session"
-                self.task_resolver = TaskResolver()
-
-        dummy_context = DummyContext()
-
+        # RedisTaskQueue no longer needs execution_context
+        # Tasks are retrieved from Graph via GraphStore
         return RedisTaskQueue(
-            dummy_context,
             redis_client=redis_client,
             key_prefix=redis_config.get('key_prefix', 'graflow')
         )

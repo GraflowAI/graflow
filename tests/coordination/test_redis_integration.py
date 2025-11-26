@@ -17,7 +17,7 @@ def create_coordinator(redis_client, key_prefix: str = "test") -> tuple[RedisCoo
     """Helper to create coordinator with backing queue/context."""
     graph = TaskGraph()
     context = ExecutionContext(graph)
-    queue = RedisTaskQueue(context, redis_client=redis_client, key_prefix=key_prefix)
+    queue = RedisTaskQueue(redis_client=redis_client, key_prefix=key_prefix)
     return RedisCoordinator(queue), context, queue
 
 

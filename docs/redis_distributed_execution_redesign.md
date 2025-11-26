@@ -103,17 +103,7 @@ sequenceDiagram
     Producer->>Redis: SUBSCRIBE barrier_done:parallel_group_1
     Redis-->>Producer: 全タスク完了通知
 
-    Note over Producer: 5. Graph 同期（Worker 側で変更があれば）
-    Producer->>Redis: HGETALL completions:parallel_group_1
-    Redis-->>Producer: [task_1: {graph_hash}, task_2: {graph_hash}, ...]
-    Producer->>Producer: Worker の graph_hash と比較
-    alt Graph が変更された場合
-        Producer->>Redis: GET {prefix}:graph:{new_hash}
-        Redis-->>Producer: 更新された TaskGraph
-        Producer->>Producer: ExecutionContext.graph を更新
-    end
-
-    Note over Producer: 6. 次のタスク実行
+    Note over Producer: 5. 次のタスク実行
     Producer->>Redis: LPUSH queue (aggregate_task)
 ```
 
@@ -140,13 +130,11 @@ sequenceDiagram
    - 現在の graph_hash を含める（next_task() で変更された可能性）
    - Barrier カウントをインクリメント
 
-5. **Producer: Barrier 待機 & Graph 同期**
+5. **Producer: Barrier 待機**
    - wait_barrier() で全タスク完了を待つ
-   - completion results から graph_hash を収集
-   - Worker 側で Graph が変更されていれば Producer の Graph を更新
 
 6. **Producer: 次のタスク**
-   - 更新された Graph で次のタスク（aggregate）を実行
+   - 次のタスク（aggregate）を実行
 
 ---
 
@@ -429,7 +417,7 @@ def execute_nested_group(self, group_tasks, context):
 ```
 
 **結論:**
-- **親Producerへの「Graphのマージ/同期」は一切不要**
+- **親Producerへの「Graphのマージ/同期」は不要**
 - 各Workerは独立した世界を持ち、必要になった時（分散実行時）だけ自分の世界（Graph）を公開（Upload）すれば良い
 - シンプルで効率的、かつ状態管理の複雑さを排除
 
@@ -562,8 +550,7 @@ class ExecutionContextFactory:
      - dispatch_task() × N (全タスク)
      - wait_barrier(group_id) ← ここで待機（BSP）
   3. barrier 完了後、completion results を収集
-  4. Worker の Graph 変更を Producer に同期
-  5. 次のタスク（aggregate）を enqueue
+  4. 次のタスク（aggregate）を enqueue
 
 [Worker]
   1. Redis queue から task_spec を dequeue
@@ -573,7 +560,6 @@ class ExecutionContextFactory:
      - 新しい graph_hash で Redis に保存
   3. 実行完了後、notify_task_completion()
      - barrier カウントを増やす
-     - 現在の graph_hash を completion に含める
      - 全タスク完了で barrier を通知
 ```
 

@@ -6,14 +6,14 @@ from typing import TYPE_CHECKING, Optional
 from graflow.queue.base import TaskQueue, TaskSpec, TaskStatus
 
 if TYPE_CHECKING:
-    pass
+    from graflow.core.context import ExecutionContext
 
 
 class InMemoryTaskQueue(TaskQueue):
     """In-memory task queue with TaskSpec support (Phase 1 implementation)."""
 
-    def __init__(self, execution_context, start_node: Optional[str] = None):
-        super().__init__(execution_context)
+    def __init__(self, execution_context: ExecutionContext, start_node: Optional[str] = None):
+        super().__init__()
         self._queue: deque[TaskSpec] = deque()
         if start_node:
             # Get task from graph instead of creating a new Task object

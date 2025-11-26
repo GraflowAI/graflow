@@ -279,10 +279,10 @@ class TaskWorker:
         task_id = task_spec.task_id
 
         try:
-            # Resolve task from TaskSpec
-            task_func = task_spec.get_task()
+            # Get task from TaskSpec (already resolved from graph)
+            task_func = task_spec.executable
             if task_func is None:
-                raise GraflowRuntimeError(f"Could not resolve task from spec: {task_id}")
+                raise GraflowRuntimeError(f"Task not found in graph: {task_id}")
 
             # Get execution context from task spec
             execution_context = task_spec.execution_context

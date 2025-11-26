@@ -138,7 +138,7 @@ def test_redis_backend():
         config={"redis_client": redis_client}
     )
 
-    redis_queue = RedisTaskQueue(context, redis_client=redis_client)
+    redis_queue = RedisTaskQueue(redis_client=redis_client)
 
     print("✅ ExecutionContext created (in-memory queue, Redis channel)")
     print("✅ RedisTaskQueue ready for distributed workers")

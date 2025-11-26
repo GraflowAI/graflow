@@ -31,7 +31,7 @@ def _create_registered_task(execution_context: ExecutionContext, task_id: str) -
     wrapper.__module__ = __name__
 
     execution_context.graph.add_node(wrapper, task_id)
-    execution_context.task_resolver.register_task(task_id, wrapper)
+    # Task is stored in Graph, no need to register separately
     return wrapper
 
 
@@ -44,8 +44,8 @@ def _create_task_spec(execution_context: ExecutionContext, task_id: str) -> Task
 class MockTaskQueue(TaskQueue):
     """Simple in-memory queue for negative-path testing."""
 
-    def __init__(self, execution_context: ExecutionContext):
-        super().__init__(execution_context)
+    def __init__(self):
+        super().__init__()
         self.tasks: list[TaskSpec] = []
 
     def enqueue(self, task_spec: TaskSpec) -> bool:
@@ -69,8 +69,7 @@ class MockTaskQueue(TaskQueue):
 
 def test_task_worker_rejects_non_redis_queue():
     """Ensure TaskWorker rejects queues that are not RedisTaskQueue."""
-    execution_context = _create_execution_context()
-    queue = MockTaskQueue(execution_context)
+    queue = MockTaskQueue()
 
     with pytest.raises(ValueError, match="RedisTaskQueue"):
         TaskWorker(queue=queue, worker_id="invalid") # type: ignore
@@ -79,7 +78,7 @@ def test_task_worker_rejects_non_redis_queue():
 def test_task_worker_processes_tasks_with_redis_queue(clean_redis: Any):
     """Verify TaskWorker processes tasks correctly when using RedisTaskQueue."""
     execution_context = _create_execution_context()
-    queue = RedisTaskQueue(execution_context, clean_redis, "test_worker_queue")
+    queue = RedisTaskQueue(redis_client=clean_redis, key_prefix="test_worker_queue")
     queue.cleanup()
 
     try:

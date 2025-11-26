@@ -169,16 +169,14 @@ def demonstrate_programmatic_worker(redis_client):
     )
 
     queue = RedisTaskQueue(
-        context,
         redis_client=redis_client,
         key_prefix="graflow:worker_demo"
     )
     queue.cleanup()
     context.channel.clear()
 
-    # Register tasks for function resolution (reference + pickle fallback)
-    for task in registered_tasks:
-        context.task_resolver.register_task(task.task_id, task)
+    # Tasks are stored in Graph, no need to register separately
+    # Workers will retrieve tasks from Graph via GraphStore
 
     # Create worker using the Redis-backed queue
     worker = TaskWorker(
@@ -193,12 +191,12 @@ def demonstrate_programmatic_worker(redis_client):
     print("   Poll interval: 0.5s")
 
     # Enqueue tasks manually using queue TaskSpec
+    # Tasks are retrieved from Graph (via GraphStore), no serialization strategy needed
     for task_id in ["task_1", "task_2", "task_3"]:
         task_node = graph.get_node(task_id)
         task_spec = TaskSpec(
             executable=task_node,
-            execution_context=context,
-            strategy="pickle"
+            execution_context=context
         )
         queue.enqueue(task_spec)
         print(f"✅ Enqueued task: {task_id}")

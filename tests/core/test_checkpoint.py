@@ -759,3 +759,89 @@ class TestCheckpointIntegration:
 
             assert restored_context.channel.get("shared_value") == 42
             assert restored_context.channel.get("config") == {"mode": "test", "retry": 3}
+
+    def test_checkpoint_preserves_graph_structure(self):
+        """Test that checkpoint correctly saves and restores Graph with all tasks.
+
+        This test verifies the core principle: "Task is in the Graph, Get it from the Graph"
+        - Graph structure (nodes and edges) is preserved
+        - All tasks can be retrieved from restored graph
+        - TaskSpec deserialization retrieves tasks from graph
+        """
+        graph = TaskGraph()
+
+        @task("task_a")
+        def task_a_func(x: int) -> int:
+            return x * 2
+
+        @task("task_b")
+        def task_b_func(x: int) -> int:
+            return x + 10
+
+        @task("task_c")
+        def task_c_func(x: int) -> int:
+            return x ** 2
+
+        # Add tasks to graph with dependencies
+        graph.add_node(task_a_func, "task_a")
+        graph.add_node(task_b_func, "task_b")
+        graph.add_node(task_c_func, "task_c")
+        graph.add_edge("task_a", "task_b")
+        graph.add_edge("task_b", "task_c")
+
+        # Create execution context
+        context = ExecutionContext.create(graph, "task_a", max_steps=10)
+
+        # Verify original graph structure
+        original_nodes = set(graph.nodes())
+        original_edges = set(graph.edges())
+        assert len(original_nodes) == 3
+        assert len(original_edges) == 2
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            checkpoint_path = os.path.join(tmpdir, "graph_checkpoint")
+
+            # Create checkpoint
+            pkl_path, _ = CheckpointManager.create_checkpoint(
+                context,
+                path=checkpoint_path
+            )
+
+            # Resume from checkpoint
+            restored_context, _ = CheckpointManager.resume_from_checkpoint(pkl_path)
+
+            # Verify graph structure is preserved
+            restored_nodes = set(restored_context.graph.nodes())
+            restored_edges = set(restored_context.graph.edges())
+
+            assert restored_nodes == original_nodes, "Graph nodes should be preserved"
+            assert restored_edges == original_edges, "Graph edges should be preserved"
+
+            # Verify all tasks can be retrieved from restored graph
+            for task_id in ["task_a", "task_b", "task_c"]:
+                task_obj = restored_context.graph.get_node(task_id)
+                assert task_obj is not None, f"Task {task_id} should be retrievable from graph"
+                assert task_obj.task_id == task_id
+                assert callable(task_obj), f"Task {task_id} should be callable"
+
+            # Verify TaskSpec deserialization retrieves from graph
+            from graflow.queue.base import TaskSpec
+
+            # Create and serialize a TaskSpec
+            original_task = context.graph.get_node("task_a")
+            task_spec = TaskSpec(
+                executable=original_task,
+                execution_context=context,
+            )
+            serialized = CheckpointManager._serialize_task_spec(task_spec)
+
+            # Deserialize using restored context (should retrieve from graph)
+            deserialized = CheckpointManager._deserialize_task_spec(
+                serialized,
+                restored_context
+            )
+
+            # Verify deserialized task is from the graph
+            graph_task = restored_context.graph.get_node("task_a")
+            assert deserialized.executable is graph_task, "Deserialized task should be from graph"
+            assert deserialized.task_id == "task_a"

@@ -16,7 +16,6 @@ from graflow.coordination.executor import GroupExecutor
 from graflow.core.cycle import CycleController
 from graflow.core.engine import WorkflowEngine
 from graflow.core.graph import TaskGraph
-from graflow.core.task_registry import TaskResolver
 from graflow.exceptions import CycleLimitExceededError
 from graflow.queue.base import TaskQueue, TaskSpec
 from graflow.queue.memory import InMemoryTaskQueue
@@ -102,11 +101,6 @@ class TaskExecutionContext:
         """
         channel = self.execution_context.get_channel()
         return TypedChannel(channel, message_type)
-
-    @property
-    def task_resolver(self) -> TaskResolver:
-        """Get the task resolver instance from execution context."""
-        return self.execution_context.task_resolver
 
     def get_result(self, node: str, default: Any = None) -> Any:
         """Get execution result for a node from channel."""
@@ -299,11 +293,6 @@ class ExecutionContext:
             for key in parent_context.channel.keys():
                 self.channel.set(key, parent_context.channel.get(key))
 
-        if parent_context is not None:
-            self._task_resolver = parent_context._task_resolver
-        else:
-            self._task_resolver = TaskResolver()
-
         # Task execution context management
         self._task_execution_stack: list[TaskExecutionContext] = []
         self._task_contexts: dict[str, TaskExecutionContext] = {}
@@ -442,11 +431,6 @@ class ExecutionContext:
     def queue(self) -> TaskQueue:
         """Get the task queue instance."""
         return self.task_queue
-
-    @property
-    def task_resolver(self) -> TaskResolver:
-        """Get the task resolver instance."""
-        return self._task_resolver
 
     @property
     def config(self) -> Dict[str, Any]:
@@ -922,7 +906,6 @@ class ExecutionContext:
         state.pop('task_queue', None)
         state.pop('channel', None)
         state.pop('group_executor', None)
-        state.pop('_task_resolver', None)
 
         # LLM: Exclude agent instances (only keep YAML for distributed execution)
         state['_llm_agents'] = {}  # Agent instances not serialized
@@ -977,7 +960,6 @@ class ExecutionContext:
 
         # Reconstruct TaskQueue (always in-memory after simplification)
         from graflow.channels.factory import ChannelFactory
-        from graflow.core.task_registry import TaskResolver
 
         queue_start_node = config.get('start_node')
         self.task_queue = InMemoryTaskQueue(self, queue_start_node)
@@ -995,9 +977,6 @@ class ExecutionContext:
         if channel_data:
             for key, value in channel_data.items():
                 self.channel.set(key, value)
-
-        # Reconstruct TaskResolver
-        self._task_resolver = TaskResolver()
 
         # Ensure GroupExecutor exists for older checkpoints
         if not hasattr(self, 'group_executor'):

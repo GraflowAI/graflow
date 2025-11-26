@@ -2,7 +2,7 @@
 
 import json
 import logging
-from typing import Optional
+from typing import Optional, cast
 
 try:
     import redis
@@ -19,14 +19,16 @@ logger = logging.getLogger(__name__)
 class RedisTaskQueue(TaskQueue):
     """Redis distributed task queue with TaskSpec support."""
 
-    def __init__(self, execution_context, redis_client: Optional['Redis'] = None,
+    def __init__(self, redis_client: Optional['Redis'] = None,
                  host: str = "localhost", port: int = 6379, db: int = 0,
                  key_prefix: str = "graflow", graph_store: Optional['GraphStore'] = None):
         """Initialize Redis task queue.
 
         Args:
-            execution_context: ExecutionContext instance
             redis_client: Optional Redis client instance
+            host: Redis server host
+            port: Redis server port
+            db: Redis database number
             key_prefix: Key prefix for Redis keys
             graph_store: Optional GraphStore for loading graphs (required for SerializedTaskRecord)
 
@@ -36,7 +38,7 @@ class RedisTaskQueue(TaskQueue):
         if redis is None:
             raise ImportError("Redis library not installed. Install with: pip install redis")
 
-        super().__init__(execution_context)
+        super().__init__()
 
         if redis_client is not None:
             self.redis_client = redis_client
@@ -121,7 +123,6 @@ class RedisTaskQueue(TaskQueue):
             task_spec = TaskSpec(
                 executable=task,
                 execution_context=context,
-                strategy="reference", # Default strategy
                 status=TaskStatus.RUNNING,
                 created_at=record.created_at
             )
