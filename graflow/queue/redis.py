@@ -151,19 +151,7 @@ class RedisTaskQueue(TaskQueue):
         """Get Redis queue size."""
         return cast(int, self.redis_client.llen(self.queue_key))
 
-    def peek_next_node(self) -> Optional[str]:
-        """Peek next node without removing."""
-        result = self.redis_client.lindex(self.queue_key, 0)
-        return str(result) if result else None
 
-    def to_list(self) -> list[str]:
-        """Get list of node IDs in queue order."""
-        queue_items = cast(list, self.redis_client.lrange(self.queue_key, 0, -1))
-        return [str(item) for item in queue_items]
-
-    def get_pending_task_specs(self) -> list[TaskSpec]:
-        """Return TaskSpecs for pending tasks (not required for Redis checkpoints)."""
-        return []
 
     def notify_task_completion(
         self,

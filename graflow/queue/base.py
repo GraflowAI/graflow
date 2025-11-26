@@ -75,12 +75,10 @@ class TaskSpec:
         return self.executable
 
 class TaskQueue(ABC):
-    """Abstract base class for TaskQueue (TaskSpec support)."""
+    """Abstract base class for all task queues."""
 
     def __init__(self):
-        """
-        Initialize TaskQueue.
-        """
+        """Initialize TaskQueue."""
         self._task_specs: Dict[str, TaskSpec] = {}
         # Phase 3: Advanced features
         self.enable_retry: bool = False
@@ -120,27 +118,14 @@ class TaskQueue(ABC):
         task_spec = self.dequeue()
         return task_spec.task_id if task_spec else None
 
-    # === Optional extended interface ===
+    # === Common optional interface ===
     def size(self) -> int:
         """Number of waiting nodes."""
         return 0
 
-    def peek_next_node(self) -> Optional[str]:
-        """Peek next node without removing."""
-        return None
-
-    @abstractmethod
-    def to_list(self) -> list[str]:
-        """Get list of task IDs in queue order."""
-        pass
-
     def get_task_spec(self, task_id: str) -> Optional[TaskSpec]:
         """Get TaskSpec by task ID."""
         return self._task_specs.get(task_id)
-
-    def get_pending_task_specs(self) -> List[TaskSpec]:
-        """Return TaskSpec objects for pending tasks (checkpoint helper)."""
-        return []
 
     # === Phase 3: Advanced features ===
     def configure(self, enable_retry: bool = False, enable_metrics: bool = False) -> None:
@@ -149,11 +134,7 @@ class TaskQueue(ABC):
         self.enable_metrics = enable_metrics
 
     def handle_task_failure(self, task_spec: TaskSpec, error_message: str) -> bool:
-        """Handle task failure with retry logic.
-
-        Returns:
-            bool: True if task should be retried, False if it should be marked as failed
-        """
+        """Handle task failure with retry logic."""
         task_spec.status = TaskStatus.ERROR
 
         if self.enable_metrics:
@@ -203,4 +184,4 @@ class TaskQueue(ABC):
             logger.debug(f"Task {task_id} completed successfully in group {group_id}")
         else:
             logger.debug(f"Task {task_id} failed in group {group_id}: {error_message}")
-        pass
+
