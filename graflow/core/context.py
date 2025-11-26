@@ -17,7 +17,7 @@ from graflow.core.cycle import CycleController
 from graflow.core.engine import WorkflowEngine
 from graflow.core.graph import TaskGraph
 from graflow.exceptions import CycleLimitExceededError
-from graflow.queue.base import TaskQueue, TaskSpec
+from graflow.queue.base import TaskSpec
 from graflow.queue.memory import LocalTaskQueue
 from graflow.trace.noop import NoopTracer
 
@@ -277,7 +277,7 @@ class ExecutionContext:
         # Preserve original config (without runtime additions)
         base_config: Dict[str, Any] = dict(config) if config else {}
 
-        self.task_queue: TaskQueue = LocalTaskQueue(self, start_node)
+        self.task_queue: LocalTaskQueue = LocalTaskQueue(self, start_node)
 
         self.cycle_controller = CycleController(default_max_cycles)
 
@@ -428,7 +428,7 @@ class ExecutionContext:
         )
 
     @property
-    def queue(self) -> TaskQueue:
+    def queue(self) -> LocalTaskQueue:
         """Get the task queue instance."""
         return self.task_queue
 
