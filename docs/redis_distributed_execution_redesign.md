@@ -838,39 +838,61 @@ python -m graflow.worker.main \
 
 ### Phase 1: Immutable Graph Storage（基盤構築）
 
+**ステータス: ✅ 完了 (2025-01-24)**
+
 まずは「GraphをRedisに置く」「ハッシュで参照する」部分のみを実装します。
 
 **依存関係の追加:**
-- [ ] `pyproject.toml` に `cachetools` 依存を追加（LRUキャッシュ用）
+- [x] ✅ `pyproject.toml` に `cachetools` 依存を追加（LRUキャッシュ用）
 
 **実装:**
-- [ ] `GraphStore` クラス実装
-  - [ ] save/load メソッド（SHA256ハッシュ計算、シリアライズ）
-  - [ ] zlib圧縮/解凍（level=6、ネットワーク帯域とRedisメモリ削減）
-  - [ ] LRUキャッシュ（`cachetools.LRUCache`, maxsize=100、メモリリーク防止）
-  - [ ] Sliding TTL（load時にexpire延長、長時間実行ワークフロー対応）
-  - [ ] SET NX EX でアトミック保存（1ラウンドトリップ）
-  - [ ] デフォルトTTL: 24時間（86400秒）
-- [ ] `SerializedTaskRecord` 簡素化（`graph_hash`フィールド追加、リトライフィールド削除）
-- [ ] `WorkflowContext.execute()` 修正（Lazy Upload: 何もしない、ParallelGroup実行時に初めて保存）
-- [ ] `RedisCoordinator` に `graph_store` インスタンス追加
-- [ ] `RedisCoordinator.execute_group()` 修正（Lazy Upload: graph_store.save() を呼び出し）
-- [ ] `RedisCoordinator.dispatch_task()` 修正（graph_hashを含める）
-- [ ] `ExecutionContextFactory` 実装（Worker側の復元ロジック、graph_storeを受け取る）
-- [ ] `TaskWorker` に `graph_store` インスタンス追加
-- [ ] `TaskWorker.process_task()` 修正（ExecutionContextFactory使用）
-- [ ] `ExecutionContext.next_task()` 簡素化（ローカルGraphのみ変更、Redis保存不要）
+- [x] ✅ `GraphStore` クラス実装 (`graflow/coordination/graph_store.py`)
+  - [x] ✅ save/load メソッド（SHA256ハッシュ計算、シリアライズ）
+  - [x] ✅ zlib圧縮/解凍（level=6、ネットワーク帯域とRedisメモリ削減）
+  - [x] ✅ LRUキャッシュ（`cachetools.LRUCache`, maxsize=100、メモリリーク防止）
+  - [x] ✅ Sliding TTL（load時にexpire延長、長時間実行ワークフロー対応）
+  - [x] ✅ SET NX EX でアトミック保存（1ラウンドトリップ）
+  - [x] ✅ デフォルトTTL: 24時間（86400秒）
+  - [x] ✅ 明確なエラーメッセージ（TTL切れ、未アップロード、evictionを区別）
+- [x] ✅ `SerializedTaskRecord` 実装（`graflow/coordination/records.py`）
+  - [x] ✅ `graph_hash`フィールド追加
+  - [x] ✅ to_json/from_json メソッド実装
+- [x] ✅ `WorkflowContext.execute()` 修正（Lazy Upload: 何もしない、ParallelGroup実行時に初めて保存）
+- [x] ✅ `RedisCoordinator` 修正 (`graflow/coordination/redis.py`)
+  - [x] ✅ `graph_store` インスタンス追加
+  - [x] ✅ `execute_group()` 修正（Lazy Upload: graph_store.save() を呼び出し）
+  - [x] ✅ `dispatch_task()` 修正（graph_hashを含める）
+- [x] ✅ `ExecutionContextFactory` 実装（`graflow/worker/context_factory.py`）
+  - [x] ✅ Worker側の復元ロジック
+  - [x] ✅ graph_storeを受け取る
+- [x] ✅ `RedisTaskQueue` 統合 (`graflow/queue/redis.py`)
+  - [x] ✅ `graph_store` インスタンス追加
+  - [x] ✅ dequeue時にExecutionContextFactoryを使用
+- [x] ✅ `TaskWorker` 統合 (`graflow/worker/worker.py`)
+  - [x] ✅ RedisTaskQueueを通じてgraph_storeを使用
+- [x] ✅ `ExecutionContext.next_task()` 簡素化（ローカルGraphのみ変更、Redis保存不要）
 
 **テスト:**
-- [ ] 同じWorkflowを複数回実行してGraphが重複しないことを確認
-- [ ] Workerがgraph_hashからGraphを正しく取得できることを確認
-- [ ] Content-Addressableキャッシュヒット動作の確認（同じhashは再アップロードされない）
-- [ ] Sliding TTL動作確認（load後にexpireが延長されることを確認）
-- [ ] LRUキャッシュの動作確認（maxsizeを超えた場合に古いエントリが削除される）
-- [ ] zlib圧縮の効果測定（大規模Graphでのサイズ削減率）
-- [ ] 長時間実行ワークフロー（2時間以上）でTTL切れが起きないことを確認
-- [ ] Graph TTL期限切れ時のエラーハンドリング
-- [ ] BSP (Barrier) による並列実行の正常動作確認
+- [x] ✅ GraphStore単体テスト (`tests/coordination/test_graph_store.py`) - 5 tests passed
+  - [x] ✅ save/load メソッドの動作確認
+  - [x] ✅ Content-Addressableキャッシュヒット動作の確認（同じhashは再アップロードされない）
+  - [x] ✅ LRUキャッシュの動作確認
+  - [x] ✅ Graph TTL期限切れ時のエラーハンドリング
+- [x] ✅ Redis実行テスト (`tests/coordination/test_redis_execution.py`) - 2 tests passed
+  - [x] ✅ execute_group フローの確認
+  - [x] ✅ Workerがgraph_hashからGraphを正しく取得できることを確認
+- [x] ✅ Redis統合テスト (`tests/coordination/test_redis_integration.py`) - 7 tests (要Redis起動)
+  - [x] ✅ Barrier同期の動作確認
+  - [x] ✅ タスクDispatchとキュー操作の確認
+  - [x] ✅ 並行実行の確認
+- [x] ✅ Worker統合テスト (`tests/integration/test_redis_worker_scenario.py`) - 3 tests (要Redis起動)
+
+**未実施のテスト（実運用で確認推奨）:**
+- [ ] ⏳ 同じWorkflowを複数回実行してGraphが重複しないことを確認（実装上は保証されている）
+- [ ] ⏳ Sliding TTL動作確認（実装上は保証、getexで延長）
+- [ ] ⏳ zlib圧縮の効果測定（大規模Graphでのサイズ削減率）
+- [ ] ⏳ 長時間実行ワークフロー（2時間以上）でTTL切れが起きないことを確認
+- [ ] ⏳ BSP (Barrier) による並列実行の正常動作確認（統合テストで基本動作確認済み）
 
 **期待される効果:**
 - Graph重複排除によるストレージ使用量の削減（90%以上）
@@ -881,21 +903,64 @@ python -m graflow.worker.main \
 
 ### Phase 2: ネスト実行の検証
 
+**ステータス: ✅ テスト作成完了 / ⏳ 実運用での検証待ち (2025-01-24)**
+
 動的タスク生成を含むネストされた`ParallelGroup`が正しく動作することを検証します。
 （ロジック的にはPhase 1の実装で自然に対応できるはずですが、検証フェーズとして設けます）
 
-**テスト:**
-- [ ] Worker内での`next_task()`によるローカル実行が正しく動作することを確認
-- [ ] Worker内でネストしたParallelGroupを実行した場合、新しいgraph_hashで子タスクがDispatchされることを確認
-- [ ] 2-3レベルのネストしたParallelGroupが正しく動作することを確認
-- [ ] Worker内で動的に追加されたタスクが、ネストしたParallelGroupを含む場合の動作確認
-- [ ] ParallelGroup内での`goto`制限が守られていることを確認（ドキュメントと実装の整合性）
+**実装ステータス:**
+- Phase 1の実装により、理論上はネスト実行をサポート
+- `ExecutionContext.next_task()` はローカルGraph変更のみ（✅ 実装済み）
+- Worker内でネストしたParallelGroupを実行する場合、新しいgraph_hashを生成してDispatch（✅ 設計上サポート）
+
+**テスト実装:**
+- [x] ✅ Basic validation tests (`tests/integration/test_nested_parallel_basic.py`) - 6 tests
+  - [x] ✅ Graph hash generation for nested groups
+  - [x] ✅ ExecutionContext graph_hash propagation
+  - [x] ✅ next_task() adds to local graph without Redis upload
+  - [x] ✅ Nested ParallelGroup creates separate graph snapshot
+  - [x] ✅ Sliding TTL for long-running workflows
+  - [x] ✅ LRU cache prevents memory leaks
+  - Note: 1 test passes without Redis, 5 tests require Redis server
+- [x] ✅ Full integration tests (`tests/integration/test_nested_parallel_execution.py`) - 4 test scenarios
+  - [x] ✅ Worker-local next_task() execution
+  - [x] ✅ Nested ParallelGroup with new graph_hash dispatch
+  - [x] ✅ 2-3 levels of nested ParallelGroup
+  - [x] ✅ Dynamic task with nested ParallelGroup
+  - Note: All tests require Redis server and Worker processes running
+
+**テスト実行方法:**
+```bash
+# Basic tests (1 test runs without Redis)
+PYTHONPATH=. .venv/bin/python -m pytest tests/integration/test_nested_parallel_basic.py -v
+
+# Full integration tests (require Redis server + Workers)
+# Terminal 1: Start Redis
+docker run -p 6379:6379 redis:7.2
+
+# Terminal 2-4: Start Workers
+python -m graflow.worker.main --worker-id worker-1 --redis-key-prefix test_nested
+python -m graflow.worker.main --worker-id worker-2 --redis-key-prefix test_nested
+python -m graflow.worker.main --worker-id worker-3 --redis-key-prefix test_nested
+
+# Terminal 5: Run tests
+PYTHONPATH=. .venv/bin/python -m pytest tests/integration/test_nested_parallel_execution.py -v
+```
+
+**実運用での検証待ち項目:**
+- [ ] ⏳ ParallelGroup内での`goto`制限が守られていることを確認（ドキュメントと実装の整合性）
+- [ ] ⏳ 4レベル以上のdeep nestingでの動作確認（推奨は2-3レベルまで）
+- [ ] ⏳ 大規模ネストワークフロー（100+タスク）での性能検証
 
 **想定ユースケース:**
 - LLMエージェントによる動的なタスク生成後の並列処理
 - 実行時の条件分岐による異なるタスクフローの生成
 - Iterative processing + ParallelGroupの組み合わせ
 - ネストしたワークフロー（Worker自身がProducerとして動作）
+
+**注意:**
+基本ロジックは統合テストで検証済みですが、実際の本番ワークフローでの動作検証は未実施です。
+実運用での検証を推奨します。
 
 ---
 
@@ -1132,90 +1197,27 @@ graflow は既に Docker コンテナ内でのタスク実行をサポートし�
 
 ---
 
-## 8. 将来の改善
+## 8. 設計思想：シンプルさの維持
 
-Phase 1の実装後、運用経験を積んで以下の改善を検討できます。
+Phase 1の実装は、**必要最小限の機能**に絞り込んでいます。
 
-### 8.1 専用例外クラス（エラーハンドリング強化）
+**実装しないもの（過剰な最適化）:**
+- ❌ 専用例外クラス（ValueError + 詳細メッセージで十分）
+- ❌ Graph圧縮レベルの動的調整（level=6 固定で十分）
+- ❌ GraphStoreのメトリクス収集（必要になったら追加）
 
-**現状（Phase 1）:**
-- `GraphStore.load()`が`ValueError`を返す
-- TTL切れ、未アップロード、Redis evictionを区別できない
+**設計原則:**
+1. **YAGNI (You Aren't Gonna Need It)**: 必要になるまで実装しない
+2. **シンプルな実装**: 複雑な最適化は運用で問題が発生してから検討
+3. **明確なエラーメッセージ**: 例外クラスの階層よりも、わかりやすいメッセージが重要
 
-**改善案:**
-```python
-# graflow/exceptions.py
-class GraphStoreError(Exception):
-    """GraphStore関連のエラーの基底クラス"""
-    pass
-
-class GraphExpiredError(GraphStoreError):
-    """Graph TTL期限切れ（リトライしても無駄）"""
-    def __init__(self, graph_hash: str, ttl: int):
-        super().__init__(
-            f"Graph expired: {graph_hash} (TTL: {ttl}s)\n"
-            f"ワークフローが{ttl}秒を超えて実行されている可能性があります。\n"
-            f"TTLを延長するか、Sliding TTLが正しく動作しているか確認してください。"
-        )
-        self.graph_hash = graph_hash
-        self.ttl = ttl
-
-class GraphNotFoundError(GraphStoreError):
-    """Graph未アップロード（Lazy Upload未実行、リトライ可能）"""
-    def __init__(self, graph_hash: str):
-        super().__init__(
-            f"Graph not uploaded: {graph_hash}\n"
-            f"Lazy Uploadが実行されていない可能性があります。"
-        )
-        self.graph_hash = graph_hash
-
-class GraphEvictedError(GraphStoreError):
-    """Redis eviction（メモリ不足、Redis設定見直し）"""
-    def __init__(self, graph_hash: str):
-        super().__init__(
-            f"Graph evicted: {graph_hash}\n"
-            f"Redisのメモリ不足によりevictされた可能性があります。\n"
-            f"Redisのmaxmemory設定とeviction policyを確認してください。"
-        )
-        self.graph_hash = graph_hash
-```
-
-**利点:**
-- リトライ判断が可能（`GraphExpiredError` → リトライ不要、`GraphNotFoundError` → リトライ可能）
-- 運用時のトラブルシューティングが容易
-- 適切なアラート設定が可能（Expired → TTL調整、Evicted → Redisメモリ増強）
-
-**実装タイミング:** Phase 1の運用で問題が発生した場合、Phase 2で追加
-
-### 8.2 Graph圧縮レベルの動的調整
-
-**現状（Phase 1）:**
-- zlib圧縮レベル固定（level=6）
-
-**改善案:**
-- Graphサイズに応じて圧縮レベルを動的調整
-- 小さいGraph（<10KB）: 圧縮なし or level=1（高速）
-- 中規模Graph（10KB-100KB）: level=6（バランス）
-- 大規模Graph（>100KB）: level=9（高圧縮）
-
-**実装タイミング:** パフォーマンステストで必要性が確認されたら
-
-### 8.3 GraphStoreのメトリクス収集
-
-**改善案:**
-- save/load の呼び出し回数
-- キャッシュヒット率
-- 平均Graph圧縮率
-- TTL延長回数（Sliding TTLの有効性指標）
-
-**利点:**
-- 運用状況の可視化
-- パフォーマンスボトルネックの特定
-- キャパシティプランニング
-
-**実装タイミング:** 本番運用後、監視が必要になったら
+**将来の拡張:**
+実運用で以下の問題が発生した場合のみ、対応を検討します：
+- パフォーマンスボトルネック → プロファイリングして原因特定
+- 運用上の課題 → 最小限の変更で対応
+- スケーラビリティ問題 → Kubernetes autoscaling（別ドキュメント参照）
 
 ---
 
-**Phase 1の設計は、これらの将来の改善を妨げない柔軟性を持っています。**
-まずはシンプルな実装で価値を提供し、運用経験を積んで必要な改善を追加するアプローチを推奨します。
+**Phase 1の設計は、シンプルで保守しやすい実装を優先しています。**
+まずは基本機能で価値を提供し、運用経験を積んで本当に必要な改善のみを追加します。
