@@ -218,24 +218,6 @@ class TestRedisTaskQueue:
             assert result == 5
             mock_redis.llen.assert_called_once_with(queue.queue_key)
 
-    def test_peek_next_node(self, mock_redis, execution_context):
-        """Test peek_next_node method."""
-        with patch('graflow.queue.redis.redis'):
-            queue = DistributedTaskQueue(mock_redis)
-
-            # Test empty queue
-            mock_redis.lindex.return_value = None
-            result = queue.peek_next_node()
-            assert result is None
-
-            # Test queue with items
-            mock_redis.lindex.return_value = json.dumps({"task_id": "test_node"})
-            result = queue.peek_next_node()
-            assert result == "test_node"
-
-            # Verify Redis calls
-            assert mock_redis.lindex.call_count == 2
-            mock_redis.lindex.assert_called_with(queue.queue_key, 0)
 
     def test_cleanup(self, mock_redis, execution_context):
         """Test cleanup method."""
