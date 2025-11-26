@@ -165,7 +165,7 @@ class RedisCoordinator(TaskCoordinator):
             created_at=time.time()
         )
 
-        # Redis queue に push (bypass RedisTaskQueue.enqueue)
+        # Push directly to Redis queue bypassing RedisTaskQueue.enqueue()
         self.task_queue.redis_client.lpush(
             self.task_queue.queue_key,
             record.to_json()
