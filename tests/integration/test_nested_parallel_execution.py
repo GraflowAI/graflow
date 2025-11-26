@@ -68,9 +68,7 @@ class TestNestedParallelExecution:
                 return "parallel_result_2"
 
             # Setup Worker
-            context = ExecutionContext(wf.graph)
             queue = DistributedTaskQueue(
-                context,
                 redis_client=clean_redis,
                 key_prefix="test_local"
             )
@@ -180,9 +178,7 @@ class TestNestedParallelExecution:
             )
 
             # Setup Workers (multiple for parallel processing)
-            context = ExecutionContext(wf.graph)
             queue = DistributedTaskQueue(
-                context,
                 redis_client=clean_redis,
                 key_prefix="test_nested"
             )
@@ -310,9 +306,7 @@ class TestNestedParallelExecution:
                 return "L1_result_L1_2"
 
             # Setup Workers (multiple for deep parallelism)
-            context = ExecutionContext(wf.graph)
             queue = DistributedTaskQueue(
-                context,
                 redis_client=clean_redis,
                 key_prefix="test_deep"
             )
@@ -425,9 +419,7 @@ class TestNestedParallelExecution:
                 return "initial_result_t2"
 
             # Setup Workers
-            context = ExecutionContext(wf.graph)
             queue = DistributedTaskQueue(
-                context,
                 redis_client=clean_redis,
                 key_prefix="test_dynamic"
             )

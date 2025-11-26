@@ -39,7 +39,6 @@ class TestRedisExecution(unittest.TestCase):
 
         # Setup RedisTaskQueue with mock
         self.queue = DistributedTaskQueue(
-            self.context,
             redis_client=self.redis_mock,
             key_prefix="test"
         )
