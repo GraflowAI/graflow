@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from graflow.core.context import ExecutionContext
 
 
-class InMemoryTaskQueue(TaskQueue):
+class LocalTaskQueue(TaskQueue):
     """In-memory task queue with TaskSpec support (Phase 1 implementation)."""
 
     def __init__(self, execution_context: ExecutionContext, start_node: Optional[str] = None):
