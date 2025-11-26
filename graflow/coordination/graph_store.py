@@ -1,6 +1,7 @@
 """Content-Addressable Graph Storage on Redis."""
 
 import hashlib
+import logging
 import zlib
 
 from cachetools import LRUCache
@@ -55,7 +56,16 @@ class GraphStore:
         """
         try:
             kwargs = dict(redis_client.connection_pool.connection_kwargs)
-        except Exception:
+        except AttributeError:
+            # Mock client or testing scenario - assume it's configured correctly
+            return redis_client
+        except Exception as e:
+            # Unexpected error - log warning
+            logging.warning(
+                f"Could not inspect Redis client configuration: {e}. "
+                f"Assuming binary mode is correct. If you encounter decode errors, "
+                f"ensure decode_responses=False"
+            )
             return redis_client
 
         if kwargs.get("decode_responses"):
