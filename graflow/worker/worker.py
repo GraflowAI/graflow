@@ -5,7 +5,6 @@ import signal
 import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
-from concurrent.futures import TimeoutError as FutureTimeoutError
 from typing import TYPE_CHECKING, Any, Dict, Optional, Set
 
 from graflow.core.engine import WorkflowEngine
