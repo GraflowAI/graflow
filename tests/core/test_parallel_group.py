@@ -2,7 +2,6 @@
 
 import pytest
 
-from graflow.coordination.coordinator import CoordinationBackend
 from graflow.coordination.executor import GroupExecutor
 from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
@@ -55,7 +54,7 @@ class TestParallelGroup:
             parallel_group.run()
 
             mock_execute.assert_called_once()
-            args, kwargs = mock_execute.call_args
+            args, _kwargs = mock_execute.call_args
             group_id, tasks, context = args
 
             assert group_id == parallel_group.task_id
@@ -69,7 +68,7 @@ class TestParallelGroup:
         with WorkflowContext("test"):
             task1 = Task("task1")
             task2 = Task("task2")
-            custom_executor = GroupExecutor(CoordinationBackend.DIRECT)
+            custom_executor = GroupExecutor()
             execution_context.group_executor = custom_executor
 
             parallel_group = ParallelGroup([task1, task2])
@@ -95,8 +94,8 @@ class TestParallelGroup:
             parallel_group.run()
 
             mock_execute.assert_called_once()
-            args, kwargs = mock_execute.call_args
-            group_id, tasks, context = args
+            args, _kwargs = mock_execute.call_args
+            _group_id, tasks, _context = args
 
             # Check that wrapper task has context function
             wrapper_task = tasks[1]
@@ -473,7 +472,7 @@ class TestParallelGroupIntegration:
 
             # Use the workflow context's graph instead of creating a new one
             context = ExecutionContext.create(wf_ctx.graph, "test")
-            context.group_executor = GroupExecutor(CoordinationBackend.DIRECT)
+            context.group_executor = GroupExecutor()
 
             parallel_group.set_execution_context(context)
 
