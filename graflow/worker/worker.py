@@ -322,7 +322,7 @@ class TaskWorker:
             }
             return result_payload
 
-        except FutureTimeoutError:
+        except TimeoutError: # Changed from FutureTimeoutError to TimeoutError
             duration = time.time() - start_time
             return {
                 "success": False,
