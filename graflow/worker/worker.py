@@ -95,12 +95,14 @@ class TaskWorker:
         self.start_time = time.time()
 
         # Initialize thread pool executor
+        logger.debug(f"Initializing ThreadPoolExecutor with {self.max_concurrent_tasks} workers")
         self._executor = ThreadPoolExecutor(
             max_workers=self.max_concurrent_tasks,
             thread_name_prefix=f"worker-{self.worker_id}"
         )
 
         # Start worker thread
+        logger.debug(f"Starting worker thread for {self.worker_id}")
         self._worker_thread = threading.Thread(
             target=self._worker_loop,
             name=f"worker-{self.worker_id}-main",
@@ -108,7 +110,8 @@ class TaskWorker:
         )
         self._worker_thread.start()
 
-        logger.info(f"TaskWorker {self.worker_id} started")
+        logger.info(f"TaskWorker {self.worker_id} started (max_concurrent={self.max_concurrent_tasks}, "
+                   f"poll_interval={self.poll_interval}s, shutdown_timeout={self.graceful_shutdown_timeout}s)")
 
     def stop(self, timeout: Optional[float] = None) -> None:
         """Stop the worker gracefully.
@@ -126,27 +129,36 @@ class TaskWorker:
         self.is_stopping = True
 
         # Wait for active tasks to complete
+        logger.info(f"Waiting for active tasks to complete (timeout: {timeout}s)")
         self._wait_for_active_tasks(timeout)
 
         # Shutdown executor
         if self._executor:
+            logger.debug("Shutting down ThreadPoolExecutor")
             self._executor.shutdown(wait=True)
             self._executor = None
+            logger.debug("ThreadPoolExecutor shutdown complete")
 
         # Wait for worker thread to finish
         if self._worker_thread and self._worker_thread.is_alive():
+            logger.debug("Waiting for worker thread to finish")
             self._worker_thread.join(timeout=timeout)
             if self._worker_thread.is_alive():
                 logger.warning(f"TaskWorker {self.worker_id} did not stop within timeout")
+            else:
+                logger.debug("Worker thread finished")
 
         self.is_running = False
 
         # Final statistics
         runtime = time.time() - self.start_time
-        logger.info(
-            f"Worker stopped: {self.worker_id} "
-            f"(runtime: {runtime:.1f}s, tasks: {self.tasks_processed})"
-        )
+        with self._metrics_lock:
+            logger.info(
+                f"Worker stopped: {self.worker_id} "
+                f"(runtime: {runtime:.1f}s, processed: {self.tasks_processed}, "
+                f"succeeded: {self.tasks_succeeded}, failed: {self.tasks_failed}, "
+                f"timeout: {self.tasks_timeout})"
+            )
 
     def _wait_for_active_tasks(self, timeout: float) -> None:
         """Wait for active tasks to complete.
@@ -194,8 +206,11 @@ class TaskWorker:
 
                 if task_spec is None:
                     # No tasks available, wait before next poll
+                    logger.debug(f"No tasks available in queue, polling again in {self.poll_interval}s")
                     time.sleep(self.poll_interval)
                     continue
+
+                logger.info(f"Dequeued task: {task_spec.task_id} (group: {task_spec.group_id})")
 
                 # Submit task for processing
                 self._submit_task(task_spec)
@@ -221,6 +236,9 @@ class TaskWorker:
         # Add to active tasks
         with self._active_tasks_lock:
             self._active_tasks.add(task_id)
+            active_count = len(self._active_tasks)
+
+        logger.info(f"Submitting task {task_id} to thread pool (active: {active_count}/{self.max_concurrent_tasks})")
 
         # Submit to thread pool
         future = self._executor.submit(self._process_task_wrapper, task_spec)
@@ -228,7 +246,7 @@ class TaskWorker:
         # Add callback to handle completion
         future.add_done_callback(lambda f: self._task_completed(task_spec, f))
 
-        logger.debug(f"Task submitted: {task_id}")
+        logger.debug(f"Task {task_id} submitted successfully")
 
     def _create_tracer(self) -> 'Tracer':
         """Create tracer from worker configuration.
@@ -245,15 +263,20 @@ class TaskWorker:
         # Extract config without "type" key
         config = {k: v for k, v in self.tracer_config.items() if k != "type"}
 
+        logger.debug(f"Creating tracer: type={tracer_type}, config_keys={list(config.keys())}")
+
         try:
             if tracer_type == "noop":
+                logger.debug("Initialized NoopTracer")
                 return NoopTracer(**config)
             elif tracer_type == "console":
                 from graflow.trace.console import ConsoleTracer
+                logger.debug("Initialized ConsoleTracer")
                 return ConsoleTracer(**config)
             elif tracer_type == "langfuse":
                 from graflow.trace.langfuse import LangFuseTracer
                 # LangFuseTracer loads API keys from .env in worker process
+                logger.debug("Initialized LangFuseTracer")
                 return LangFuseTracer(**config)
             else:
                 logger.warning(f"Unknown tracer type: {tracer_type}, using NoopTracer")
@@ -277,6 +300,10 @@ class TaskWorker:
         start_time = time.time()
         task_id = task_spec.task_id
 
+        logger.info(f"Starting task execution: {task_id}")
+        logger.debug(f"Task spec - group_id: {task_spec.group_id}, trace_id: {task_spec.trace_id}, "
+                    f"parent_span_id: {task_spec.parent_span_id}")
+
         try:
             # Get task from TaskSpec (already resolved from graph)
             task_func = task_spec.executable
@@ -287,6 +314,7 @@ class TaskWorker:
             execution_context = task_spec.execution_context
 
             # Tracer initialization from worker configuration
+            logger.debug(f"Initializing tracer for task {task_id}")
             tracer = self._create_tracer()
 
             # Set tracer on ExecutionContext
@@ -294,6 +322,8 @@ class TaskWorker:
 
             # Attach to parent trace for distributed tracing
             if task_spec.trace_id:
+                logger.debug(f"Attaching to parent trace: trace_id={task_spec.trace_id}, "
+                           f"parent_span_id={task_spec.parent_span_id}")
                 tracer.attach_to_trace(
                     trace_id=task_spec.trace_id,
                     parent_span_id=task_spec.parent_span_id
@@ -301,18 +331,23 @@ class TaskWorker:
 
             # Create TaskWrapper from the function
             from graflow.core.task import TaskWrapper
+            logger.debug(f"Creating TaskWrapper for task {task_id}")
             task_wrapper = TaskWrapper(task_id, task_func, register_to_context=False)
 
             # Set execution context on the task wrapper
             task_wrapper.set_execution_context(execution_context)
 
             # Use WorkflowEngine to execute the task
+            logger.debug(f"Executing task {task_id} via WorkflowEngine")
             self.engine.execute(execution_context, start_task_id=task_id)
 
             # Flush tracer to ensure data is sent
+            logger.debug(f"Shutting down tracer for task {task_id}")
             tracer.shutdown()
 
             duration = time.time() - start_time
+
+            logger.info(f"Task {task_id} execution completed successfully in {duration:.3f}s")
 
             result_payload = {
                 "success": True,
@@ -323,6 +358,7 @@ class TaskWorker:
 
         except TimeoutError: # Changed from FutureTimeoutError to TimeoutError
             duration = time.time() - start_time
+            logger.warning(f"Task {task_id} execution timed out after {duration:.3f}s")
             return {
                 "success": False,
                 "error": "Task execution timeout",
@@ -332,7 +368,7 @@ class TaskWorker:
             }
         except GraflowRuntimeError as e:
             duration = time.time() - start_time
-            logger.error(f"Task {task_id} failed with GraflowRuntimeError: {e}")
+            logger.error(f"Task {task_id} failed with GraflowRuntimeError after {duration:.3f}s: {e}")
             return {
                 "success": False,
                 "error": str(e),
@@ -341,7 +377,7 @@ class TaskWorker:
             }
         except Exception as e:
             duration = time.time() - start_time
-            logger.error(f"Task {task_id} failed with unexpected error: {e}", exc_info=True)
+            logger.error(f"Task {task_id} failed with unexpected error after {duration:.3f}s: {e}", exc_info=True)
             return {
                 "success": False,
                 "error": str(e),
@@ -361,6 +397,9 @@ class TaskWorker:
         # Remove from active tasks
         with self._active_tasks_lock:
             self._active_tasks.discard(task_id)
+            remaining_active = len(self._active_tasks)
+
+        logger.debug(f"Task {task_id} completed callback triggered (active tasks: {remaining_active})")
 
         try:
             result = future.result()
@@ -374,20 +413,22 @@ class TaskWorker:
 
             # Notify task completion via RedisTaskQueue for barrier synchronization
             if task_spec.group_id:
+                logger.debug(f"Notifying task completion for group {task_spec.group_id}: "
+                           f"task={task_id}, success={success}")
                 self.queue.notify_task_completion(
                     task_id, success, task_spec.group_id, error_message
                 )
 
             if success:
-                logger.info(f"Task {task_id} completed successfully")
+                logger.info(f"Task {task_id} completed successfully in {duration:.3f}s")
             elif is_timeout:
                 logger.warning(f"Task {task_id} timed out after {duration:.3f}s")
             else:
                 error = result.get("error", "Unknown error")
-                logger.error(f"Task {task_id} failed: {error}")
+                logger.error(f"Task {task_id} failed after {duration:.3f}s: {error}")
 
         except Exception as e:
-            logger.error(f"Error processing task completion for {task_id}: {e}")
+            logger.error(f"Error processing task completion for {task_id}: {e}", exc_info=True)
             self._update_metrics(False, 0.0)
 
     def _update_metrics(self, success: bool, duration: float, is_timeout: bool = False) -> None:
@@ -408,6 +449,15 @@ class TaskWorker:
                 self.tasks_timeout += 1
             else:
                 self.tasks_failed += 1
+
+            # Log periodic stats every 10 tasks
+            if self.tasks_processed % 10 == 0:
+                avg_time = self.total_execution_time / self.tasks_processed
+                success_rate = self.tasks_succeeded / self.tasks_processed
+                logger.info(f"Worker {self.worker_id} stats: processed={self.tasks_processed}, "
+                          f"succeeded={self.tasks_succeeded}, failed={self.tasks_failed}, "
+                          f"timeout={self.tasks_timeout}, avg_time={avg_time:.3f}s, "
+                          f"success_rate={success_rate:.2%}")
 
     def get_metrics(self) -> Dict[str, Any]:
         """Get worker metrics.
