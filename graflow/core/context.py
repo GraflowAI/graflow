@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Type, TypeVar
 from graflow.channels.base import Channel
 from graflow.channels.factory import ChannelFactory
 from graflow.channels.typed import TypedChannel
-from graflow.coordination.executor import GroupExecutor
 from graflow.core.cycle import CycleController
 from graflow.core.engine import WorkflowEngine
 from graflow.core.graph import TaskGraph
@@ -296,9 +295,6 @@ class ExecutionContext:
         # Task execution context management
         self._task_execution_stack: list[TaskExecutionContext] = []
         self._task_contexts: dict[str, TaskExecutionContext] = {}
-
-        # Group execution
-        self.group_executor: GroupExecutor = parent_context.group_executor if parent_context else GroupExecutor()
 
         # Track if goto (jump to existing task) was called in current task execution
         self._goto_called_in_current_task: bool = False
@@ -905,7 +901,6 @@ class ExecutionContext:
         # Remove un-serializable objects (will be reconstructed in __setstate__)
         state.pop('task_queue', None)
         state.pop('channel', None)
-        state.pop('group_executor', None)
 
         # LLM: Exclude agent instances (only keep YAML for distributed execution)
         state['_llm_agents'] = {}  # Agent instances not serialized
@@ -977,10 +972,6 @@ class ExecutionContext:
         if channel_data:
             for key, value in channel_data.items():
                 self.channel.set(key, value)
-
-        # Ensure GroupExecutor exists for older checkpoints
-        if not hasattr(self, 'group_executor'):
-            self.group_executor = GroupExecutor()
 
         # Ensure checkpoint attributes exist for older checkpoints
         if not hasattr(self, 'completed_tasks') or self.completed_tasks is None:
