@@ -1,5 +1,7 @@
 """Abstract base classes for task queues."""
 
+from __future__ import annotations
+
 import logging
 import time
 from abc import ABC, abstractmethod
@@ -30,8 +32,8 @@ class TaskSpec:
     executable task. The actual task is stored in the Graph (via GraphStore)
     and retrieved directly without additional serialization.
     """
-    executable: 'Executable'
-    execution_context: 'ExecutionContext'
+    executable: Executable
+    execution_context: ExecutionContext
     status: TaskStatus = TaskStatus.READY
     created_at: float = field(default_factory=time.time)
     # Phase 3: Advanced features
@@ -49,7 +51,7 @@ class TaskSpec:
         """Get task_id from executable."""
         return self.executable.task_id
 
-    def __lt__(self, other: 'TaskSpec') -> bool:
+    def __lt__(self, other: TaskSpec) -> bool:
         """For queue sorting (FIFO: older first)."""
         return self.created_at < other.created_at
 
@@ -63,7 +65,7 @@ class TaskSpec:
         self.last_error = error_message
         self.status = TaskStatus.READY  # Reset to ready for retry
 
-    def get_task(self) -> Optional['Executable']:
+    def get_task(self) -> Optional[Executable]:
         """Get task executable from TaskSpec.
 
         The task is already resolved from the Graph, so this simply
@@ -80,7 +82,7 @@ class TaskQueue(ABC):
     def __init__(self):
         """Initialize TaskQueue."""
         self._task_specs: Dict[str, TaskSpec] = {}
-        # Phase 3: Advanced features
+        # Advanced features
         self.enable_retry: bool = False
         self.enable_metrics: bool = False
         self.metrics: Dict[str, int] = {
@@ -127,7 +129,7 @@ class TaskQueue(ABC):
         """Get TaskSpec by task ID."""
         return self._task_specs.get(task_id)
 
-    # === Phase 3: Advanced features ===
+    # === Advanced features ===
     def configure(self, enable_retry: bool = False, enable_metrics: bool = False) -> None:
         """Configure advanced features."""
         self.enable_retry = enable_retry
