@@ -222,7 +222,10 @@ class TestRedisCoordinator:
         exec_context.session_id = "sess-1"
         exec_context.trace_id = "trace-1"
         exec_context.graph_hash = "graph-123"
-        exec_context.span_id = None
+        # Mock tracer to return None for span_id
+        mock_tracer = mocker.Mock()
+        mock_tracer.get_current_span_id.return_value = None
+        exec_context.tracer = mock_tracer
         executable = mocker.Mock()
         executable.task_id = "task-123"
         executable.get_execution_context.return_value = exec_context

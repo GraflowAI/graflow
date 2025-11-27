@@ -63,21 +63,6 @@ class TestParallelGroup:
             assert tasks[1].task_id == "task2"
             assert context == execution_context
 
-    def test_parallel_group_run_with_custom_executor(self, execution_context, mocker):
-        """Test ParallelGroup.run() with custom GroupExecutor."""
-        with WorkflowContext("test"):
-            task1 = Task("task1")
-            task2 = Task("task2")
-            custom_executor = GroupExecutor()
-            execution_context.group_executor = custom_executor
-
-            parallel_group = ParallelGroup([task1, task2])
-            parallel_group.set_execution_context(execution_context)
-
-            mock_execute = mocker.patch.object(custom_executor, 'execute_parallel_group')
-            parallel_group.run()
-
-            mock_execute.assert_called_once()
 
     def test_parallel_group_with_task_wrapper(self, execution_context, mocker):
         """Test ParallelGroup with TaskWrapper that requires context injection."""
@@ -472,7 +457,6 @@ class TestParallelGroupIntegration:
 
             # Use the workflow context's graph instead of creating a new one
             context = ExecutionContext.create(wf_ctx.graph, "test")
-            context.group_executor = GroupExecutor()
 
             parallel_group.set_execution_context(context)
 

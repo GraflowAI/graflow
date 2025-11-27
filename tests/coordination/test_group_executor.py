@@ -176,7 +176,7 @@ class TestGroupExecutor:
         queue_mock = mocker.Mock()
         coordinator_mock = mocker.Mock(spec=TaskCoordinator)
 
-        mocker.patch('graflow.coordination.executor.RedisTaskQueue', return_value=queue_mock)
+        mocker.patch('graflow.coordination.executor.DistributedTaskQueue', return_value=queue_mock)
         mocker.patch('graflow.coordination.executor.RedisCoordinator', return_value=coordinator_mock)
 
         executor.execute_parallel_group(
@@ -202,11 +202,10 @@ class TestGroupExecutorIntegration:
     """Integration tests for GroupExecutor."""
 
     def test_create_threading_coordinator(self):
-        executor = GroupExecutor()
         graph = TaskGraph()
         exec_context = ExecutionContext(graph)
 
-        coordinator = executor._create_coordinator(
+        coordinator = GroupExecutor._create_coordinator(
             CoordinationBackend.THREADING,
             {"thread_count": 4},
             exec_context
@@ -219,8 +218,8 @@ class TestGroupExecutorIntegration:
         from graflow.core.decorators import task
         from graflow.core.task import Executable
 
-        # Mock RedisCoordinator to simulate import error
-        mocker.patch('graflow.coordination.executor.RedisTaskQueue', side_effect=ImportError("redis missing"))
+        # Mock DistributedTaskQueue to simulate import error
+        mocker.patch('graflow.coordination.executor.DistributedTaskQueue', side_effect=ImportError("redis missing"))
 
         executor = GroupExecutor()
         graph = TaskGraph()
