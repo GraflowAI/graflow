@@ -7,8 +7,8 @@ from unittest.mock import call
 import pytest
 
 from graflow.coordination.coordinator import CoordinationBackend
-from graflow.coordination.redis import RedisCoordinator, record_task_completion
-from graflow.coordination.threading import ThreadingCoordinator
+from graflow.coordination.redis_coordinator import RedisCoordinator, record_task_completion
+from graflow.coordination.threading_coordinator import ThreadingCoordinator
 from graflow.queue.distributed import DistributedTaskQueue
 
 
@@ -216,7 +216,7 @@ class TestRedisCoordinator:
         mock_pubsub.listen.return_value = listen()
         mock_redis.pubsub.return_value = mock_pubsub
 
-        mocker.patch("graflow.coordination.redis.time.time", side_effect=[0, 0.5, 1.5])
+        mocker.patch("graflow.coordination.redis_coordinator.time.time", side_effect=[0, 0.5, 1.5])
 
         result = coordinator.wait_barrier("timeout_barrier", timeout=1)
 

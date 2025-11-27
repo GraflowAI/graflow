@@ -6,8 +6,8 @@ import time
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from graflow.coordination.coordinator import CoordinationBackend, TaskCoordinator
-from graflow.coordination.redis import RedisCoordinator
-from graflow.coordination.threading import ThreadingCoordinator
+from graflow.coordination.redis_coordinator import RedisCoordinator
+from graflow.coordination.threading_coordinator import ThreadingCoordinator
 from graflow.queue.distributed import DistributedTaskQueue
 
 if TYPE_CHECKING:

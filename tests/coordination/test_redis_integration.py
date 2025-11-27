@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-from graflow.coordination.redis import RedisCoordinator
+from graflow.coordination.redis_coordinator import RedisCoordinator
 from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
 from graflow.core.task import TaskWrapper
@@ -30,7 +30,7 @@ class TestRedisCoordinatorIntegration:
 
         BSP model: Producer waits, workers increment via record_task_completion.
         """
-        from graflow.coordination.redis import record_task_completion
+        from graflow.coordination.redis_coordinator import record_task_completion
 
         coordinator, _, queue = create_coordinator(clean_redis)
 
@@ -179,7 +179,7 @@ class TestRedisCoordinatorIntegration:
 
         BSP model: Multiple workers complete tasks concurrently.
         """
-        from graflow.coordination.redis import record_task_completion
+        from graflow.coordination.redis_coordinator import record_task_completion
 
         coordinator, _, queue = create_coordinator(clean_redis, key_prefix="integration-concurrent")
 
@@ -230,7 +230,7 @@ class TestRedisCoordinatorIntegration:
 
         This tests the fix: producer subscribes first, then checks if already complete.
         """
-        from graflow.coordination.redis import record_task_completion
+        from graflow.coordination.redis_coordinator import record_task_completion
 
         coordinator, _, queue = create_coordinator(clean_redis, key_prefix="integration-race")
 

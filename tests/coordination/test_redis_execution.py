@@ -7,7 +7,7 @@ from typing import List
 from unittest.mock import MagicMock, patch
 
 from graflow.coordination.records import SerializedTaskRecord
-from graflow.coordination.redis import RedisCoordinator
+from graflow.coordination.redis_coordinator import RedisCoordinator
 from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
 from graflow.core.task import Executable, TaskWrapper

@@ -169,7 +169,7 @@ class DistributedTaskQueue(TaskQueue):
             error_message: Error message if task failed
         """
         if group_id:
-            from graflow.coordination.redis import record_task_completion
+            from graflow.coordination.redis_coordinator import record_task_completion
             record_task_completion(
                 self.redis_client,
                 self.key_prefix,

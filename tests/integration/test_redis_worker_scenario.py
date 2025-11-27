@@ -7,7 +7,7 @@ import pytest
 
 from graflow.channels.redis import RedisChannel
 from graflow.channels.schemas import TaskResultMessage
-from graflow.coordination.redis import RedisCoordinator
+from graflow.coordination.redis_coordinator import RedisCoordinator
 from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
 from graflow.core.task import Executable
