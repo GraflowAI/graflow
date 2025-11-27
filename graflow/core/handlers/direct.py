@@ -18,7 +18,6 @@ class DirectTaskHandler(TaskHandler):
     execution method.
 
     Provides concrete implementation of execute_task() (abstract in TaskHandler).
-    Policy handlers should inherit from this class to get execute_task() for free.
 
     Examples:
         >>> handler = DirectTaskHandler()
