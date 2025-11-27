@@ -14,7 +14,7 @@ from graflow.queue.distributed import DistributedTaskQueue
 
 if TYPE_CHECKING:
     from graflow.core.context import ExecutionContext
-    from graflow.core.handler import TaskHandler
+    from graflow.core.handlers.group_policy import GroupExecutionPolicy
     from graflow.core.task import Executable
 
 
@@ -47,7 +47,7 @@ class RedisCoordinator(TaskCoordinator):
         group_id: str,
         tasks: List[Executable],
         execution_context: ExecutionContext,
-        handler: TaskHandler
+        policy: GroupExecutionPolicy
     ) -> None:
         """Execute parallel group with barrier synchronization.
 
@@ -55,7 +55,7 @@ class RedisCoordinator(TaskCoordinator):
             group_id: Parallel group identifier
             tasks: List of tasks to execute
             execution_context: Execution context
-            handler: TaskHandler instance for group execution
+            policy: GroupExecutionPolicy instance for result evaluation
         """
         from graflow.core.handler import TaskResult
 
@@ -88,8 +88,8 @@ class RedisCoordinator(TaskCoordinator):
 
             print(f"Parallel group {group_id} completed")
 
-            # Apply handler's group execution logic
-            handler.on_group_finished(group_id, tasks, task_results, execution_context)
+            # Apply policy's group execution logic directly
+            policy.on_group_finished(group_id, tasks, task_results, execution_context)
         finally:
             self.cleanup_barrier(group_id)
 

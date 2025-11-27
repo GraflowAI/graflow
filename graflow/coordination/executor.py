@@ -1,5 +1,8 @@
 """Parallel execution orchestrator for coordinating task groups."""
 
+from __future__ import annotations
+
+import time
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from graflow.coordination.coordinator import CoordinationBackend, TaskCoordinator
@@ -9,7 +12,6 @@ from graflow.queue.distributed import DistributedTaskQueue
 
 if TYPE_CHECKING:
     from graflow.core.context import ExecutionContext
-    from graflow.core.handler import TaskHandler
     from graflow.core.handlers.group_policy import GroupExecutionPolicy
     from graflow.core.task import Executable
 
@@ -40,7 +42,7 @@ class GroupExecutor:
     def _create_coordinator(
         backend: CoordinationBackend,
         config: Dict[str, Any],
-        exec_context: 'ExecutionContext'
+        exec_context: ExecutionContext
     ) -> TaskCoordinator:
         """Create appropriate coordinator based on backend."""
         if backend == CoordinationBackend.REDIS:
@@ -69,15 +71,15 @@ class GroupExecutor:
 
         raise ValueError(f"Unsupported backend: {backend}")
 
+    @staticmethod
     def execute_parallel_group(
-        self,
         group_id: str,
-        tasks: List['Executable'],
-        exec_context: 'ExecutionContext',
+        tasks: List[Executable],
+        exec_context: ExecutionContext,
         *,
         backend: Optional[Union[str, CoordinationBackend]] = None,
         backend_config: Optional[Dict[str, Any]] = None,
-        policy: Union[str, 'GroupExecutionPolicy'] = "strict",
+        policy: Union[str, GroupExecutionPolicy] = "strict",
     ) -> None:
         """Execute parallel group with a configurable group policy.
 
@@ -89,37 +91,30 @@ class GroupExecutor:
             backend_config: Backend-specific configuration
             policy: Group execution policy (name or instance)
         """
-        from graflow.core.handlers.direct import DirectTaskHandler
-        from graflow.core.handlers.group_policy import resolve_group_policy
-
-        policy_instance = resolve_group_policy(policy)
-
-        handler = DirectTaskHandler()
-        handler.set_group_policy(policy_instance)
-
-        resolved_backend = self._resolve_backend(backend)
+        resolved_backend = GroupExecutor._resolve_backend(backend)
 
         # Merge context config with backend config
         # backend_config takes precedence over context config
         context_config = getattr(exec_context, 'config', {})
         config = {**context_config, **(backend_config or {})}
 
+        from graflow.core.handlers.group_policy import resolve_group_policy
+        policy_instance = resolve_group_policy(policy)
+
         if resolved_backend == CoordinationBackend.DIRECT:
-            return self.direct_execute(group_id, tasks, exec_context, handler)
+            return GroupExecutor.direct_execute(group_id, tasks, exec_context, policy_instance)
 
-        coordinator = self._create_coordinator(resolved_backend, config, exec_context)
-        coordinator.execute_group(group_id, tasks, exec_context, handler)
+        coordinator = GroupExecutor._create_coordinator(resolved_backend, config, exec_context)
+        coordinator.execute_group(group_id, tasks, exec_context, policy_instance)
 
+    @staticmethod
     def direct_execute(
-        self,
         group_id: str,
-        tasks: List['Executable'],
-        execution_context: 'ExecutionContext',
-        handler: 'TaskHandler'
+        tasks: List[Executable],
+        execution_context: ExecutionContext,
+        policy_instance: GroupExecutionPolicy
     ) -> None:
         """Execute tasks using unified WorkflowEngine for consistency."""
-        import time
-
         from graflow.core.handler import TaskResult
 
         print(f"Running parallel group: {group_id}")
@@ -154,4 +149,5 @@ class GroupExecutor:
 
         print(f"  Direct group {group_id} completed")
 
-        handler.on_group_finished(group_id, tasks, results, execution_context)
+        # Use GroupExecutionPolicy directly instead of handler
+        policy_instance.on_group_finished(group_id, tasks, results, execution_context)
