@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from enum import Enum
 from typing import TYPE_CHECKING, List
@@ -21,9 +23,9 @@ class TaskCoordinator(ABC):
     def execute_group(
         self,
         group_id: str,
-        tasks: List['Executable'],
-        execution_context: 'ExecutionContext',
-        policy: 'GroupExecutionPolicy'
+        tasks: List[Executable],
+        execution_context: ExecutionContext,
+        policy: GroupExecutionPolicy
     ) -> None:
         """Execute parallel group with policy.
 
