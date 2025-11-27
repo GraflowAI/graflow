@@ -107,7 +107,7 @@ class WorkflowContext:
         """
         self._llm_agent_providers[name] = agent_or_factory
 
-    def execute(self, start_node: Optional[str] = None, max_steps: int = 10) -> Any:
+    def execute(self, start_node: Optional[str] = None, max_steps: int = 10000) -> Any:
         """Execute the workflow starting from the specified node.
 
         Returns:
