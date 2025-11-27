@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import threading
 import time
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
@@ -27,6 +26,8 @@ class RedisCoordinator(TaskCoordinator):
         Args:
             task_queue: RedisTaskQueue instance for task dispatch and barrier coordination
         """
+        import threading  # Import here to avoid conflict with local threading.py
+
         self.task_queue = task_queue
         self.redis = task_queue.redis_client  # Use Redis client from task queue
         self.active_barriers: Dict[str, Dict[str, Any]] = {}
@@ -141,7 +142,8 @@ class RedisCoordinator(TaskCoordinator):
             # Wait for completion notification
             start_time = time.time()
             for message in pubsub.listen():
-                if message["type"] == "message" and message["data"] == b"complete":
+                # Handle both string and bytes (depending on Redis client configuration)
+                if message["type"] == "message" and message["data"] in ("complete", b"complete"):
                     return True
 
                 # Check timeout

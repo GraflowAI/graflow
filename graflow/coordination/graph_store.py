@@ -1,14 +1,19 @@
 """Content-Addressable Graph Storage on Redis."""
 
+from __future__ import annotations
+
 import hashlib
 import logging
 import zlib
+from typing import TYPE_CHECKING
 
 from cachetools import LRUCache
-from redis import Redis
 
 from graflow.core.graph import TaskGraph
 from graflow.core.serialization import dumps, loads
+
+if TYPE_CHECKING:
+    from redis import Redis
 
 
 class GraphStore:
@@ -70,6 +75,7 @@ class GraphStore:
 
         if kwargs.get("decode_responses"):
             kwargs["decode_responses"] = False
+            from redis import Redis
             return Redis(**kwargs)
 
         return redis_client
