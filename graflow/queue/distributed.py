@@ -159,8 +159,6 @@ class DistributedTaskQueue(TaskQueue):
         """Get Redis queue size."""
         return cast(int, self.redis_client.llen(self.queue_key))
 
-
-
     def notify_task_completion(
         self,
         task_id: str,
