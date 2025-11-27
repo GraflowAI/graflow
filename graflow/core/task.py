@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Optional, Union
 
@@ -12,6 +13,8 @@ from graflow.exceptions import GraflowRuntimeError
 
 if TYPE_CHECKING:
     from graflow.core.handlers.group_policy import GroupExecutionPolicy
+
+logger = logging.getLogger(__name__)
 
 
 class Executable(ABC):
@@ -38,6 +41,19 @@ class Executable(ABC):
             raise GraflowRuntimeError("Execution context not set. Call set_execution_context() first.")
 
         return self._execution_context
+
+    def __getstate__(self):
+        """Custom serialization to exclude execution context."""
+        state = self.__dict__.copy()
+        # Remove execution context as it contains runtime state (connections, etc.)
+        # and should be re-injected on the worker side.
+        if '_execution_context' in state:
+            del state['_execution_context']
+        return state
+
+    def __setstate__(self, state):
+        """Restore state."""
+        self.__dict__.update(state)
 
     @abstractmethod
     def run(self, *args, **kwargs) -> Any:
@@ -326,7 +342,7 @@ class Task(Executable):
 
     def run(self) -> Any:
         """Execute this task (typically a no-op)."""
-        print(f"Starting workflow from root: {self._task_id}")
+        logger.debug("Starting workflow from root: %s", self._task_id)
         pass
 
     def __repr__(self) -> str:
@@ -348,7 +364,7 @@ class ParallelGroup(Executable):
 
         # Execution configuration for with_execution()
         self._execution_config = {
-            "backend": None,  # None = use context.group_executor or default
+            "backend": None,  # None = use default backend
             "backend_config": {},
             "policy": "strict",
         }
@@ -433,8 +449,6 @@ class ParallelGroup(Executable):
         """Execute all tasks in this parallel group."""
         context = self.get_execution_context()
 
-        executor = context.group_executor or GroupExecutor()
-
         for task in self.tasks:
             # Set execution context for each task
             task.set_execution_context(context)
@@ -444,7 +458,8 @@ class ParallelGroup(Executable):
         backend = self._execution_config.get("backend")
         backend_config = self._execution_config.get("backend_config", {})
 
-        executor.execute_parallel_group(
+        # GroupExecutor is stateless - call static method directly
+        GroupExecutor.execute_parallel_group(
             self.task_id,
             self.tasks,
             context,

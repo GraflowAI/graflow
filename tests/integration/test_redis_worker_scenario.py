@@ -5,14 +5,14 @@ from typing import Any, Callable, Dict, Optional, TypedDict
 
 import pytest
 
-from graflow.channels.redis import RedisChannel
+from graflow.channels.redis_channel import RedisChannel
 from graflow.channels.schemas import TaskResultMessage
-from graflow.coordination.redis import RedisCoordinator
+from graflow.coordination.redis_coordinator import RedisCoordinator
 from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
 from graflow.core.task import Executable
 from graflow.queue.base import TaskSpec, TaskStatus
-from graflow.queue.redis import RedisTaskQueue
+from graflow.queue.distributed import DistributedTaskQueue
 from graflow.worker.worker import TaskWorker
 
 CHANNEL_NAME = "task_channel"
@@ -59,20 +59,25 @@ def _get_channel() -> RedisChannel:
 
 
 def _register_tasks(execution_context: ExecutionContext, tasks: Dict[str, RedisWorkflowTask]) -> None:
-    """Register task executables in the execution context."""
+    """Add task executables to the execution graph.
+
+    Tasks are stored in Graph, no separate registration needed.
+    """
     for task in tasks.values():
         if task.task_id not in execution_context.graph.nodes:
             execution_context.graph.add_node(task, task.task_id)
-        execution_context.task_resolver.register_task(task.task_id, task)
 
 
 def _make_task_spec(task: RedisWorkflowTask, execution_context: ExecutionContext) -> TaskSpec:
-    """Create TaskSpec using pickle strategy for cloudpickle compatibility."""
+    """Create TaskSpec for distributed execution.
+
+    Tasks are retrieved from Graph (via GraphStore), no explicit
+    serialization strategy needed.
+    """
     return TaskSpec(
         executable=task,
         execution_context=execution_context,
-        status=TaskStatus.READY,
-        strategy="pickle"
+        status=TaskStatus.READY
     )
 
 
@@ -189,7 +194,7 @@ def execution_context(clean_redis):
 @pytest.fixture
 def redis_queue(clean_redis, execution_context):
     """Create RedisTaskQueue bound to the execution context."""
-    queue = RedisTaskQueue(execution_context, clean_redis, "test_graflow")
+    queue = DistributedTaskQueue(redis_client=clean_redis, key_prefix="test_graflow")
     queue.cleanup()
     yield queue
     queue.cleanup()

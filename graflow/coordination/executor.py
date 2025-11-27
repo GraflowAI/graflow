@@ -1,17 +1,22 @@
 """Parallel execution orchestrator for coordinating task groups."""
 
+from __future__ import annotations
+
+import logging
+import time
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from graflow.coordination.coordinator import CoordinationBackend, TaskCoordinator
-from graflow.coordination.redis import RedisCoordinator
-from graflow.coordination.threading import ThreadingCoordinator
-from graflow.queue.redis import RedisTaskQueue
+from graflow.coordination.redis_coordinator import RedisCoordinator
+from graflow.coordination.threading_coordinator import ThreadingCoordinator
+from graflow.queue.distributed import DistributedTaskQueue
 
 if TYPE_CHECKING:
     from graflow.core.context import ExecutionContext
-    from graflow.core.handler import TaskHandler
     from graflow.core.handlers.group_policy import GroupExecutionPolicy
     from graflow.core.task import Executable
+
+logger = logging.getLogger(__name__)
 
 
 class GroupExecutor:
@@ -40,7 +45,7 @@ class GroupExecutor:
     def _create_coordinator(
         backend: CoordinationBackend,
         config: Dict[str, Any],
-        exec_context: 'ExecutionContext'
+        exec_context: ExecutionContext
     ) -> TaskCoordinator:
         """Create appropriate coordinator based on backend."""
         if backend == CoordinationBackend.REDIS:
@@ -54,7 +59,7 @@ class GroupExecutor:
             redis_kwargs["key_prefix"] = config.get("key_prefix", "graflow")
 
             try:
-                task_queue = RedisTaskQueue(exec_context, **redis_kwargs)
+                task_queue = DistributedTaskQueue(**redis_kwargs)
             except ImportError as e:
                 raise ImportError("Redis backend requires 'redis' package") from e
 
@@ -69,15 +74,15 @@ class GroupExecutor:
 
         raise ValueError(f"Unsupported backend: {backend}")
 
+    @staticmethod
     def execute_parallel_group(
-        self,
         group_id: str,
-        tasks: List['Executable'],
-        exec_context: 'ExecutionContext',
+        tasks: List[Executable],
+        exec_context: ExecutionContext,
         *,
         backend: Optional[Union[str, CoordinationBackend]] = None,
         backend_config: Optional[Dict[str, Any]] = None,
-        policy: Union[str, 'GroupExecutionPolicy'] = "strict",
+        policy: Union[str, GroupExecutionPolicy] = "strict",
     ) -> None:
         """Execute parallel group with a configurable group policy.
 
@@ -89,37 +94,40 @@ class GroupExecutor:
             backend_config: Backend-specific configuration
             policy: Group execution policy (name or instance)
         """
-        from graflow.core.handlers.direct import DirectTaskHandler
-        from graflow.core.handlers.group_policy import resolve_group_policy
+        resolved_backend = GroupExecutor._resolve_backend(backend)
 
+        # Merge context config with backend config
+        # backend_config takes precedence over context config
+        context_config = getattr(exec_context, 'config', {})
+        config = {**context_config, **(backend_config or {})}
+
+        from graflow.core.handlers.group_policy import resolve_group_policy
         policy_instance = resolve_group_policy(policy)
 
-        handler = DirectTaskHandler()
-        handler.set_group_policy(policy_instance)
-
-        resolved_backend = self._resolve_backend(backend)
-        config = dict(backend_config or {})
-
         if resolved_backend == CoordinationBackend.DIRECT:
-            return self.direct_execute(group_id, tasks, exec_context, handler)
+            return GroupExecutor.direct_execute(group_id, tasks, exec_context, policy_instance)
 
-        coordinator = self._create_coordinator(resolved_backend, config, exec_context)
-        coordinator.execute_group(group_id, tasks, exec_context, handler)
+        coordinator = GroupExecutor._create_coordinator(resolved_backend, config, exec_context)
+        coordinator.execute_group(group_id, tasks, exec_context, policy_instance)
 
+    @staticmethod
     def direct_execute(
-        self,
         group_id: str,
-        tasks: List['Executable'],
-        execution_context: 'ExecutionContext',
-        handler: 'TaskHandler'
+        tasks: List[Executable],
+        execution_context: ExecutionContext,
+        policy_instance: GroupExecutionPolicy
     ) -> None:
         """Execute tasks using unified WorkflowEngine for consistency."""
-        import time
-
         from graflow.core.handler import TaskResult
 
-        print(f"Running parallel group: {group_id}")
-        print(f"  Direct tasks: {[task.task_id for task in tasks]}")
+        task_ids = [task.task_id for task in tasks]
+        logger.info(
+            "Running parallel group: %s with %d tasks",
+            group_id,
+            len(tasks),
+            extra={"group_id": group_id, "task_ids": task_ids}
+        )
+        logger.debug("Direct tasks: %s", task_ids)
 
         # Use unified WorkflowEngine for each task
         from graflow.core.engine import WorkflowEngine
@@ -128,7 +136,7 @@ class GroupExecutor:
         results: Dict[str, TaskResult] = {}
 
         for task in tasks:
-            print(f"  - Executing directly: {task.task_id}")
+            logger.debug("Executing task directly: %s", task.task_id, extra={"group_id": group_id})
             success = True
             error_message = None
             start_time = time.time()
@@ -136,7 +144,12 @@ class GroupExecutor:
                 # Execute single task via unified engine
                 engine.execute(execution_context, start_task_id=task.task_id)
             except Exception as e:
-                print(f"    Task {task.task_id} failed: {e}")
+                logger.error(
+                    "Task failed in parallel group: %s",
+                    task.task_id,
+                    exc_info=True,
+                    extra={"group_id": group_id, "error": str(e)}
+                )
                 success = False
                 error_message = str(e)
 
@@ -148,6 +161,15 @@ class GroupExecutor:
                 timestamp=time.time()
             )
 
-        print(f"  Direct group {group_id} completed")
+        logger.info(
+            "Direct parallel group completed: %s",
+            group_id,
+            extra={
+                "group_id": group_id,
+                "task_count": len(tasks),
+                "success_count": sum(1 for r in results.values() if r.success)
+            }
+        )
 
-        handler.on_group_finished(group_id, tasks, results, execution_context)
+        # Use GroupExecutionPolicy directly instead of handler
+        policy_instance.on_group_finished(group_id, tasks, results, execution_context)

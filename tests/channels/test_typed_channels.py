@@ -5,7 +5,7 @@ from typing import TypedDict
 
 import pytest
 
-from graflow.channels.memory import MemoryChannel
+from graflow.channels.memory_channel import MemoryChannel
 from graflow.channels.schemas import TaskProgressMessage, TaskResultMessage
 from graflow.channels.typed import ChannelTypeRegistry, TypedChannel, _is_typed_dict, _validate_typed_dict
 from graflow.exceptions import ConfigError

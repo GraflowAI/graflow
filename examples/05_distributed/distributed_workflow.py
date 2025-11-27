@@ -7,7 +7,8 @@ multiple workers using Redis as the coordination backend.
 
 Prerequisites:
 --------------
-1. Redis running: docker run -p 6379:6379 redis:7.2
+1. Redis running (auto-starts via Docker if available):
+   docker run -p 6379:6379 redis:7.2
 2. pip install redis
 3. Start 2-3 workers in separate terminals:
    python -m graflow.worker.main --worker-id worker-1
@@ -54,40 +55,211 @@ Total aggregated: 3300 records
 ✅ All tasks distributed across workers
 """
 
+import atexit
+import logging
+import os
 import random
+import signal
+import socket
 import sys
 import time
 
+import redis
 
-def check_redis():
-    """Check Redis availability."""
+from graflow.coordination.coordinator import CoordinationBackend
+from graflow.core.context import ExecutionContext
+from graflow.core.decorators import task
+from graflow.core.workflow import workflow
+from graflow.queue.distributed import DistributedTaskQueue
+from graflow.worker.worker import TaskWorker
+
+REDIS_IMAGE = "redis:7.2"
+
+def _is_port_available(port: int) -> bool:
+    """Check if a local TCP port is free to bind."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind(("127.0.0.1", port))
+        except OSError:
+            return False
+    return True
+
+
+def _get_container_host_port(container):
+    """Return the host port mapped to container's 6379/tcp."""
     try:
-        import redis
-        client = redis.Redis(host='localhost', port=6379, decode_responses=True)
-        client.ping()
-        return client
-    except Exception as e:
-        print(f"❌ Redis not available: {e}")
+        container.reload()
+        ports = container.attrs.get("NetworkSettings", {}).get("Ports", {})
+        mapping = ports.get("6379/tcp")
+        if mapping:
+            return int(mapping[0]["HostPort"])
+    except Exception as exc:  # pragma: no cover - best effort inspection
+        print(f"⚠️  Could not determine Redis port: {exc}")
+    return None
+
+
+def _register_container_cleanup(container):
+    """Register cleanup for a Docker container."""
+
+    def _cleanup():
+        try:
+            container.stop()
+        except Exception as exc:  # pragma: no cover - best effort cleanup
+            print(f"⚠️  Failed to stop Redis container: {exc}")
+
+    atexit.register(_cleanup)
+
+
+def _stop_redis_container(container):
+    """Stop the Docker Redis container if we started one."""
+    try:
+        container.stop()
+    except Exception as exc:  # pragma: no cover - best effort cleanup
+        print(f"⚠️  Failed to stop Redis container: {exc}")
+
+
+def _start_redis_container():
+    """Start Redis via Docker using the redis:7.2 image on port 6379."""
+    try:
+        import docker  # type: ignore
+    except ImportError:
+        print("⚠️  Docker SDK not installed; cannot auto-start Redis container.")
+        return None
+
+    try:
+        client = docker.from_env()
+        container = client.containers.run(
+            REDIS_IMAGE,
+            ports={'6379/tcp': 6379},
+            detach=True,
+            remove=True
+        )
+        _register_container_cleanup(container)
+        host_port = _get_container_host_port(container)
+        if host_port is None or host_port != 6379:
+            print(f"❌ Redis container did not bind to port 6379 (bound to {host_port}).")
+            _stop_redis_container(container)
+            return None
+        return container, host_port
+    except Exception as exc:  # pragma: no cover - docker import/env errors
+        print(f"❌ Failed to start Redis via Docker: {exc}")
         return None
 
 
+def _connect_redis(host: str = "localhost", port: int = 6379, password: str | None = None) -> redis.Redis:
+    client = redis.Redis(host=host, port=port, password=password, decode_responses=True)
+    client.ping()
+    return client
+
+
+def check_redis() -> redis.Redis | None:
+    """Ensure Redis is available, starting a Docker container if needed."""
+    host = os.getenv("REDIS_HOST", "localhost")
+    port = int(os.getenv("REDIS_PORT", "6379"))
+    password = os.getenv("REDIS_PASSWORD")
+    try:
+        return _connect_redis(host=host, port=port, password=password)
+    except ImportError as exc:
+        print(f"❌ redis package not installed: {exc}")
+        return None
+    except Exception as exc:
+        print(f"⚠️  Redis not available locally: {exc}")
+        message = str(exc).upper()
+        if not _is_port_available(port):
+            print("⚠️  Port 6379 is already in use; using the existing Redis instance.")
+            if "NOAUTH" in message and not password:
+                print("⚠️  Existing Redis requires authentication. Set REDIS_PASSWORD and rerun.")
+                return None
+            try:
+                return _connect_redis(host=host, port=port, password=password)
+            except Exception as retry_exc:
+                print(f"❌ Failed to use existing Redis on {host}:{port}: {retry_exc}")
+                return None
+        if "NOAUTH" in message:
+            print("⚠️  Redis at localhost:6379 requires authentication; this example expects no auth.")
+            print("ℹ️  Set REDIS_PASSWORD for the example to use your existing Redis.")
+            return None
+        print("⏳ Attempting to start Redis via Docker (no auth) on port 6379...")
+
+    container_info = _start_redis_container()
+    if not container_info:
+        print(f"\n⚠️  Start Redis manually: docker run -p 6379:6379 {REDIS_IMAGE}")
+        return None
+    container, host_port = container_info
+
+    last_error = None
+    for _ in range(3):
+        time.sleep(2)  # Give the container time to become ready
+        try:
+            client = _connect_redis(port=host_port)
+            if host_port == 6379:
+                print("✅ Started Redis via Docker")
+            else:
+                print(f"✅ Started Redis via Docker on port {host_port}")
+            return client
+        except Exception as exc:
+            last_error = exc
+
+    print(f"❌ Redis still unavailable after starting container: {last_error}")
+    _stop_redis_container(container)
+    return None
+
+def start_workers(redis_client:redis.Redis, num_workers:int = 2):
+    # Start local worker threads so the example is self-contained
+    # In a real deployment, these would be separate processes/containers
+    redis_queue = DistributedTaskQueue(
+        redis_client=redis_client,
+        key_prefix="graflow:distributed_demo"
+    )
+    redis_queue.cleanup()
+
+    workers = [
+        TaskWorker(queue=redis_queue, worker_id=f"worker-{i}")
+        for i in range(num_workers)
+    ]
+
+    def shutdown_workers():
+        print("\nStopping workers...")
+        for worker in workers:
+            worker.stop()
+        print("✅ Workers stopped")
+
+    atexit.register(shutdown_workers)
+
+    # Override TaskWorker's signal handlers to ensure we exit and trigger atexit
+    def handle_signal(signum, frame):
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, handle_signal)
+    signal.signal(signal.SIGTERM, handle_signal)
+
+    for worker in workers:
+        worker.start()
+
+    print(f"✅ {num_workers} local worker threads started")
+    return workers
+
 def main():
     """Run distributed workflow demonstration."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
     print("=== Distributed ETL Workflow ===\n")
 
     # Step 1: Setup
     print("Step 1: Setup")
     redis_client = check_redis()
     if not redis_client:
-        print("\n⚠️  Start Redis: docker run -p 6379:6379 redis:7.2")
         sys.exit(1)
 
     print("✅ Redis connected")
+    redis_host = redis_client.connection_pool.connection_kwargs.get("host", "localhost")
+    redis_port = int(redis_client.connection_pool.connection_kwargs.get("port", 6379))
+    print(f"Using Redis at {redis_host}:{redis_port}")
 
-    from graflow.core.context import ExecutionContext
-    from graflow.core.decorators import task
-    from graflow.core.workflow import workflow
-    from graflow.queue.redis import RedisTaskQueue
+    start_workers(redis_client=redis_client, num_workers=2)
 
     # Create workflow
     with workflow("distributed_etl") as ctx:
@@ -113,11 +285,18 @@ def main():
         @task(inject_context=True)
         def aggregate_results(context):
             """Aggregate results from all sources."""
-
             # Get results from all extraction tasks
             result1 = context.get_result("extract_source_1")
             result2 = context.get_result("extract_source_2")
             result3 = context.get_result("extract_source_3")
+
+            for name, result in [
+                ("extract_source_1", result1),
+                ("extract_source_2", result2),
+                ("extract_source_3", result3),
+            ]:
+                if not isinstance(result, dict) or "records" not in result:
+                    raise ValueError(f"Missing or invalid result for {name}: {result}")
 
             # Aggregate
             total = result1["records"] + result2["records"] + result3["records"]
@@ -127,117 +306,51 @@ def main():
                 "total_records": total
             }
 
-        # Define parallel extraction followed by aggregation
-        (extract_source_1 | extract_source_2 | extract_source_3) >> aggregate_results
-
-        print("✅ 3 extraction tasks created")
-        print("✅ 1 aggregation task created")
-
+    # Define parallel extraction followed by aggregation
+        parallel_extract = (extract_source_1 | extract_source_2 | extract_source_3).set_group_name("parallel_extract").with_execution(backend=CoordinationBackend.REDIS)
+        parallel_extract >> aggregate_results # type: ignore
         # Step 2: Submit workflow
-        print("\nStep 2: Submitting workflow to Redis")
+        print("\nStep 2: Executing workflow with Redis backend")
+
 
         # Create execution context with Redis
+        # Note: We use the same key_prefix as the workers to ensure they share the queue
         exec_context = ExecutionContext.create(
             ctx.graph,
-            "extract_source_1",
+            start_node="parallel_extract",
             channel_backend="redis",
-            max_steps=20,
-            config={"redis_client": redis_client}
+            max_steps=100,
+            config={
+                "redis_client": redis_client,
+                "key_prefix": "graflow:distributed_demo"
+            }
         )
-
-        redis_queue = RedisTaskQueue(
-            exec_context,
-            redis_client=redis_client,
-            key_prefix="graflow:distributed_demo"
-        )
-
-        redis_queue.cleanup()
         exec_context.channel.clear()
 
-        # Submit tasks to Redis queue
-        # Note: In production, WorkflowEngine.execute() would manage scheduling.
-        # Here we demonstrate manual enqueueing for clarity.
-        from graflow.queue.base import TaskSpec
+        try:
+            print("⏳ Waiting for workflow completion...")
 
-        # Register tasks so workers can resolve them
-        for task in [extract_source_1, extract_source_2, extract_source_3, aggregate_results]:
-            exec_context.task_resolver.register_task(task.task_id, task)
+            # Execute workflow using the engine
+            # This will block until the workflow completes (or fails)
+            # The engine handles distributed coordination via RedisCoordinator
+            from graflow.core.engine import WorkflowEngine
+            engine = WorkflowEngine()
+            result = engine.execute(exec_context)
 
-        # Enqueue all extraction tasks (they can run in parallel)
-        for task_id in ["extract_source_1", "extract_source_2", "extract_source_3"]:
-            task_node = ctx.graph.get_node(task_id)
-            task_spec = TaskSpec(
-                executable=task_node,
-                execution_context=exec_context,
-                strategy="pickle"
-            )
-            redis_queue.enqueue(task_spec)
+            print("\nStep 3: Results")
+            if result:
+                agg_result = result
+                for source_data in agg_result["sources"]:
+                    print(f"Source {source_data['source'].split('_')[1]}: {source_data['records']} records")
+                print(f"Total aggregated: {agg_result['total_records']} records")
+                print("✅ Distributed workflow completed")
+            else:
+                print("⚠️ Distributed workflow did not return a result")
 
-        print("✅ Workflow submitted")
-        print("✅ Workers will process tasks...")
-        print("\n⚠️  Make sure workers are running with matching prefix:")
-        print("   python -m graflow.worker.main --worker-id worker-1 --redis-key-prefix graflow:distributed_demo")
-        print("   python -m graflow.worker.main --worker-id worker-2 --redis-key-prefix graflow:distributed_demo")
-
-        # Step 3: Monitor execution
-        print("\nStep 3: Monitoring execution (this may take 10-15 seconds)")
-        print("⏳ Waiting for workers to process tasks...")
-
-        # Wait for extraction tasks to complete
-        completed = set()
-        for _ in range(30):  # Wait up to 30 seconds
-            time.sleep(1)
-
-            for task_id in ["extract_source_1", "extract_source_2", "extract_source_3"]:
-                if task_id not in completed:
-                    result = exec_context.get_result(task_id)
-                    if result is not None:
-                        print(f"✅ {task_id} completed")
-                        completed.add(task_id)
-
-            if len(completed) == 3:
-                break
-
-        if len(completed) < 3:
-            print(f"\n⚠️  Not all extraction tasks completed. Finished tasks: {completed}")
-            print("   Make sure workers are running!")
-            sys.exit(1)
-
-        # Enqueue aggregation task
-        agg_task = ctx.graph.get_node("aggregate_results")
-        agg_spec = TaskSpec(
-            executable=agg_task,
-            execution_context=exec_context,
-            strategy="pickle"
-        )
-        print("✅ Extraction phase complete, enqueuing aggregation task")
-        redis_queue.enqueue(agg_spec)
-
-        # Wait for aggregation
-        for _ in range(30):
-            time.sleep(1)
-            agg_result = exec_context.get_result("aggregate_results")
-            if agg_result is not None:
-                print("✅ aggregate_results completed")
-                break
-
-        # Step 4: Display results
-        print("\nStep 4: Results")
-
-        agg_result = exec_context.get_result("aggregate_results")
-        if agg_result:
-            for source_data in agg_result["sources"]:
-                print(f"Source {source_data['source'].split('_')[1]}: {source_data['records']} records")
-            print(f"Total aggregated: {agg_result['total_records']} records")
-        else:
-            print("⚠️  Aggregation not completed")
-
-    # Summary
-    print("\n=== Summary ===")
-    print("✅ Distributed workflow completed")
-    print("✅ 3 extraction tasks processed in parallel")
-    print("✅ 1 aggregation task processed results")
-    print("✅ All tasks distributed across workers")
+        except Exception as e:
+            print(f"\n❌ Workflow execution failed: {e}")
+            import traceback
+            traceback.print_exc()
 
 
 if __name__ == "__main__":

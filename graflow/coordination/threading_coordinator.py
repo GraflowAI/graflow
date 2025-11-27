@@ -1,5 +1,7 @@
 """Threading-based coordination backend for local parallel execution."""
 
+from __future__ import annotations
+
 import concurrent.futures
 import logging
 import time
@@ -11,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from graflow.core.context import ExecutionContext
-    from graflow.core.handler import TaskHandler
+    from graflow.core.handlers.group_policy import GroupExecutionPolicy
     from graflow.core.task import Executable
 
 
@@ -35,9 +37,9 @@ class ThreadingCoordinator(TaskCoordinator):
     def execute_group(
         self,
         group_id: str,
-        tasks: List['Executable'],
-        execution_context: 'ExecutionContext',
-        handler: 'TaskHandler'
+        tasks: List[Executable],
+        execution_context: ExecutionContext,
+        policy: GroupExecutionPolicy
     ) -> None:
         """Execute parallel group using WorkflowEngine in thread pool.
 
@@ -45,7 +47,7 @@ class ThreadingCoordinator(TaskCoordinator):
             group_id: Parallel group identifier
             tasks: List of tasks to execute
             execution_context: Execution context
-            handler: TaskHandler instance for group execution
+            policy: GroupExecutionPolicy instance for result evaluation
         """
         from graflow.core.handler import TaskResult
 
@@ -60,7 +62,7 @@ class ThreadingCoordinator(TaskCoordinator):
             logger.info("No tasks in group %s", group_id)
             return
 
-        def execute_task_with_engine(task: 'Executable', branch_context: 'ExecutionContext') -> tuple[str, bool, str, float]:
+        def execute_task_with_engine(task: Executable, branch_context: ExecutionContext) -> tuple[str, bool, str, float]:
             """Execute single task using WorkflowEngine within a branch context.
 
             Note: The tracer is propagated via branch_context, which inherits the parent tracer.
@@ -148,8 +150,8 @@ class ThreadingCoordinator(TaskCoordinator):
             failure_count,
         )
 
-        # Apply handler (can raise ParallelGroupError)
-        handler.on_group_finished(group_id, tasks, results, execution_context)
+        # Apply policy directly (can raise ParallelGroupError)
+        policy.on_group_finished(group_id, tasks, results, execution_context)
 
     def shutdown(self) -> None:
         """Shutdown the coordinator and cleanup resources."""

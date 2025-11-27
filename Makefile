@@ -43,8 +43,8 @@ install-dev:
 
 # Install extras (e.g., graphviz)
 install-extras:
-	export CFLAGS="-I $(brew --prefix graphviz)/include"
-	export LDFLAGS="-L $(brew --prefix graphviz)/lib"  
+	export CFLAGS="-I$(brew --prefix graphviz)/include"
+	export LDFLAGS="-L$(brew --prefix graphviz)/lib"
 	uv sync --all-extras --dev
 
 # Run all checks (format, lint, test)

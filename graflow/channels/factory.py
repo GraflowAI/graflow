@@ -5,11 +5,11 @@ from __future__ import annotations
 from typing import ClassVar, Dict, Type
 
 from graflow.channels.base import Channel
-from graflow.channels.memory import MemoryChannel
+from graflow.channels.memory_channel import MemoryChannel
 from graflow.exceptions import ConfigError
 
 try:
-    from graflow.channels.redis import RedisChannel
+    from graflow.channels.redis_channel import RedisChannel
     REDIS_AVAILABLE = True
 except ImportError:
     RedisChannel = None

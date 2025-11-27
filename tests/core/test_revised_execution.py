@@ -42,11 +42,11 @@ def test_execute_with_traditional_tasks():
     clear_workflow_context()
     context = current_workflow_context()
 
-    A = Task("A")
-    B = Task("B")
-    C = Task("C")
+    task_a = Task("A")
+    task_b = Task("B")
+    task_c = Task("C")
 
-    A >> B >> C # type: ignore
+    task_a >> task_b >> task_c # type: ignore
 
     # Should execute without error
     execute_with_cycles(context.graph, "A", max_steps=5)

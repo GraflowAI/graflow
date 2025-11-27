@@ -62,7 +62,7 @@ class RedisChannel(Channel):
     def set(self, key: str, value: Any, ttl: Optional[int] = None) -> None:
         """Store data in the channel."""
         redis_key = self._get_key(key)
-        serialized_value = json.dumps(value)
+        serialized_value = json.dumps(value, default=str)
 
         if ttl is not None:
             self.redis_client.setex(redis_key, ttl, serialized_value)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any, Optional
 
 from graflow import exceptions
@@ -11,6 +12,8 @@ if TYPE_CHECKING:
     from .context import ExecutionContext
     from .handler import TaskHandler
     from .task import Executable
+
+logger = logging.getLogger(__name__)
 
 
 class WorkflowEngine:
@@ -96,7 +99,11 @@ class WorkflowEngine:
         if context.parent_context is None:
             context.tracer.on_workflow_start(workflow_name, context)
 
-        print(f"Starting execution from: {start_task_id or context.start_node}")
+        logger.info(
+            "Starting execution from task: %s",
+            start_task_id or context.start_node,
+            extra={"session_id": context.session_id, "workflow": workflow_name}
+        )
 
         # Initialize first task
         if start_task_id is not None:
@@ -116,8 +123,18 @@ class WorkflowEngine:
             # Check if task exists in graph
             graph = context.graph
             if task_id not in graph.nodes:
-                print(f"Error: Node {task_id} not found in graph")
-                break  # Terminate execution
+                logger.error(
+                    "Node not found in graph: %s",
+                    task_id,
+                    extra={
+                        "session_id": context.session_id,
+                        "available_nodes": list(graph.nodes.keys())[:10]
+                    }
+                )
+                raise exceptions.GraflowRuntimeError(
+                    f"Node '{task_id}' not found in graph. "
+                    f"Available nodes: {', '.join(list(graph.nodes.keys())[:5])}..."
+                )
 
             # Execute the task
             task = graph.get_node(task_id)
@@ -134,7 +151,10 @@ class WorkflowEngine:
 
             # Handle successor scheduling
             if context.goto_called:
-                print(f"🚫 Goto called in {task_id}, skipping successors")
+                logger.debug(
+                    "Goto called in task, skipping normal successors",
+                    extra={"task_id": task_id, "session_id": context.session_id}
+                )
             else:
                 # Add successor nodes to queue
                 successors = list(graph.successors(task_id))
@@ -155,14 +175,25 @@ class WorkflowEngine:
                     path=context.checkpoint_request_path,
                     metadata=context.checkpoint_request_metadata,
                 )
-                print(f"Checkpoint created: {checkpoint_path}")
+                logger.info(
+                    "Checkpoint created at: %s",
+                    checkpoint_path,
+                    extra={
+                        "session_id": context.session_id,
+                        "checkpoint_id": checkpoint_metadata.checkpoint_id,
+                        "checkpoint_steps": checkpoint_metadata.steps
+                    }
+                )
                 context.checkpoint_metadata = checkpoint_metadata.to_dict()
                 context.last_checkpoint_path = checkpoint_path
                 context.clear_checkpoint_request()
 
             task_id = context.get_next_task()
 
-        print(f"Execution completed after {context.steps} steps")
+        logger.info(
+            "Execution completed",
+            extra={"session_id": context.session_id, "steps": context.steps, "workflow": workflow_name}
+        )
 
         # Call tracer hook: workflow end (skip for nested contexts to avoid duplicate traces)
         # Nested contexts (branches/parallel groups) are already tracked via parent context's tracer

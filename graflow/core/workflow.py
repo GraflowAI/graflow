@@ -11,7 +11,6 @@ from graflow.exceptions import GraphCompilationError
 from graflow.trace.base import Tracer
 
 if TYPE_CHECKING:
-    from graflow.coordination.executor import GroupExecutor
     from graflow.core.context import ExecutionContext
     from graflow.core.task import Executable
     from graflow.llm.agents.base import LLMAgent
@@ -41,7 +40,6 @@ class WorkflowContext:
         self.graph = TaskGraph()
         self._task_counter = 0
         self._group_counter = 0
-        self._group_executor: Optional[GroupExecutor] = None
         self._redis_client: Optional[Any] = None
         self._tracer = tracer
         self._llm_agent_providers: dict[str, LLMAgentProvider] = {}
@@ -76,9 +74,7 @@ class WorkflowContext:
         """
         self.graph.rename_node(old_task_id, new_task_id)
 
-    def set_group_executor(self, executor: GroupExecutor) -> None:
-        """Set the group executor for parallel execution."""
-        self._group_executor = executor
+
 
     def set_redis_client(self, redis_client: Any) -> None:
         """Set the Redis client for this workflow context.
@@ -107,7 +103,7 @@ class WorkflowContext:
         """
         self._llm_agent_providers[name] = agent_or_factory
 
-    def execute(self, start_node: Optional[str] = None, max_steps: int = 10) -> Any:
+    def execute(self, start_node: Optional[str] = None, max_steps: int = 10000) -> Any:
         """Execute the workflow starting from the specified node.
 
         Returns:
@@ -127,8 +123,6 @@ class WorkflowContext:
         from .context import ExecutionContext
         from .engine import WorkflowEngine
         exec_context = ExecutionContext.create(self.graph, start_node, max_steps=max_steps, tracer=self._tracer)
-        if self._group_executor:
-            exec_context.group_executor = self._group_executor
 
         self._attach_llm_agents(exec_context)
 

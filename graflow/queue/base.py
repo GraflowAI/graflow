@@ -1,11 +1,13 @@
 """Abstract base classes for task queues."""
 
+from __future__ import annotations
+
 import logging
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, Optional
 
 if TYPE_CHECKING:
     from graflow.core.context import ExecutionContext
@@ -24,10 +26,14 @@ class TaskStatus(Enum):
 
 @dataclass
 class TaskSpec:
-    """Task specification and metadata with function serialization support."""
-    executable: 'Executable'
-    execution_context: 'ExecutionContext'
-    strategy: str = "reference"
+    """Task specification and metadata for distributed task execution.
+
+    TaskSpec stores task execution metadata and maintains a reference to the
+    executable task. The actual task is stored in the Graph (via GraphStore)
+    and retrieved directly without additional serialization.
+    """
+    executable: Executable
+    execution_context: ExecutionContext
     status: TaskStatus = TaskStatus.READY
     created_at: float = field(default_factory=time.time)
     # Phase 3: Advanced features
@@ -45,12 +51,7 @@ class TaskSpec:
         """Get task_id from executable."""
         return self.executable.task_id
 
-    @property
-    def task_data(self) -> Dict[str, Any]:
-        """Get task_data by serializing executable's task."""
-        return self.execution_context.task_resolver.serialize_task(self.executable, self.strategy)
-
-    def __lt__(self, other: 'TaskSpec') -> bool:
+    def __lt__(self, other: TaskSpec) -> bool:
         """For queue sorting (FIFO: older first)."""
         return self.created_at < other.created_at
 
@@ -64,30 +65,24 @@ class TaskSpec:
         self.last_error = error_message
         self.status = TaskStatus.READY  # Reset to ready for retry
 
-    def get_task(self) -> Optional['Executable']:
-        """Get task executable by deserializing stored data.
+    def get_task(self) -> Optional[Executable]:
+        """Get task executable from TaskSpec.
+
+        The task is already resolved from the Graph, so this simply
+        returns the executable directly without additional serialization.
 
         Returns:
-            Executable object or None if no task data available
-
-        Raises:
-            TaskResolutionError: If task cannot be resolved
+            Executable object (already resolved from Graph)
         """
-        try:
-            task_data = self.task_data
-            return self.execution_context.task_resolver.resolve_task(task_data)
-        except ValueError:
-            return None
-        except Exception:
-            return None
+        return self.executable
 
 class TaskQueue(ABC):
-    """Abstract base class for TaskQueue (TaskSpec support)."""
+    """Abstract base class for all task queues."""
 
-    def __init__(self, execution_context: 'ExecutionContext'):
-        self.execution_context = execution_context
+    def __init__(self):
+        """Initialize TaskQueue."""
         self._task_specs: Dict[str, TaskSpec] = {}
-        # Phase 3: Advanced features
+        # Advanced features
         self.enable_retry: bool = False
         self.enable_metrics: bool = False
         self.metrics: Dict[str, int] = {
@@ -125,40 +120,23 @@ class TaskQueue(ABC):
         task_spec = self.dequeue()
         return task_spec.task_id if task_spec else None
 
-    # === Optional extended interface ===
+    # === Common optional interface ===
     def size(self) -> int:
         """Number of waiting nodes."""
         return 0
-
-    def peek_next_node(self) -> Optional[str]:
-        """Peek next node without removing."""
-        return None
-
-    @abstractmethod
-    def to_list(self) -> list[str]:
-        """Get list of task IDs in queue order."""
-        pass
 
     def get_task_spec(self, task_id: str) -> Optional[TaskSpec]:
         """Get TaskSpec by task ID."""
         return self._task_specs.get(task_id)
 
-    def get_pending_task_specs(self) -> List[TaskSpec]:
-        """Return TaskSpec objects for pending tasks (checkpoint helper)."""
-        return []
-
-    # === Phase 3: Advanced features ===
+    # === Advanced features ===
     def configure(self, enable_retry: bool = False, enable_metrics: bool = False) -> None:
         """Configure advanced features."""
         self.enable_retry = enable_retry
         self.enable_metrics = enable_metrics
 
     def handle_task_failure(self, task_spec: TaskSpec, error_message: str) -> bool:
-        """Handle task failure with retry logic.
-
-        Returns:
-            bool: True if task should be retried, False if it should be marked as failed
-        """
+        """Handle task failure with retry logic."""
         task_spec.status = TaskStatus.ERROR
 
         if self.enable_metrics:
@@ -208,4 +186,4 @@ class TaskQueue(ABC):
             logger.debug(f"Task {task_id} completed successfully in group {group_id}")
         else:
             logger.debug(f"Task {task_id} failed in group {group_id}: {error_message}")
-        pass
+

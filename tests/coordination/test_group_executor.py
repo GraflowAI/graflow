@@ -6,9 +6,11 @@ import pytest
 
 from graflow.coordination.coordinator import CoordinationBackend, TaskCoordinator
 from graflow.coordination.executor import GroupExecutor
-from graflow.coordination.task_spec import TaskSpec
 from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
+from graflow.core.task import TaskWrapper
+from graflow.queue.base import TaskSpec as QueueTaskSpec
+from graflow.queue.base import TaskStatus
 
 
 class TestTaskSpec:
@@ -17,30 +19,28 @@ class TestTaskSpec:
     def test_task_spec_creation(self):
         """Test TaskSpec creation and properties."""
 
-        def test_func():
-            return "test_result"
-
         graph = TaskGraph()
         exec_context = ExecutionContext(graph)
-        spec = TaskSpec("test_task", exec_context, test_func, args=(1, 2), kwargs={"key": "value"})
+        task = TaskWrapper("test_task", lambda: "test_result", register_to_context=False)
+        spec = QueueTaskSpec(task, exec_context)
 
         assert spec.task_id == "test_task"
         assert spec.execution_context == exec_context
-        assert spec.func == test_func
-        assert spec.args == (1, 2)
-        assert spec.kwargs == {"key": "value"}
+        assert spec.executable is task
+        assert spec.status == TaskStatus.READY
+        assert spec.group_id is None
 
-    def test_task_spec_default_kwargs(self):
-        """Test TaskSpec with default kwargs."""
-
-        def test_func():
-            pass
-
+    def test_task_retry_metadata(self):
+        """Retry metadata is tracked."""
         graph = TaskGraph()
         exec_context = ExecutionContext(graph)
-        spec = TaskSpec("test_task", exec_context, test_func)
+        task = TaskWrapper("retry_task", lambda: None, register_to_context=False)
+        spec = QueueTaskSpec(task, exec_context, max_retries=2)
 
-        assert spec.kwargs == {}
+        assert spec.can_retry()
+        spec.increment_retry("boom")
+        assert spec.retry_count == 1
+        assert spec.last_error == "boom"
 
 
 class TestGroupExecutor:
@@ -80,6 +80,10 @@ class TestGroupExecutor:
 
         tasks = cast(List[Executable], [task1, task2])
 
+        for t in tasks:
+            t.set_execution_context(exec_context)
+            graph.add_node(t)
+
         mock_print = mocker.patch('builtins.print')
         executor.execute_parallel_group("test_group", tasks, exec_context, backend="direct")
 
@@ -111,6 +115,10 @@ class TestGroupExecutor:
 
         tasks = cast(List[Executable], [task1])
 
+        for t in tasks:
+            t.set_execution_context(exec_context)
+            graph.add_node(t)
+
         executor.execute_parallel_group("test_group", tasks, exec_context, backend=CoordinationBackend.DIRECT)
 
         assert results == [("a", "b", "c")]
@@ -133,6 +141,10 @@ class TestGroupExecutor:
             return "result_task2"
 
         tasks = cast(List[Executable], [task1, task2])
+
+        for t in tasks:
+            t.set_execution_context(exec_context)
+            graph.add_node(t)
 
         coordinator_mock = mocker.Mock(spec=TaskCoordinator)
         mocker.patch('graflow.coordination.executor.ThreadingCoordinator', return_value=coordinator_mock)
@@ -157,10 +169,14 @@ class TestGroupExecutor:
 
         tasks = cast(List[Executable], [task1])
 
+        for t in tasks:
+            t.set_execution_context(exec_context)
+            graph.add_node(t)
+
         queue_mock = mocker.Mock()
         coordinator_mock = mocker.Mock(spec=TaskCoordinator)
 
-        mocker.patch('graflow.coordination.executor.RedisTaskQueue', return_value=queue_mock)
+        mocker.patch('graflow.coordination.executor.DistributedTaskQueue', return_value=queue_mock)
         mocker.patch('graflow.coordination.executor.RedisCoordinator', return_value=coordinator_mock)
 
         executor.execute_parallel_group(
@@ -186,11 +202,10 @@ class TestGroupExecutorIntegration:
     """Integration tests for GroupExecutor."""
 
     def test_create_threading_coordinator(self):
-        executor = GroupExecutor()
         graph = TaskGraph()
         exec_context = ExecutionContext(graph)
 
-        coordinator = executor._create_coordinator(
+        coordinator = GroupExecutor._create_coordinator(
             CoordinationBackend.THREADING,
             {"thread_count": 4},
             exec_context
@@ -203,8 +218,8 @@ class TestGroupExecutorIntegration:
         from graflow.core.decorators import task
         from graflow.core.task import Executable
 
-        # Mock RedisCoordinator to simulate import error
-        mocker.patch('graflow.coordination.executor.RedisTaskQueue', side_effect=ImportError("redis missing"))
+        # Mock DistributedTaskQueue to simulate import error
+        mocker.patch('graflow.coordination.executor.DistributedTaskQueue', side_effect=ImportError("redis missing"))
 
         executor = GroupExecutor()
         graph = TaskGraph()

@@ -450,6 +450,20 @@ class LangFuseTracer(Tracer):
 
         return branch_tracer
 
+    def get_current_span_id(self) -> Optional[str]:
+        """Return the active Langfuse span id, if any."""
+        if not self.enabled:
+            return None
+
+        if self._span_stack:
+            current = self._span_stack[-1]
+            return getattr(current, "id", None)
+
+        if self._root_span:
+            return getattr(self._root_span, "id", None)
+
+        return None
+
     def flush(self) -> None:
         """Flush traces to LangFuse."""
         if self.enabled and self.client:
@@ -464,4 +478,3 @@ class LangFuseTracer(Tracer):
         """
         self.flush()
         self._root_span = None
-

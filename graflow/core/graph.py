@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, List, Optional
 
 import networkx as nx
-from networkx.classes.reportviews import EdgeView, NodeView
+from networkx.classes.reportviews import NodeView, OutEdgeView
 
 from graflow.exceptions import DuplicateTaskError
 
@@ -38,9 +38,24 @@ class TaskGraph:
 
     def get_node(self, task_id: str) -> Executable:
         """Get a task node by its ID."""
-        if task_id not in self._graph.nodes:
-            raise KeyError(f"Task {task_id} not found in graph")
-        return self._graph.nodes[task_id]["task"]
+        if task_id in self._graph.nodes:
+            node_data = self._graph.nodes[task_id]
+            if "task" not in node_data:
+                 raise KeyError(f"Node {task_id} exists but has no 'task' attribute")
+            return node_data["task"]
+
+        # Search in ParallelGroups
+        from graflow.core.task import ParallelGroup
+        for node_id in self._graph.nodes:
+            node_data = self._graph.nodes[node_id]
+            if "task" in node_data:
+                task = node_data["task"]
+                if isinstance(task, ParallelGroup):
+                    for member in task.tasks:
+                        if member.task_id == task_id:
+                            return member
+
+        raise KeyError(f"Task {task_id} not found in graph")
 
     @property
     def nodes(self) -> NodeView:
@@ -48,7 +63,7 @@ class TaskGraph:
         return self._graph.nodes() # type: ignore
 
     @property
-    def edges(self) -> EdgeView:
+    def edges(self) -> OutEdgeView:
         """Get all edges in the graph."""
         return self._graph.edges()
 

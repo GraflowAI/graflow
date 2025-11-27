@@ -1,19 +1,21 @@
 """In-memory task queue implementation."""
 
+from __future__ import annotations
+
 from collections import deque
 from typing import TYPE_CHECKING, Optional
 
 from graflow.queue.base import TaskQueue, TaskSpec, TaskStatus
 
 if TYPE_CHECKING:
-    pass
+    from graflow.core.context import ExecutionContext
 
 
-class InMemoryTaskQueue(TaskQueue):
-    """In-memory task queue with TaskSpec support (Phase 1 implementation)."""
+class LocalTaskQueue(TaskQueue):
+    """In-memory task queue with TaskSpec support."""
 
-    def __init__(self, execution_context, start_node: Optional[str] = None):
-        super().__init__(execution_context)
+    def __init__(self, execution_context: ExecutionContext, start_node: Optional[str] = None):
+        super().__init__()
         self._queue: deque[TaskSpec] = deque()
         if start_node:
             # Get task from graph instead of creating a new Task object
@@ -39,7 +41,6 @@ class InMemoryTaskQueue(TaskQueue):
         self._queue.append(task_spec)
         self._task_specs[task_spec.task_id] = task_spec
 
-        # Phase 3: Metrics
         if self.enable_metrics:
             self.metrics['enqueued'] += 1
 
@@ -51,7 +52,6 @@ class InMemoryTaskQueue(TaskQueue):
             task_spec = self._queue.popleft()
             task_spec.status = TaskStatus.RUNNING
 
-            # Phase 3: Metrics
             if self.enable_metrics:
                 self.metrics['dequeued'] += 1
 
@@ -82,7 +82,6 @@ class InMemoryTaskQueue(TaskQueue):
         """Return pending TaskSpec objects (shallow copy)."""
         return list(self._queue)
 
-    # === Phase 3: Advanced features ===
     def retry_failed_task(self, task_spec: TaskSpec) -> bool:
         """Re-enqueue a failed task for retry."""
         if self.enable_retry and task_spec.can_retry():

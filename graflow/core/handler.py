@@ -2,13 +2,10 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Dict, Optional, Sequence
+from typing import Any, Optional
 
 from graflow.core.context import ExecutionContext
 from graflow.core.task import Executable
-
-if TYPE_CHECKING:
-    from graflow.core.handlers.group_policy import GroupExecutionPolicy
 
 
 @dataclass
@@ -30,17 +27,16 @@ class TaskResult:
 class TaskHandler(ABC):
     """Base class for task execution handlers.
 
-    TaskHandler has two roles used in different contexts:
-    1. How individual tasks execute (execute_task) - via @task(handler="...")
-    2. When parallel groups succeed/fail (on_group_finished) - via .with_execution(handler=...)
+    TaskHandler is responsible for individual task execution strategy.
+    For group result evaluation, use GroupExecutionPolicy directly.
 
     Design:
     - execute_task() is abstract - all handlers must provide execution strategy
-    - on_group_finished() has default implementation (strict mode)
     - get_name() has default implementation (class name)
 
-    For policy handlers: Inherit from DirectTaskHandler to get execute_task() implementation.
-    For execution handlers: Inherit from TaskHandler and implement execute_task().
+    Responsibility Separation:
+    - TaskHandler: How individual tasks execute (via @task(handler="..."))
+    - GroupExecutionPolicy: How parallel groups succeed/fail (via .with_execution(policy=...))
     """
 
     def get_name(self) -> str:
@@ -100,55 +96,6 @@ class TaskHandler(ABC):
             context.set_result(task_id, exception) within the execution environment.
 
         Implementation Pattern:
-            For policy handlers: Inherit from DirectTaskHandler instead.
             For execution handlers: Implement custom execution logic.
         """
         raise NotImplementedError
-
-    def set_group_policy(self, policy: 'GroupExecutionPolicy') -> None:
-        """Assign a custom group execution policy for this handler."""
-        self._group_policy = policy
-
-    def get_group_policy(self) -> 'GroupExecutionPolicy':
-        """Return the group execution policy for this handler."""
-        from graflow.core.handlers.group_policy import StrictGroupPolicy
-
-        policy = getattr(self, "_group_policy", None)
-        if policy is None:
-            policy = StrictGroupPolicy()
-            self._group_policy = policy
-        return policy
-
-    def on_group_finished(
-        self,
-        group_id: str,
-        tasks: Sequence[Executable],
-        results: Dict[str, TaskResult],
-        context: ExecutionContext
-    ) -> None:
-        """Handle parallel group execution results.
-
-        Default: Strict mode - fail if any task fails.
-        Override for custom success criteria.
-
-        Args:
-            group_id: Parallel group identifier
-            tasks: List of tasks in the group
-            results: Dict mapping task_id to TaskResult
-            context: Execution context
-
-        Raises:
-            ParallelGroupError: If group execution should fail
-
-        Usage Context:
-            - Called by GroupExecutor after all parallel tasks complete
-            - Specified via .with_execution(handler=PolicyHandler()) on ParallelGroup
-            - NOT called for individual task execution
-            - Use context.get_result(task_id) to access task result values if needed
-
-        Note:
-            Called after ALL tasks complete (success or failure).
-            Handler decides whether to raise exception based on results.
-        """
-        policy = self.get_group_policy()
-        policy.on_group_finished(group_id, tasks, results, context)

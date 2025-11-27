@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import time
@@ -12,14 +13,12 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Type, TypeVar
 from graflow.channels.base import Channel
 from graflow.channels.factory import ChannelFactory
 from graflow.channels.typed import TypedChannel
-from graflow.coordination.executor import GroupExecutor
 from graflow.core.cycle import CycleController
 from graflow.core.engine import WorkflowEngine
 from graflow.core.graph import TaskGraph
-from graflow.core.task_registry import TaskResolver
 from graflow.exceptions import CycleLimitExceededError
-from graflow.queue.base import TaskQueue, TaskSpec
-from graflow.queue.memory import InMemoryTaskQueue
+from graflow.queue.base import TaskSpec
+from graflow.queue.local import LocalTaskQueue
 from graflow.trace.noop import NoopTracer
 
 if TYPE_CHECKING:
@@ -29,6 +28,8 @@ if TYPE_CHECKING:
     from graflow.trace.base import Tracer
 
 T = TypeVar('T')
+
+logger = logging.getLogger(__name__)
 
 # Compiled regex pattern for iteration task detection (performance optimization)
 _ITERATION_PATTERN: re.Pattern[str] = re.compile(r'(_cycle_\d+_[0-9a-f]+)+$')
@@ -102,11 +103,6 @@ class TaskExecutionContext:
         """
         channel = self.execution_context.get_channel()
         return TypedChannel(channel, message_type)
-
-    @property
-    def task_resolver(self) -> TaskResolver:
-        """Get the task resolver instance from execution context."""
-        return self.execution_context.task_resolver
 
     def get_result(self, node: str, default: Any = None) -> Any:
         """Get execution result for a node from channel."""
@@ -246,7 +242,7 @@ class ExecutionContext:
         self,
         graph: TaskGraph,
         start_node: Optional[str] = None,
-        max_steps: int = 10,
+        max_steps: int = 10000,
         default_max_cycles: int = 10,
         default_max_retries: int = 3,
         steps: int = 0,
@@ -268,6 +264,9 @@ class ExecutionContext:
         self.session_id = session_id or uuid.uuid4().hex
         self.trace_id = trace_id or (parent_context.trace_id if parent_context else self.session_id)
 
+        # Graph hash for distributed execution (Content-Addressable)
+        self.graph_hash: Optional[str] = None
+
         # Each context gets its own tracer instance to avoid shared mutable state
         self.tracer = tracer if tracer is not None else NoopTracer()
 
@@ -280,7 +279,7 @@ class ExecutionContext:
         # Preserve original config (without runtime additions)
         base_config: Dict[str, Any] = dict(config) if config else {}
 
-        self.task_queue: TaskQueue = InMemoryTaskQueue(self, start_node)
+        self.task_queue: LocalTaskQueue = LocalTaskQueue(self, start_node)
 
         self.cycle_controller = CycleController(default_max_cycles)
 
@@ -296,17 +295,9 @@ class ExecutionContext:
             for key in parent_context.channel.keys():
                 self.channel.set(key, parent_context.channel.get(key))
 
-        if parent_context is not None:
-            self._task_resolver = parent_context._task_resolver
-        else:
-            self._task_resolver = TaskResolver()
-
         # Task execution context management
         self._task_execution_stack: list[TaskExecutionContext] = []
         self._task_contexts: dict[str, TaskExecutionContext] = {}
-
-        # Group execution
-        self.group_executor: GroupExecutor = parent_context.group_executor if parent_context else GroupExecutor()
 
         # Track if goto (jump to existing task) was called in current task execution
         self._goto_called_in_current_task: bool = False
@@ -388,7 +379,7 @@ class ExecutionContext:
         cls,
         graph: TaskGraph,
         start_node: Optional[str] = None,
-        max_steps: int = 10,
+        max_steps: int = 10000,
         default_max_cycles: int = 10,
         default_max_retries: int = 3,
         channel_backend: str = "memory",
@@ -436,14 +427,14 @@ class ExecutionContext:
         )
 
     @property
-    def queue(self) -> TaskQueue:
+    def queue(self) -> LocalTaskQueue:
         """Get the task queue instance."""
         return self.task_queue
 
     @property
-    def task_resolver(self) -> TaskResolver:
-        """Get the task resolver instance."""
-        return self._task_resolver
+    def config(self) -> Dict[str, Any]:
+        """Get the configuration dictionary."""
+        return self._original_config
 
     def add_to_queue(self, executable: Executable) -> None:
         """Add executable to execution queue with trace context."""
@@ -727,23 +718,39 @@ class ExecutionContext:
             # Explicit goto: Skip successors regardless of whether task is new or existing
             if is_new_task:
                 # New task: Create it but still skip successors
-                print(f"✨ Goto: Creating new task (skip successors): {task_id}")
+                logger.debug(
+                    "Goto: Creating new task (skip successors): %s",
+                    task_id,
+                    extra={"session_id": self.session_id, "goto": True, "is_new": True}
+                )
                 self.graph.add_node(executable, task_id)
             else:
                 # Existing task: Jump to it
-                print(f"🔄 Goto: Jumping to existing task: {task_id}")
+                logger.debug(
+                    "Goto: Jumping to existing task: %s",
+                    task_id,
+                    extra={"session_id": self.session_id, "goto": True, "is_new": False}
+                )
             self.add_to_queue(executable)
             self._goto_called_in_current_task = True
         # Auto-detect behavior (no goto specified)
         elif is_new_task:
             # New task: Create dynamic task (normal successor processing)
-            print(f"✨ Creating new dynamic task: {task_id}")
+            logger.debug(
+                "Creating new dynamic task: %s",
+                task_id,
+                extra={"session_id": self.session_id, "is_dynamic": True}
+            )
             self.graph.add_node(executable, task_id)
             self.add_to_queue(executable)
             # Note: _goto_called_in_current_task remains False for normal processing
         else:
             # Existing task: Jump to it (auto-detected, skip successors)
-            print(f"🔄 Jumping to existing task: {task_id}")
+            logger.debug(
+                "Jumping to existing task: %s",
+                task_id,
+                extra={"session_id": self.session_id, "auto_goto": True}
+            )
             self.add_to_queue(executable)
             self._goto_called_in_current_task = True
 
@@ -913,8 +920,6 @@ class ExecutionContext:
         # Remove un-serializable objects (will be reconstructed in __setstate__)
         state.pop('task_queue', None)
         state.pop('channel', None)
-        state.pop('group_executor', None)
-        state.pop('_task_resolver', None)
 
         # LLM: Exclude agent instances (only keep YAML for distributed execution)
         state['_llm_agents'] = {}  # Agent instances not serialized
@@ -969,10 +974,9 @@ class ExecutionContext:
 
         # Reconstruct TaskQueue (always in-memory after simplification)
         from graflow.channels.factory import ChannelFactory
-        from graflow.core.task_registry import TaskResolver
 
         queue_start_node = config.get('start_node')
-        self.task_queue = InMemoryTaskQueue(self, queue_start_node)
+        self.task_queue = LocalTaskQueue(self, queue_start_node)
 
         # Reconstruct Channel
         self.channel = ChannelFactory.create_channel(
@@ -987,13 +991,6 @@ class ExecutionContext:
         if channel_data:
             for key, value in channel_data.items():
                 self.channel.set(key, value)
-
-        # Reconstruct TaskResolver
-        self._task_resolver = TaskResolver()
-
-        # Ensure GroupExecutor exists for older checkpoints
-        if not hasattr(self, 'group_executor'):
-            self.group_executor = GroupExecutor()
 
         # Ensure checkpoint attributes exist for older checkpoints
         if not hasattr(self, 'completed_tasks') or self.completed_tasks is None:

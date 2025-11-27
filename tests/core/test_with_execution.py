@@ -1,7 +1,6 @@
 """Tests for ParallelGroup.with_execution() method."""
 
 from graflow.coordination.coordinator import CoordinationBackend
-from graflow.coordination.executor import GroupExecutor
 from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
 from graflow.core.handlers.group_policy import AtLeastNGroupPolicy
@@ -115,8 +114,8 @@ class TestWithExecution:
 class TestWithExecutionRunBehavior:
     """Test run() method behavior with with_execution()."""
 
-    def test_run_uses_configured_executor(self, mocker):
-        """Test that run() uses executor from with_execution()."""
+    def test_run_calls_static_executor_with_configured_backend(self, mocker):
+        """Test that run() calls GroupExecutor.execute_parallel_group() with configured backend."""
         with WorkflowContext("test"):
             task1 = Task("task1")
             task2 = Task("task2")
@@ -128,25 +127,22 @@ class TestWithExecutionRunBehavior:
             context = ExecutionContext(graph)
             group.set_execution_context(context)
 
-            # Mock GroupExecutor to verify it's created correctly
-            mock_executor = mocker.MagicMock(spec=GroupExecutor)
-            mock_executor_class = mocker.patch(
-                'graflow.core.task.GroupExecutor',
-                return_value=mock_executor
-            )
+            # Mock the static GroupExecutor.execute_parallel_group method
+            mock_execute = mocker.patch('graflow.core.task.GroupExecutor.execute_parallel_group')
 
             group.run()
 
-            # Verify GroupExecutor was created with correct backend
-            mock_executor_class.assert_called_once_with(
-                CoordinationBackend.THREADING, {}
-            )
-            mock_executor.execute_parallel_group.assert_called_once()
-            _, kwargs = mock_executor.execute_parallel_group.call_args
-            assert kwargs["policy"] == group._execution_config["policy"]
+            # Verify static method was called with correct arguments
+            mock_execute.assert_called_once()
+            call_args = mock_execute.call_args
+            assert call_args[0][0] == group.task_id  # group_id
+            assert call_args[0][1] == group.tasks  # tasks
+            assert call_args[0][2] == context  # context
+            assert call_args[1]["backend"] == CoordinationBackend.THREADING
+            assert call_args[1]["policy"] == group._execution_config["policy"]
 
-    def test_run_uses_context_executor_when_backend_none(self, mocker):
-        """Test that run() uses context.group_executor when backend is None."""
+    def test_run_calls_static_executor_with_default_backend(self, mocker):
+        """Test that run() calls GroupExecutor.execute_parallel_group() with default backend when not configured."""
         with WorkflowContext("test"):
             task1 = Task("task1")
             task2 = Task("task2")
@@ -157,75 +153,41 @@ class TestWithExecutionRunBehavior:
 
             graph = TaskGraph()
             context = ExecutionContext(graph)
-            context.group_executor = mocker.MagicMock(spec=GroupExecutor)
             group.set_execution_context(context)
+
+            # Mock the static GroupExecutor.execute_parallel_group method
+            mock_execute = mocker.patch('graflow.core.task.GroupExecutor.execute_parallel_group')
 
             group.run()
 
-            # Verify context.group_executor was used
-            context.group_executor.execute_parallel_group.assert_called_once() # type: ignore
-            _, kwargs = context.group_executor.execute_parallel_group.call_args # type: ignore
-            assert kwargs["policy"] == group._execution_config["policy"] # type: ignore
+            # Verify static method was called with None backend (will use default)
+            mock_execute.assert_called_once()
+            call_args = mock_execute.call_args
+            assert call_args[1]["backend"] is None  # None means use default
+            assert call_args[1]["policy"] == group._execution_config["policy"]
 
-    def test_run_with_execution_overrides_context_executor(self, mocker):
-        """Test that with_execution() takes priority over context.group_executor."""
+    def test_run_passes_backend_config(self, mocker):
+        """Test that run() passes backend_config to GroupExecutor."""
         with WorkflowContext("test"):
             task1 = Task("task1")
             task2 = Task("task2")
             group = ParallelGroup([task1, task2])
 
-            # Set backend via with_execution()
-            group.with_execution(backend=CoordinationBackend.DIRECT)
+            group.with_execution(
+                backend=CoordinationBackend.THREADING,
+                backend_config={"thread_count": 4}
+            )
 
             graph = TaskGraph()
             context = ExecutionContext(graph)
-            # Set context.group_executor (should be ignored)
-            context.group_executor = mocker.MagicMock(spec=GroupExecutor)
             group.set_execution_context(context)
 
-            # Mock GroupExecutor to verify configured one is used
-            mock_executor = mocker.MagicMock(spec=GroupExecutor)
-            mock_executor_class = mocker.patch(
-                'graflow.core.task.GroupExecutor',
-                return_value=mock_executor
-            )
+            # Mock the static GroupExecutor.execute_parallel_group method
+            mock_execute = mocker.patch('graflow.core.task.GroupExecutor.execute_parallel_group')
 
             group.run()
 
-            # Verify configured executor is used, not context.group_executor
-            mock_executor_class.assert_called_once_with(
-                CoordinationBackend.DIRECT, {}
-            )
-            mock_executor.execute_parallel_group.assert_called_once()
-            _, kwargs = mock_executor.execute_parallel_group.call_args
-            assert kwargs["policy"] == group._execution_config["policy"]
-            context.group_executor.execute_parallel_group.assert_not_called() # type: ignore
-
-    def test_run_uses_default_when_no_backend_and_no_context_executor(self, mocker):
-        """Test that run() uses default executor when backend is None and no context executor."""
-        with WorkflowContext("test"):
-            task1 = Task("task1")
-            task2 = Task("task2")
-            group = ParallelGroup([task1, task2])
-
-            # Don't call with_execution() - backend remains None
-            assert group._execution_config["backend"] is None
-
-            graph = TaskGraph()
-            context = ExecutionContext(graph)
-            # Don't set context.group_executor
-            assert context.group_executor is None
-            group.set_execution_context(context)
-
-            # Mock GroupExecutor to verify default is created
-            mock_executor = mocker.MagicMock(spec=GroupExecutor)
-            mock_executor_class = mocker.patch(
-                'graflow.core.task.GroupExecutor',
-                return_value=mock_executor
-            )
-
-            group.run()
-
-            # Verify default GroupExecutor() is created
-            mock_executor_class.assert_called_once_with()
-            mock_executor.execute_parallel_group.assert_called_once()
+            # Verify backend_config was passed
+            mock_execute.assert_called_once()
+            call_args = mock_execute.call_args
+            assert call_args[1]["backend_config"] == {"thread_count": 4}
