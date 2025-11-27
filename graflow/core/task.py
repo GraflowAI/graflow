@@ -361,7 +361,7 @@ class ParallelGroup(Executable):
 
         # Execution configuration for with_execution()
         self._execution_config = {
-            "backend": None,  # None = use context.group_executor or default
+            "backend": None,  # None = use default backend
             "backend_config": {},
             "policy": "strict",
         }
@@ -446,8 +446,6 @@ class ParallelGroup(Executable):
         """Execute all tasks in this parallel group."""
         context = self.get_execution_context()
 
-        executor = context.group_executor or GroupExecutor()
-
         for task in self.tasks:
             # Set execution context for each task
             task.set_execution_context(context)
@@ -457,7 +455,8 @@ class ParallelGroup(Executable):
         backend = self._execution_config.get("backend")
         backend_config = self._execution_config.get("backend_config", {})
 
-        executor.execute_parallel_group(
+        # GroupExecutor is stateless - call static method directly
+        GroupExecutor.execute_parallel_group(
             self.task_id,
             self.tasks,
             context,
