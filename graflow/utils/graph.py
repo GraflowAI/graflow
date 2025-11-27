@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import logging
 import math
 import os
 import random
@@ -19,6 +20,8 @@ from graflow.core.workflow import WorkflowContext, current_workflow_context
 
 if TYPE_CHECKING:
     from graflow.core.task import Executable
+
+logger = logging.getLogger(__name__)
 
 
 def build_graph(start_node: Executable, context: Optional[WorkflowContext] = None) -> TaskGraph:
@@ -108,8 +111,9 @@ def show_graph_info(graph: nx.DiGraph) -> None:
             print(f"Cycles detected: {cycles}")
         else:
             print("No cycles detected")
-    except Exception:
-        print("Error detecting cycles")
+    except Exception as e:
+        logger.error("Error detecting cycles in graph", exc_info=True)
+        print(f"Error detecting cycles: {e}")
 
 
 # ASCII Drawing Utilities

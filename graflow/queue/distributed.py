@@ -110,7 +110,10 @@ class DistributedTaskQueue(TaskQueue):
             # If graph_store is missing, we can't process this record
             # Should we re-enqueue? Or log error?
             # For now, log error and return None (task lost)
-            print("Error: GraphStore not configured in RedisTaskQueue, cannot process SerializedTaskRecord")
+            logger.error(
+                "GraphStore not configured in DistributedTaskQueue, cannot process SerializedTaskRecord",
+                extra={"queue_key": self.queue_key, "task_data_keys": list(data.keys())}
+            )
             return None
 
         from graflow.coordination.records import SerializedTaskRecord
@@ -140,7 +143,12 @@ class DistributedTaskQueue(TaskQueue):
             return task_spec
 
         except Exception as e:
-            print(f"Error processing SerializedTaskRecord: {e}")
+            logger.error(
+                "Error processing SerializedTaskRecord: %s",
+                str(e),
+                exc_info=True,
+                extra={"queue_key": self.queue_key, "record_data": data}
+            )
             return None
 
     def is_empty(self) -> bool:

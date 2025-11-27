@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Optional, Union
 
@@ -12,6 +13,8 @@ from graflow.exceptions import GraflowRuntimeError
 
 if TYPE_CHECKING:
     from graflow.core.handlers.group_policy import GroupExecutionPolicy
+
+logger = logging.getLogger(__name__)
 
 
 class Executable(ABC):
@@ -339,7 +342,7 @@ class Task(Executable):
 
     def run(self) -> Any:
         """Execute this task (typically a no-op)."""
-        print(f"Starting workflow from root: {self._task_id}")
+        logger.debug("Starting workflow from root: %s", self._task_id)
         pass
 
     def __repr__(self) -> str:

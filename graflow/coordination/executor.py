@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
@@ -14,6 +15,8 @@ if TYPE_CHECKING:
     from graflow.core.context import ExecutionContext
     from graflow.core.handlers.group_policy import GroupExecutionPolicy
     from graflow.core.task import Executable
+
+logger = logging.getLogger(__name__)
 
 
 class GroupExecutor:
@@ -117,8 +120,14 @@ class GroupExecutor:
         """Execute tasks using unified WorkflowEngine for consistency."""
         from graflow.core.handler import TaskResult
 
-        print(f"Running parallel group: {group_id}")
-        print(f"  Direct tasks: {[task.task_id for task in tasks]}")
+        task_ids = [task.task_id for task in tasks]
+        logger.info(
+            "Running parallel group: %s with %d tasks",
+            group_id,
+            len(tasks),
+            extra={"group_id": group_id, "task_ids": task_ids}
+        )
+        logger.debug("Direct tasks: %s", task_ids)
 
         # Use unified WorkflowEngine for each task
         from graflow.core.engine import WorkflowEngine
@@ -127,7 +136,7 @@ class GroupExecutor:
         results: Dict[str, TaskResult] = {}
 
         for task in tasks:
-            print(f"  - Executing directly: {task.task_id}")
+            logger.debug("Executing task directly: %s", task.task_id, extra={"group_id": group_id})
             success = True
             error_message = None
             start_time = time.time()
@@ -135,7 +144,12 @@ class GroupExecutor:
                 # Execute single task via unified engine
                 engine.execute(execution_context, start_task_id=task.task_id)
             except Exception as e:
-                print(f"    Task {task.task_id} failed: {e}")
+                logger.error(
+                    "Task failed in parallel group: %s",
+                    task.task_id,
+                    exc_info=True,
+                    extra={"group_id": group_id, "error": str(e)}
+                )
                 success = False
                 error_message = str(e)
 
@@ -147,7 +161,15 @@ class GroupExecutor:
                 timestamp=time.time()
             )
 
-        print(f"  Direct group {group_id} completed")
+        logger.info(
+            "Direct parallel group completed: %s",
+            group_id,
+            extra={
+                "group_id": group_id,
+                "task_count": len(tasks),
+                "success_count": sum(1 for r in results.values() if r.success)
+            }
+        )
 
         # Use GroupExecutionPolicy directly instead of handler
         policy_instance.on_group_finished(group_id, tasks, results, execution_context)

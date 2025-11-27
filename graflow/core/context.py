@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import time
@@ -27,6 +28,8 @@ if TYPE_CHECKING:
     from graflow.trace.base import Tracer
 
 T = TypeVar('T')
+
+logger = logging.getLogger(__name__)
 
 # Compiled regex pattern for iteration task detection (performance optimization)
 _ITERATION_PATTERN: re.Pattern[str] = re.compile(r'(_cycle_\d+_[0-9a-f]+)+$')
@@ -715,23 +718,39 @@ class ExecutionContext:
             # Explicit goto: Skip successors regardless of whether task is new or existing
             if is_new_task:
                 # New task: Create it but still skip successors
-                print(f"✨ Goto: Creating new task (skip successors): {task_id}")
+                logger.debug(
+                    "Goto: Creating new task (skip successors): %s",
+                    task_id,
+                    extra={"session_id": self.session_id, "goto": True, "is_new": True}
+                )
                 self.graph.add_node(executable, task_id)
             else:
                 # Existing task: Jump to it
-                print(f"🔄 Goto: Jumping to existing task: {task_id}")
+                logger.debug(
+                    "Goto: Jumping to existing task: %s",
+                    task_id,
+                    extra={"session_id": self.session_id, "goto": True, "is_new": False}
+                )
             self.add_to_queue(executable)
             self._goto_called_in_current_task = True
         # Auto-detect behavior (no goto specified)
         elif is_new_task:
             # New task: Create dynamic task (normal successor processing)
-            print(f"✨ Creating new dynamic task: {task_id}")
+            logger.debug(
+                "Creating new dynamic task: %s",
+                task_id,
+                extra={"session_id": self.session_id, "is_dynamic": True}
+            )
             self.graph.add_node(executable, task_id)
             self.add_to_queue(executable)
             # Note: _goto_called_in_current_task remains False for normal processing
         else:
             # Existing task: Jump to it (auto-detected, skip successors)
-            print(f"🔄 Jumping to existing task: {task_id}")
+            logger.debug(
+                "Jumping to existing task: %s",
+                task_id,
+                extra={"session_id": self.session_id, "auto_goto": True}
+            )
             self.add_to_queue(executable)
             self._goto_called_in_current_task = True
 
