@@ -1,19 +1,21 @@
 """Redis-based coordination backend for distributed parallel execution."""
 
+from __future__ import annotations
+
 import json
 import threading
 import time
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-if TYPE_CHECKING:
-    from graflow.core.context import ExecutionContext
-    from graflow.core.handler import TaskHandler
-    from graflow.core.task import Executable
-
 from graflow.coordination.coordinator import TaskCoordinator
 from graflow.coordination.graph_store import GraphStore
 from graflow.coordination.records import SerializedTaskRecord
 from graflow.queue.distributed import DistributedTaskQueue
+
+if TYPE_CHECKING:
+    from graflow.core.context import ExecutionContext
+    from graflow.core.handler import TaskHandler
+    from graflow.core.task import Executable
 
 
 class RedisCoordinator(TaskCoordinator):
@@ -43,9 +45,9 @@ class RedisCoordinator(TaskCoordinator):
     def execute_group(
         self,
         group_id: str,
-        tasks: List['Executable'],
-        execution_context: 'ExecutionContext',
-        handler: 'TaskHandler'
+        tasks: List[Executable],
+        execution_context: ExecutionContext,
+        handler: TaskHandler
     ) -> None:
         """Execute parallel group with barrier synchronization.
 
@@ -146,7 +148,7 @@ class RedisCoordinator(TaskCoordinator):
 
         return False
 
-    def dispatch_task(self, executable: 'Executable', group_id: str) -> None:
+    def dispatch_task(self, executable: Executable, group_id: str) -> None:
         """Dispatch task to Redis queue for worker processing."""
         context = executable.get_execution_context()
 
