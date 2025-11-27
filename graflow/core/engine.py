@@ -180,7 +180,8 @@ class WorkflowEngine:
                     checkpoint_path,
                     extra={
                         "session_id": context.session_id,
-                        "checkpoint_label": checkpoint_metadata.label
+                        "checkpoint_id": checkpoint_metadata.checkpoint_id,
+                        "checkpoint_steps": checkpoint_metadata.steps
                     }
                 )
                 context.checkpoint_metadata = checkpoint_metadata.to_dict()
