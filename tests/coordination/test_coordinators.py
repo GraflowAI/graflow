@@ -161,23 +161,32 @@ class TestRedisCoordinator:
         mock_redis.delete.assert_called_with(f"{coordinator.task_queue.key_prefix}:barrier:test_barrier")
         mock_redis.set.assert_called_with(f"{coordinator.task_queue.key_prefix}:barrier:test_barrier:expected", 3)
 
-    def test_wait_barrier_success(self, coordinator, mock_redis):
-        """Last participant publishes completion event."""
+    def test_wait_barrier_already_complete(self, coordinator, mock_redis, mocker):
+        """Producer detects barrier already complete (fast workers)."""
         coordinator.create_barrier("test_barrier", 2)
-        mock_redis.incr.return_value = 2
+
+        # Mock that barrier is already complete (workers finished)
+        mock_redis.get.return_value = b"2"
+
+        mock_pubsub = mocker.MagicMock()
+        mock_redis.pubsub.return_value = mock_pubsub
 
         result = coordinator.wait_barrier("test_barrier", timeout=1)
 
         assert result is True
-        mock_redis.incr.assert_called_with(f"{coordinator.task_queue.key_prefix}:barrier:test_barrier")
-        mock_redis.publish.assert_called_with(
-            f"{coordinator.task_queue.key_prefix}:barrier_done:test_barrier", "complete"
+        # Should subscribe first, then check counter
+        mock_pubsub.subscribe.assert_called_with(
+            f"{coordinator.task_queue.key_prefix}:barrier_done:test_barrier"
         )
+        mock_redis.get.assert_called_with(f"{coordinator.task_queue.key_prefix}:barrier:test_barrier")
+        mock_pubsub.close.assert_called_once()
 
     def test_wait_barrier_with_pubsub(self, coordinator, mock_redis, mocker):
-        """Participants block on pub/sub until completion message arrives."""
+        """Producer blocks on pub/sub until workers complete."""
         coordinator.create_barrier("test_barrier", 2)
-        mock_redis.incr.return_value = 1
+
+        # Mock that barrier is not yet complete
+        mock_redis.get.return_value = b"1"  # Only 1 worker done, need 2
 
         mock_pubsub = mocker.MagicMock()
         mock_pubsub.listen.return_value = iter([{ "type": "message", "data": b"complete" }])
@@ -192,9 +201,11 @@ class TestRedisCoordinator:
         mock_pubsub.close.assert_called_once()
 
     def test_wait_barrier_timeout(self, coordinator, mock_redis, mocker):
-        """Timeout returns False and closes pubsub."""
+        """Timeout returns False and closes pubsub when workers don't complete."""
         coordinator.create_barrier("timeout_barrier", 2)
-        mock_redis.incr.return_value = 1
+
+        # Mock that barrier is not complete
+        mock_redis.get.return_value = None  # No workers completed yet
 
         mock_pubsub = mocker.MagicMock()
 

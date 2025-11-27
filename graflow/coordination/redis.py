@@ -113,38 +113,45 @@ class RedisCoordinator(TaskCoordinator):
         return barrier_key
 
     def wait_barrier(self, barrier_id: str, timeout: int = 30) -> bool:
-        """Wait at barrier until all participants arrive."""
+        """Wait at barrier until all participants arrive.
+
+        Producer only subscribes and waits - workers increment the barrier counter.
+        This implements the BSP (Bulk Synchronous Parallel) model where the producer
+        dispatches all tasks and waits, while workers execute and signal completion.
+        """
         if barrier_id not in self.active_barriers:
             return False
 
         barrier_info = self.active_barriers[barrier_id]
 
-        # Increment participant count atomically
-        current_count = self.redis.incr(barrier_info["key"])
+        # Subscribe to completion channel FIRST (before checking counter)
+        # This prevents race condition where workers complete before we subscribe
+        pubsub = self.redis.pubsub()
+        pubsub.subscribe(barrier_info["channel"])
 
-        if current_count >= barrier_info["expected"]:
-            # Last participant - notify all waiting participants
-            self.redis.publish(barrier_info["channel"], "complete")
-            return True
-        else:
+        try:
+            # After subscribing, check if barrier already complete
+            # This handles the case where all workers finished before we subscribed
+            current_count_bytes = self.redis.get(barrier_info["key"])
+            if current_count_bytes:
+                current_count = int(current_count_bytes)  # type: ignore[arg-type]
+                if current_count >= barrier_info["expected"]:
+                    return True
+
             # Wait for completion notification
-            pubsub = self.redis.pubsub()
-            pubsub.subscribe(barrier_info["channel"])
-
             start_time = time.time()
-            try:
-                for message in pubsub.listen():
-                    if message["type"] == "message" and message["data"] == b"complete":
-                        return True
+            for message in pubsub.listen():
+                if message["type"] == "message" and message["data"] == b"complete":
+                    return True
 
-                    # Check timeout
-                    if time.time() - start_time > timeout:
-                        return False
+                # Check timeout
+                if time.time() - start_time > timeout:
+                    return False
 
-            except Exception:
-                return False
-            finally:
-                pubsub.close()
+        except Exception:
+            return False
+        finally:
+            pubsub.close()
 
         return False
 

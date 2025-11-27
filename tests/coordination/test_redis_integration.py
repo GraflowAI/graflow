@@ -26,44 +26,57 @@ class TestRedisCoordinatorIntegration:
     """Integration tests for RedisCoordinator with real Redis server."""
 
     def test_barrier_synchronization(self, clean_redis):
-        """Test barrier synchronization with real Redis."""
-        coordinator, _, _ = create_coordinator(clean_redis)
+        """Test barrier synchronization with real Redis.
 
-        # Create barrier for 2 participants
+        BSP model: Producer waits, workers increment via record_task_completion.
+        """
+        from graflow.coordination.redis import record_task_completion
+
+        coordinator, _, queue = create_coordinator(clean_redis)
+
+        # Create barrier for 2 tasks
         barrier_id = "test_barrier"
         coordinator.create_barrier(barrier_id, 2)
 
-        # Simulate first participant waiting (in separate thread)
+        # Producer waits in separate thread
         results = []
 
-        def first_participant():
-            """First participant waits at barrier."""
+        def producer_wait():
+            """Producer waits for workers to complete."""
             result = coordinator.wait_barrier(barrier_id, timeout=5)
-            results.append(("first", result))
+            results.append(("producer", result))
 
-        thread = threading.Thread(target=first_participant)
-        thread.start()
+        producer_thread = threading.Thread(target=producer_wait)
+        producer_thread.start()
 
-        # Small delay to ensure first participant is waiting
+        # Small delay to ensure producer is waiting
         time.sleep(0.1)
 
-        # Second participant completes the barrier
-        result = coordinator.wait_barrier("test_barrier", timeout=5)
-        thread.join()
+        # Simulate workers completing tasks
+        record_task_completion(
+            clean_redis, queue.key_prefix, "task_1", barrier_id, True
+        )
+        record_task_completion(
+            clean_redis, queue.key_prefix, "task_2", barrier_id, True
+        )
 
-        # Both participants should succeed
-        assert result is True
+        producer_thread.join()
+
+        # Producer should succeed
         assert len(results) == 1
-        assert results[0] == ("first", True)
+        assert results[0] == ("producer", True)
 
         # Clean up
         coordinator.cleanup_barrier("test_barrier")
 
     def test_barrier_timeout(self, clean_redis):
-        """Test barrier timeout with real Redis."""
+        """Test barrier timeout with real Redis.
+
+        Producer waits but workers never complete.
+        """
         coordinator, _, _ = create_coordinator(clean_redis)
 
-        # Create barrier for 2 participants but only one waits
+        # Create barrier for 2 tasks but no workers complete
         coordinator.create_barrier("timeout_barrier", 2)
 
         start_time = time.time()
@@ -162,41 +175,84 @@ class TestRedisCoordinatorIntegration:
         assert "cleanup_test" not in coordinator.active_barriers
 
     def test_concurrent_barrier_operations(self, clean_redis):
-        """Test concurrent barrier operations."""
+        """Test concurrent barrier operations with workers.
 
-        coordinator, _, _ = create_coordinator(clean_redis, key_prefix="integration-concurrent")
+        BSP model: Multiple workers complete tasks concurrently.
+        """
+        from graflow.coordination.redis import record_task_completion
 
-        # Create barrier for 3 participants
+        coordinator, _, queue = create_coordinator(clean_redis, key_prefix="integration-concurrent")
+
+        # Create barrier for 3 tasks
         coordinator.create_barrier("concurrent_test", 3)
 
         results = []
 
-        def participant(participant_id):
+        def producer_wait():
+            """Producer waits for all workers."""
             result = coordinator.wait_barrier("concurrent_test", timeout=5)
-            results.append((participant_id, result, time.time()))
+            results.append(("producer", result, time.time()))
 
-        # Start 3 participants
-        threads = []
+        # Start producer waiting
+        producer_thread = threading.Thread(target=producer_wait)
+        producer_thread.start()
+
+        # Small delay to ensure producer is waiting
+        time.sleep(0.1)
+
+        # Simulate 3 workers completing tasks concurrently
+        def worker(worker_id):
+            time.sleep(0.1)  # Simulate some work
+            record_task_completion(
+                clean_redis, queue.key_prefix, f"task_{worker_id}", "concurrent_test", True
+            )
+
+        worker_threads = []
         for i in range(3):
-            thread = threading.Thread(target=participant, args=(i,))
+            thread = threading.Thread(target=worker, args=(i,))
             thread.start()
-            threads.append(thread)
+            worker_threads.append(thread)
 
         # Wait for all threads
-        for thread in threads:
+        for thread in worker_threads:
             thread.join()
+        producer_thread.join()
 
-        # All participants should succeed
-        assert len(results) == 3
-        for _participant_id, result, _timestamp in results:
-            assert result is True
-
-        # All should complete around the same time (within 1 second)
-        timestamps = [timestamp for _, _, timestamp in results]
-        time_spread = max(timestamps) - min(timestamps)
-        assert time_spread < 1.0
+        # Producer should succeed
+        assert len(results) == 1
+        assert results[0][0] == "producer"
+        assert results[0][1] is True
 
         coordinator.cleanup_barrier("concurrent_test")
+
+    def test_barrier_race_condition_fast_workers(self, clean_redis):
+        """Test race condition where workers complete before producer waits.
+
+        This tests the fix: producer subscribes first, then checks if already complete.
+        """
+        from graflow.coordination.redis import record_task_completion
+
+        coordinator, _, queue = create_coordinator(clean_redis, key_prefix="integration-race")
+
+        # Create barrier for 2 tasks
+        barrier_id = "race_test"
+        coordinator.create_barrier(barrier_id, 2)
+
+        # Workers complete IMMEDIATELY (before producer waits)
+        record_task_completion(
+            clean_redis, queue.key_prefix, "task_1", barrier_id, True
+        )
+        record_task_completion(
+            clean_redis, queue.key_prefix, "task_2", barrier_id, True
+        )
+
+        # Now producer waits (should detect completion immediately)
+        result = coordinator.wait_barrier(barrier_id, timeout=5)
+
+        # Should return True immediately (not timeout)
+        assert result is True
+
+        coordinator.cleanup_barrier(barrier_id)
 
 
 if __name__ == "__main__":
