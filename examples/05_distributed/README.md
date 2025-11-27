@@ -22,29 +22,7 @@ This section demonstrates **distributed execution** in Graflow - how to scale wo
 
 ## Examples
 
-### 1. redis_basics.py
-
-**Concept**: Redis setup and basic operations
-
-Learn how to set up Redis as a backend for distributed execution.
-
-```bash
-python examples/05_distributed/redis_basics.py
-```
-
-**Key Concepts**:
-- Redis connection setup
-- Redis task queue configuration
-- Redis channel configuration
-- Testing Redis connectivity
-
-**Prerequisites**:
-- Redis server running (local or Docker)
-- `pip install redis`
-
----
-
-### 2. redis_worker.py
+###  1. redis_worker.py
 
 **Concept**: Worker process setup
 
@@ -62,7 +40,7 @@ python examples/05_distributed/redis_worker.py
 
 ---
 
-### 3. distributed_workflow.py
+### 2. distributed_workflow.py
 
 **Concept**: Complete distributed workflow
 
