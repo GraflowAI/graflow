@@ -40,7 +40,6 @@ class WorkflowContext:
         self.graph = TaskGraph()
         self._task_counter = 0
         self._group_counter = 0
-        self._group_counter = 0
         self._redis_client: Optional[Any] = None
         self._tracer = tracer
         self._llm_agent_providers: dict[str, LLMAgentProvider] = {}
@@ -123,7 +122,6 @@ class WorkflowContext:
 
         from .context import ExecutionContext
         from .engine import WorkflowEngine
-        exec_context = ExecutionContext.create(self.graph, start_node, max_steps=max_steps, tracer=self._tracer)
         exec_context = ExecutionContext.create(self.graph, start_node, max_steps=max_steps, tracer=self._tracer)
 
         self._attach_llm_agents(exec_context)
