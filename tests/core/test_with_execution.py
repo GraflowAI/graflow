@@ -1,7 +1,6 @@
 """Tests for ParallelGroup.with_execution() method."""
 
 from graflow.coordination.coordinator import CoordinationBackend
-from graflow.coordination.executor import GroupExecutor
 from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
 from graflow.core.handlers.group_policy import AtLeastNGroupPolicy

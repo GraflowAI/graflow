@@ -11,7 +11,6 @@ from graflow.exceptions import GraphCompilationError
 from graflow.trace.base import Tracer
 
 if TYPE_CHECKING:
-    from graflow.coordination.executor import GroupExecutor
     from graflow.core.context import ExecutionContext
     from graflow.core.task import Executable
     from graflow.llm.agents.base import LLMAgent
