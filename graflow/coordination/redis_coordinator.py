@@ -79,7 +79,7 @@ class RedisCoordinator(TaskCoordinator):
 
         self.create_barrier(group_id, len(tasks))
         try:
-            logger.debug("Dispatching %d tasks to Redis queue", len(tasks))
+            logger.info("Dispatching %d tasks to Redis queue", len(tasks))
             for task in tasks:
                 self.dispatch_task(task, group_id)
             logger.info("All tasks dispatched for group '%s', waiting for completion", group_id)
@@ -89,9 +89,9 @@ class RedisCoordinator(TaskCoordinator):
                 raise TimeoutError(f"Barrier wait timeout for group {group_id}")
 
             # Collect results from Redis
-            logger.debug("Collecting completion results for group '%s'", group_id)
+            logger.info("Collecting completion results for group '%s'", group_id)
             completion_results = self._get_completion_results(group_id)
-            logger.debug("Retrieved %d completion results", len(completion_results))
+            logger.info("Retrieved %d completion results", len(completion_results))
 
             # Convert to TaskResult format and check for graph updates
             task_results: Dict[str, TaskResult] = {}
@@ -114,7 +114,7 @@ class RedisCoordinator(TaskCoordinator):
             else:
                 logger.info("Parallel group '%s' completed successfully", group_id)
 
-            print(f"Parallel group {group_id} completed")
+            logger.info("Parallel group '%s' completed", group_id)
 
             # Apply policy's group execution logic directly
             logger.debug("Applying group policy for '%s'", group_id)
