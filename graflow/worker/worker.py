@@ -36,7 +36,12 @@ class TaskWorker:
             tracer_config: Tracer configuration dict with "type" key
                           {"type": "langfuse", "enable_runtime_graph": False, ...}
         """
+        logger.info("Initializing TaskWorker: worker_id=%s", worker_id)
+        logger.debug("Worker config: max_concurrent=%d, poll_interval=%.2fs, shutdown_timeout=%.1fs",
+                    max_concurrent_tasks, poll_interval, graceful_shutdown_timeout)
+
         if not isinstance(queue, DistributedTaskQueue):
+            logger.error("Invalid queue type: %s (expected DistributedTaskQueue)", type(queue).__name__)
             raise ValueError("TaskWorker requires a RedisTaskQueue instance")
 
         self.queue = queue
@@ -48,6 +53,8 @@ class TaskWorker:
 
         # Tracer configuration
         self.tracer_config = tracer_config or {}
+        if self.tracer_config:
+            logger.debug("Tracer config: %s", {k: v for k, v in self.tracer_config.items() if k != "api_key"})
 
         # Worker state
         self.is_running = False
@@ -70,6 +77,7 @@ class TaskWorker:
 
         # Setup signal handlers
         self._setup_signal_handlers()
+        logger.info("TaskWorker '%s' initialized successfully", worker_id)
 
     def _setup_signal_handlers(self) -> None:
         """Setup signal handlers for graceful shutdown."""
@@ -195,11 +203,15 @@ class TaskWorker:
                 # Check if we can accept more tasks
                 with self._active_tasks_lock:
                     active_count = len(self._active_tasks)
+                    active_tasks_list = list(self._active_tasks)
 
                 if active_count >= self.max_concurrent_tasks:
-                    logger.debug(f"Max concurrent tasks reached ({active_count}), waiting...")
+                    logger.debug(f"Max concurrent tasks reached ({active_count}/{self.max_concurrent_tasks}), "
+                               f"waiting... Active: {active_tasks_list[:3]}{'...' if len(active_tasks_list) > 3 else ''}")
                     time.sleep(self.poll_interval)
                     continue
+
+                logger.debug(f"Polling queue for tasks (active: {active_count}/{self.max_concurrent_tasks})")
 
                 # Try to get a task
                 task_spec = self.queue.dequeue()
@@ -210,7 +222,7 @@ class TaskWorker:
                     time.sleep(self.poll_interval)
                     continue
 
-                logger.info(f"Dequeued task: {task_spec.task_id} (group: {task_spec.group_id})")
+                logger.info(f"Dequeued task: {task_spec.task_id} (group: {task_spec.group_id or 'None'})")
 
                 # Submit task for processing
                 self._submit_task(task_spec)
@@ -238,7 +250,7 @@ class TaskWorker:
             self._active_tasks.add(task_id)
             active_count = len(self._active_tasks)
 
-        logger.info(f"Submitting task {task_id} to thread pool (active: {active_count}/{self.max_concurrent_tasks})")
+        logger.debug(f"Submitting task {task_id} to thread pool (active: {active_count}/{self.max_concurrent_tasks})")
 
         # Submit to thread pool
         future = self._executor.submit(self._process_task_wrapper, task_spec)
@@ -445,10 +457,16 @@ class TaskWorker:
 
             if success:
                 self.tasks_succeeded += 1
+                logger.debug(f"Metrics updated: task succeeded (total: {self.tasks_processed}, "
+                           f"succeeded: {self.tasks_succeeded}, duration: {duration:.3f}s)")
             elif is_timeout:
                 self.tasks_timeout += 1
+                logger.debug(f"Metrics updated: task timed out (total: {self.tasks_processed}, "
+                           f"timeout: {self.tasks_timeout}, duration: {duration:.3f}s)")
             else:
                 self.tasks_failed += 1
+                logger.debug(f"Metrics updated: task failed (total: {self.tasks_processed}, "
+                           f"failed: {self.tasks_failed}, duration: {duration:.3f}s)")
 
             # Log periodic stats every 10 tasks
             if self.tasks_processed % 10 == 0:
