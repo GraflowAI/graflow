@@ -9,7 +9,7 @@ from graflow.channels.memory import MemoryChannel
 from graflow.exceptions import ConfigError
 
 try:
-    from graflow.channels.redis import RedisChannel
+    from graflow.channels.redis_channel import RedisChannel
     REDIS_AVAILABLE = True
 except ImportError:
     RedisChannel = None

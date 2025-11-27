@@ -5,7 +5,7 @@ from typing import Any, Callable, Dict, Optional, TypedDict
 
 import pytest
 
-from graflow.channels.redis import RedisChannel
+from graflow.channels.redis_channel import RedisChannel
 from graflow.channels.schemas import TaskResultMessage
 from graflow.coordination.redis_coordinator import RedisCoordinator
 from graflow.core.context import ExecutionContext
