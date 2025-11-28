@@ -431,15 +431,11 @@ def dynamic_processor(context):
 
 After mastering dynamic task generation, explore:
 
-1. **Workflow Composition** (`../08_workflow_composition/`)
-   - Combine dynamic tasks with concurrent workflows
-   - Build reusable workflow templates
-
-2. **Real-World Examples** (`../09_real_world/`)
+1. **Real-World Examples** (`../09_real_world/`)
    - Apply dynamic patterns to production use cases
    - See complete implementations
 
-3. **Custom Development**
+2. **Custom Development**
    - Build your own dynamic workflow patterns
    - Create domain-specific task generators
 

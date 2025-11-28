@@ -104,17 +104,6 @@ Dynamic task generation patterns:
 
 [View dynamic task examples →](07_dynamic_tasks/)
 
-### ✅ 08_workflow_composition - Workflow Composition
-**Status**: Complete | **Difficulty**: Advanced
-
-Workflow composition and reusability patterns:
-- Concurrent workflow execution with threading
-- Workflow factory patterns
-- Reusable workflow templates
-- Parameterized workflow creation
-
-[View workflow composition examples →](08_workflow_composition/)
-
 ### ✅ 09_real_world - Real-World Use Cases
 **Status**: Complete | **Difficulty**: Intermediate to Advanced
 
@@ -208,13 +197,7 @@ Build AI-powered workflows with LLM integration:
 1. `dynamic_tasks.py` - Compile-time task generation (20 min)
 2. `runtime_dynamic_tasks.py` - Runtime task creation with next_task() (30 min)
 
-### Level 8: Workflow Composition 🏗️
-
-**08_workflow_composition/** - Composing and reusing workflows
-1. `concurrent_workflows.py` - Parallel workflow execution (25 min)
-2. `workflow_factory.py` - Reusable workflow templates (25 min)
-
-### Level 9: Production Use Cases 💼
+### Level 8: Production Use Cases 💼
 
 **09_real_world/** - Complete real-world applications
 1. `data_pipeline.py` - ETL workflow (20 min)
@@ -222,13 +205,13 @@ Build AI-powered workflows with LLM integration:
 3. `batch_processing.py` - Large-scale batch processing (15 min)
 4. `sales_analysis.py` - Data analysis with anomaly detection (25 min)
 
-### Level 10: Workflow Visualization 📊
+### Level 9: Workflow Visualization 📊
 
 **10_visualization/** - Visualize workflows and graphs
 1. `workflow_visualization.py` - Visualizing Graflow workflows (20 min)
 2. `graph_utilities.py` - Graph visualization utilities (25 min)
 
-### Level 11: LLM Integration 🤖
+### Level 10: LLM Integration 🤖
 
 **12_llm_integration/** - AI-powered workflows
 1. `simple_llm_client.py` - Basic LLMClient injection (15 min)
@@ -351,11 +334,6 @@ examples/
 │   ├── dynamic_tasks.py
 │   └── runtime_dynamic_tasks.py
 │
-├── 08_workflow_composition/ # Workflow composition
-│   ├── README.md       # Category documentation
-│   ├── concurrent_workflows.py
-│   └── workflow_factory.py
-│
 ├── 09_real_world/       # Real-world use cases
 │   ├── README.md       # Category documentation
 │   ├── data_pipeline.py
@@ -380,7 +358,7 @@ examples/
 
 ## Development Status
 
-✅ **Completed** (33 examples): Fully functional and tested with comprehensive documentation
+✅ **Completed** (31 examples): Fully functional and tested with comprehensive documentation
 
 ### Progress Overview
 
@@ -393,12 +371,11 @@ examples/
 | 05_distributed | ✅ Complete | 3/3 | Redis-based distribution |
 | 06_advanced | ✅ Complete | 4/4 | Advanced patterns |
 | 07_dynamic_tasks | ✅ Complete | 2/2 | Dynamic task generation |
-| 08_workflow_composition | ✅ Complete | 2/2 | Workflow composition |
 | 09_real_world | ✅ Complete | 4/4 | Production use cases |
 | 10_visualization | ✅ Complete | 2/2 | Workflow visualization |
 | 12_llm_integration | ✅ Complete | 4/4 | LLM-powered workflows |
 
-**Total Progress**: 33/33 examples (100% complete) 🎉
+**Total Progress**: 31/31 examples (100% complete) 🎉
 
 ## Troubleshooting
 
@@ -462,22 +439,21 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md) for details.
 
 All planned examples are now complete! 🎉
 
-The **33 examples** provide comprehensive coverage from basic concepts to AI-powered production applications. You can now:
+The **31 examples** provide comprehensive coverage from basic concepts to AI-powered production applications. You can now:
 
 1. **Build Production Workflows** - Use patterns from 09_real_world
 2. **Scale with Redis** - Deploy distributed workflows from 05_distributed
 3. **Apply Advanced Patterns** - Leverage techniques from 06_advanced
 4. **Implement Runtime Dynamics** - Use next_task() and next_iteration() from 07_dynamic_tasks
-5. **Compose Workflows** - Create reusable templates from 08_workflow_composition
-6. **Analyze Data** - Build data analysis pipelines with anomaly detection
-7. **Visualize Workflows** - Document and debug with ASCII, Mermaid, and PNG from 10_visualization
-8. **Integrate LLMs** - Build AI-powered workflows with LLMClient and agents from 12_llm_integration
+5. **Analyze Data** - Build data analysis pipelines with anomaly detection
+6. **Visualize Workflows** - Document and debug with ASCII, Mermaid, and PNG from 10_visualization
+7. **Integrate LLMs** - Build AI-powered workflows with LLMClient and agents from 12_llm_integration
 
 Additional examples may be added based on community feedback and emerging use cases.
 
 ## API Notes
 
-**Important**: The examples in this directory use stable, tested API patterns. All 33 examples are fully functional and production-ready. See [docs/examples_api_issues.md](../docs/examples_api_issues.md) for historical notes on API evolution.
+**Important**: The examples in this directory use stable, tested API patterns. All 31 examples are fully functional and production-ready. See [docs/examples_api_issues.md](../docs/examples_api_issues.md) for historical notes on API evolution.
 
 ## Getting Help
 

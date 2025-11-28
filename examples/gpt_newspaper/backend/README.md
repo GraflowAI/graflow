@@ -475,4 +475,3 @@ These workflows demonstrate **Graflow's evolution from simple loops to autonomou
 
 - [Graflow Documentation](https://github.com/myui/graflow)
 - [Dynamic Tasks Example](../../07_dynamic_tasks/)
-- [Parallel Execution Example](../../08_workflow_composition/)

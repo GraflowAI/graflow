@@ -248,7 +248,7 @@ tests/
 
 ## Examples Guide
 
-The `examples/` directory contains **27 production-ready examples** organized by complexity:
+The `examples/` directory contains **production-ready examples** organized by complexity:
 
 1. **01_basics/**: Basic task introduction (1 example - hello_world.py)
 2. **02_workflows/**: Workflow context, operators (`>>`, `|`), context injection (4 examples) - **Start here for real usage**
@@ -257,9 +257,8 @@ The `examples/` directory contains **27 production-ready examples** organized by
 5. **05_distributed/**: Redis-based distribution, workers (3 examples)
 6. **06_advanced/**: Lambda tasks, serialization, nested workflows (4 examples)
 7. **07_dynamic_tasks/**: Dynamic task generation patterns (2 examples)
-8. **08_workflow_composition/**: Concurrent workflows, factory patterns (2 examples)
-9. **09_real_world/**: ETL, ML training, batch processing, data analysis (4 examples)
-10. **10_visualization/**: Workflow visualization (ASCII, Mermaid, PNG) (2 examples)
+8. **09_real_world/**: ETL, ML training, batch processing, data analysis (4 examples)
+9. **10_visualization/**: Workflow visualization (ASCII, Mermaid, PNG) (2 examples)
 
 **Quick Start**: Begin with `examples/01_basics/hello_world.py`, then `examples/02_workflows/simple_pipeline.py`
 

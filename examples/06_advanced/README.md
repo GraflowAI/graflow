@@ -10,9 +10,8 @@ These examples showcase advanced capabilities of Graflow including:
 - **Nested Workflows** - Hierarchical workflow composition and organization
 - **Context Management** - Global and explicit context handling
 
-**Note**: For dynamic task generation and workflow composition examples, see:
+**Note**: For dynamic task generation examples, see:
 - **Dynamic Tasks** → `../07_dynamic_tasks/`
-- **Workflow Composition** → `../08_workflow_composition/`
 
 ## Examples
 
@@ -524,12 +523,7 @@ After mastering these advanced patterns, explore:
    - Iterative processing patterns
    - State machines
 
-2. **Workflow Composition** (`../08_workflow_composition/`)
-   - Concurrent workflow execution
-   - Workflow factory patterns
-   - Reusable templates
-
-3. **Real-World Examples** (`../09_real_world/`)
+2. **Real-World Examples** (`../09_real_world/`)
    - Apply patterns to production use cases
    - See complete implementations
 
@@ -543,4 +537,4 @@ After mastering these advanced patterns, explore:
 
 ---
 
-**Ready for more advanced patterns?** Check out dynamic tasks in `07_dynamic_tasks/` and workflow composition in `08_workflow_composition/`!
+**Ready for more advanced patterns?** Check out dynamic tasks in `07_dynamic_tasks/`!
