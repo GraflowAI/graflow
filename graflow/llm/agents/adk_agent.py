@@ -384,6 +384,23 @@ def setup_adk_tracing() -> None:
     except Exception as e:
         logger.warning(f"Failed to instrument Google ADK: {e}")
 
+
+def _sanitize_adk_app_name(app_name: str) -> str:
+    """Ensure ADK App name is a valid identifier (letters/digits/underscores, not starting with a digit)."""
+    sanitized = "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in app_name)
+    if not sanitized:
+        return "app_default"
+
+    if sanitized[0].isdigit():
+        sanitized = f"app_{sanitized}"
+
+    if not sanitized.isidentifier():
+        sanitized = "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in sanitized)
+        if sanitized[0].isdigit():
+            sanitized = f"app_{sanitized}"
+
+    return sanitized
+
 class AdkLLMAgent(LLMAgent):
     """Wrapper for Google ADK LlmAgent.
 
@@ -456,6 +473,7 @@ class AdkLLMAgent(LLMAgent):
             app_name: Application name for Runner (required if adk_agent_or_app is LlmAgent).
                      Typically set to workflow session_id for proper identification.
                      Ignored if App is provided (uses App's name instead).
+                     Normalized to a valid ADK identifier (prefixed if starting with a digit).
             session_service: Session service (defaults to InMemorySessionService)
             enable_tracing: If True, automatically setup ADK tracing (default: True).
                           Set to False if you want to manually control instrumentation.
@@ -519,7 +537,7 @@ class AdkLLMAgent(LLMAgent):
                     "Pass an App instance instead to use App's name."
                 )
             self._adk_agent = adk_agent_or_app
-            self._app_name = app_name
+            self._app_name = _sanitize_adk_app_name(app_name)
             # Create App instance internally
             self._app = App(  # type: ignore
                 name=self._app_name,
