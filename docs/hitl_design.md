@@ -3628,17 +3628,16 @@ config = {
 
 ## Implementation Checklist
 
-### Phase 1: Core Functionality (Module: `graflow/hitl/`)
+### Phase 1: Core Functionality (Module: `graflow/hitl/`) ✅ **COMPLETED**
 
 **Module Structure**:
 ```
 graflow/
 ├── hitl/
 │   ├── __init__.py
-│   ├── types.py          # FeedbackType, FeedbackRequest, FeedbackResponse
-│   ├── exceptions.py     # FeedbackTimeoutException, FeedbackStorageError
+│   ├── types.py          # FeedbackType, FeedbackRequest, FeedbackResponse, Exceptions
 │   ├── manager.py        # FeedbackManager
-│   └── backends/
+│   └── backend/          # Note: uses 'backend' (singular) not 'backends'
 │       ├── __init__.py
 │       ├── base.py       # Abstract backend interface
 │       ├── filesystem.py # Filesystem backend (default)
@@ -3646,81 +3645,97 @@ graflow/
 ```
 
 **Tasks**:
-- [ ] Create `graflow/hitl/` module structure
-- [ ] Implement `graflow/hitl/types.py`:
-  - [ ] `FeedbackType` enum
-  - [ ] `FeedbackRequest` dataclass
-  - [ ] `FeedbackResponse` dataclass
-- [ ] Implement `graflow/hitl/exceptions.py`:
-  - [ ] `FeedbackTimeoutException`
-  - [ ] `FeedbackStorageError`
-- [ ] Implement `graflow/hitl/manager.py`:
-  - [ ] `FeedbackManager` class
-  - [ ] `request_feedback()` with hybrid polling (Pub/Sub + polling fallback)
-  - [ ] `provide_feedback()` for external responses
-  - [ ] `list_pending_requests()`
-  - [ ] Channel integration support:
-    - [ ] `channel_key` and `write_to_channel` parameters
-    - [ ] Auto-write response to channel in `provide_feedback()`
-    - [ ] Write full response to `{channel_key}.__feedback_response__`
-    - [ ] `channel_manager` parameter in `__init__()`
-- [ ] Implement `graflow/hitl/backends/`:
-  - [ ] `base.py` - Abstract backend interface
-  - [ ] `filesystem.py` - Filesystem backend (default, JSON files with file locking)
-  - [ ] `redis.py` - Redis backend with Pub/Sub integration
-- [ ] Update `graflow/core/context.py`:
-  - [ ] Add `feedback_manager` to `ExecutionContext`
-  - [ ] Add `request_feedback()` to `TaskExecutionContext`
-  - [ ] Add convenience methods (`request_approval`, `request_text_input`, `request_selection`)
-- [ ] Update `graflow/core/engine.py`:
-  - [ ] Handle `FeedbackTimeoutException` in `WorkflowEngine.execute()`
-  - [ ] Create checkpoint on timeout
-- [ ] Update `graflow/core/checkpoint.py`:
-  - [ ] Update checkpoint state schema to include feedback metadata
-  - [ ] Store pending feedback request references
+- [x] Create `graflow/hitl/` module structure
+- [x] Implement `graflow/hitl/types.py`:
+  - [x] `FeedbackType` enum
+  - [x] `FeedbackRequest` Pydantic model
+  - [x] `FeedbackResponse` Pydantic model
+  - [x] `FeedbackTimeoutError` exception (consolidated in types.py)
+- [x] Implement `graflow/hitl/manager.py`:
+  - [x] `FeedbackManager` class
+  - [x] `request_feedback()` with hybrid polling (Pub/Sub + polling fallback)
+  - [x] `provide_feedback()` for external responses
+  - [x] `list_pending_requests()`
+  - [x] Channel integration support:
+    - [x] `channel_key` and `write_to_channel` parameters
+    - [x] Auto-write response to channel in `provide_feedback()`
+    - [x] Write full response to `{channel_key}.__feedback_response__`
+    - [x] `channel_manager` parameter in `__init__()`
+- [x] Implement `graflow/hitl/backend/`:
+  - [x] `base.py` - Abstract backend interface
+  - [x] `filesystem.py` - Filesystem backend (default, JSON files with file locking)
+  - [x] `redis.py` - Redis backend with Pub/Sub integration and JSON serialization
+- [x] Update `graflow/core/context.py`:
+  - [x] Add `feedback_manager` to `ExecutionContext`
+  - [x] Add `request_feedback()` to `TaskExecutionContext`
+  - [x] Add convenience methods (`request_approval`, `request_text_input`, `request_selection`)
+- [x] Update `graflow/core/engine.py`:
+  - [x] Handle `FeedbackTimeoutError` in `WorkflowEngine.execute()`
+  - [x] Create checkpoint on timeout
+- [x] Update `graflow/core/checkpoint.py`:
+  - [x] Update checkpoint state schema to include feedback metadata
+  - [x] Store pending feedback request references
 
-### Phase 2: REST API (Module: `graflow/api/`)
+### Phase 2: REST API (Module: `graflow/api/`) ✅ **COMPLETED**
 
 **Module Structure**:
 ```
 graflow/
 ├── api/
-│   ├── __init__.py           # create_feedback_api() factory
-│   ├── router.py             # FastAPI router with endpoints
-│   └── schemas/
-│       ├── __init__.py
-│       └── feedback.py       # Pydantic schemas for request/response
+│   ├── __init__.py           # Minimal package with docstring
+│   ├── __main__.py           # CLI entry point (python -m graflow.api)
+│   ├── main.py               # CLI argument parsing and server launch
+│   ├── app.py                # create_feedback_api() factory
+│   ├── endpoints/
+│   │   ├── __init__.py
+│   │   └── feedback.py       # FastAPI router with all endpoints
+│   ├── schemas/
+│   │   ├── __init__.py
+│   │   └── feedback.py       # Pydantic schemas for request/response
+│   └── README.md             # API documentation
 ```
 
 **Tasks**:
-- [ ] Create `graflow/api/` module structure
-- [ ] Implement `graflow/api/schemas/feedback.py`:
-  - [ ] `FeedbackResponseRequest` Pydantic schema
-  - [ ] `FeedbackRequestResponse` Pydantic schema
-  - [ ] `FeedbackListResponse` Pydantic schema
-  - [ ] Request/response validation models
-- [ ] Implement `graflow/api/endpoints/feedback.py`:
-  - [ ] FastAPI `APIRouter` for feedback endpoints
-  - [ ] `GET /api/feedback` (list pending requests)
-  - [ ] `GET /api/feedback/{id}` (get feedback details)
-  - [ ] `POST /api/feedback/{id}/respond` (provide feedback response)
-  - [ ] `DELETE /api/feedback/{id}` (cancel request)
-  - [ ] Dependency injection for `FeedbackManager`
-- [ ] Implement `graflow/api/app.py`:
-  - [ ] `create_feedback_api()` factory function
-  - [ ] Optional FastAPI dependency handling
-  - [ ] Include router from `endpoints/feedback.py`
-- [ ] Implement `graflow/api/__init__.py`:
-  - [ ] Minimal package file with `__all__ = []`
-  - [ ] Docstring with usage instructions
-- [ ] Add API authentication/authorization (optional OAuth 2.0)
+- [x] Create `graflow/api/` module structure
+- [x] Implement `graflow/api/schemas/feedback.py`:
+  - [x] `FeedbackResponseRequest` Pydantic schema
+  - [x] `FeedbackRequestResponse` Pydantic schema
+  - [x] `FeedbackDetailResponse` Pydantic schema
+  - [x] `MessageResponse` schema
+  - [x] `PendingFeedbackListResponse` schema
+  - [x] Request/response validation models with full validation and examples
+- [x] Implement `graflow/api/endpoints/feedback.py`:
+  - [x] FastAPI `APIRouter` for feedback endpoints
+  - [x] `GET /api/feedback` (list pending requests with count)
+  - [x] `GET /api/feedback/{id}` (get feedback details)
+  - [x] `POST /api/feedback/{id}/respond` (provide feedback response)
+  - [x] `DELETE /api/feedback/{id}` (cancel request)
+  - [x] App state pattern for `FeedbackManager` dependency injection
+- [x] Implement `graflow/api/app.py`:
+  - [x] `create_feedback_api()` factory function
+  - [x] `create_feedback_api_with_redis()` convenience function
+  - [x] CORS middleware support
+  - [x] Health check endpoint
+  - [x] Root info endpoint
+  - [x] Optional FastAPI dependency handling (import guard)
+- [x] Implement `graflow/api/main.py`:
+  - [x] CLI argument parsing (backend, host, port, workers, etc.)
+  - [x] Backend configuration (filesystem/redis)
+  - [x] Uvicorn server integration
+  - [x] Redis connection testing
+- [x] Implement `graflow/api/__main__.py`:
+  - [x] Module entry point for `python -m graflow.api`
+- [x] Implement `graflow/api/__init__.py`:
+  - [x] Minimal package file (no exports per project convention)
+  - [x] Docstring with usage instructions
+- [x] Generate OpenAPI/Swagger documentation (automatic via FastAPI)
+- [ ] Add API authentication/authorization (optional OAuth 2.0) - **DEFERRED** (future enhancement)
   - [ ] Implement `api/dependencies/auth.py` with `Depends` injection
   - [ ] Implement `api/security/oauth2.py` for OAuth 2.0 support
   - [ ] Implement `api/schemas/auth.py` for token models
   - [ ] Add scope-based permissions (read, write, admin)
   - [ ] Support optional authentication (configurable)
-- [ ] Generate OpenAPI/Swagger documentation
-- [ ] Create simple web UI for feedback management (optional)
+- [ ] Create simple web UI for feedback management - **DEFERRED** (optional)
 
 ### Phase 3: Testing
 
@@ -4288,10 +4303,16 @@ The design prioritizes:
 
 ---
 
-**Document Status**: ✅ Design Confirmed - Ready for Implementation
+**Document Status**: ✅ Phase 1 & 2 Implementation Complete
 **Design Version**: 1.2
 **Finalized Date**: 2025-01-28
-**Next Steps**: Begin Phase 1 implementation (Core Functionality)
+**Implementation Status**:
+- ✅ Phase 1 (Core Functionality) - Complete
+- ✅ Phase 2 (REST API) - Complete
+- ⏳ Phase 3 (Testing) - Partial (API tests complete, integration tests pending)
+- ⏳ Phase 4 (Documentation) - Partial (examples complete, comprehensive docs pending)
+
+**Next Steps**: Complete Phase 3 testing (integration and scenario tests)
 
 **Key Design Decisions**:
 - Hybrid notification approach (Redis Pub/Sub + Polling Fallback) confirmed
@@ -4301,35 +4322,50 @@ The design prioritizes:
 - Channel integration support included
 - Module structure defined: `graflow/hitl/` for core, `graflow/api/` for REST API
 
-**Module Structure Summary**:
+**Module Structure Summary** (Actual Implementation):
 ```
 graflow/
-├── hitl/                      # Core HITL implementation
-│   ├── types.py              # Data types and enums
-│   ├── exceptions.py         # Exceptions
+├── hitl/                      # Core HITL implementation ✅
+│   ├── __init__.py
+│   ├── types.py              # Data types, enums, and exceptions (Pydantic models)
 │   ├── manager.py            # FeedbackManager
-│   └── backends/             # Backend implementations
+│   └── backend/              # Backend implementations (singular, not plural)
+│       ├── __init__.py
 │       ├── base.py           # Abstract interface
-│       ├── filesystem.py     # Filesystem backend (default)
-│       └── redis.py          # Redis backend with Pub/Sub
-├── api/                       # REST API (optional, with OAuth 2.0)
-│   ├── __init__.py           # Minimal package (__all__ = [])
-│   ├── app.py                # create_feedback_api()
+│       ├── filesystem.py     # Filesystem backend (default, JSON files)
+│       └── redis.py          # Redis backend with Pub/Sub and JSON serialization
+├── api/                       # REST API ✅
+│   ├── __init__.py           # Minimal package with docstring only
+│   ├── __main__.py           # CLI entry point (python -m graflow.api)
+│   ├── main.py               # CLI argument parsing and server launch
+│   ├── app.py                # create_feedback_api() factory
 │   ├── endpoints/
 │   │   ├── __init__.py
-│   │   └── feedback.py       # FastAPI router with endpoints
+│   │   └── feedback.py       # FastAPI router with all endpoints
 │   ├── schemas/
-│   │   ├── feedback.py       # Feedback request/response schemas
-│   │   └── auth.py           # OAuth 2.0 token schemas (optional)
-│   ├── dependencies/
-│   │   └── auth.py           # Authentication dependencies (optional)
-│   └── security/
-│       ├── oauth2.py         # OAuth 2.0 implementation (optional)
-│       └── permissions.py    # Scope-based permissions (optional)
-└── core/                      # Core workflow updates
-    ├── context.py            # Add feedback_manager, request_feedback()
-    ├── engine.py             # Handle FeedbackTimeoutException
-    └── checkpoint.py         # Include feedback metadata
+│   │   ├── __init__.py
+│   │   └── feedback.py       # Pydantic schemas with full validation
+│   └── README.md             # API documentation
+└── core/                      # Core workflow updates ✅
+    ├── context.py            # feedback_manager, request_feedback(), convenience methods
+    ├── engine.py             # FeedbackTimeoutError handling
+    └── checkpoint.py         # Feedback metadata in checkpoint state
+```
+
+**Examples** ✅:
+```
+examples/11_hitl/
+├── 01_basic_approval.py          # Basic approval with immediate feedback
+├── 02_timeout_checkpoint.py      # Timeout handling and checkpoint creation
+├── 03_channel_integration.py     # Channel integration for inter-task communication
+└── 04_api_feedback.py            # Distributed feedback via REST API with Redis
+```
+
+**Tests** ✅ (Partial):
+```
+tests/hitl/
+├── test_feedback_manager.py      # FeedbackManager unit tests
+└── test_api.py                    # API endpoint tests (19 test cases)
 ```
 
 **Related Documents**:
