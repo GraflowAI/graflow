@@ -490,8 +490,10 @@ class ExecutionContext:
         from graflow.hitl.manager import FeedbackManager
 
         # Pass channel to FeedbackManager for write_to_channel support
+        # Use same backend as channel for consistency (redis for distributed, filesystem for local)
+        feedback_backend = "redis" if channel_backend == "redis" else "filesystem"
         self.feedback_manager = FeedbackManager(
-            backend=channel_backend,  # Use same backend as channel (memory/redis)
+            backend=feedback_backend,
             backend_config=base_config,
             channel_manager=self.channel
         )
