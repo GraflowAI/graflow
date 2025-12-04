@@ -79,3 +79,4 @@ credentials/
 # Project specific
 examples/gpt_newspaper/backend/outputs/
 feedback_data/
+checkpoints/
