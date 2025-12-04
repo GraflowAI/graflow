@@ -9,7 +9,6 @@ import uuid
 from typing import TYPE_CHECKING, Optional
 
 from graflow.hitl.backend.base import FeedbackBackend
-from graflow.hitl.backend.memory import MemoryFeedbackBackend
 from graflow.hitl.backend.redis import RedisFeedbackBackend
 from graflow.hitl.types import (
     FeedbackRequest,
@@ -29,15 +28,17 @@ class FeedbackManager:
 
     def __init__(
         self,
-        backend: str | FeedbackBackend = "memory",
+        backend: str | FeedbackBackend = "filesystem",
         backend_config: Optional[dict] = None,
         channel_manager: Optional[Channel] = None,
     ):
         """Initialize feedback manager.
 
         Args:
-            backend: Backend instance or "memory"/"redis" string
+            backend: Backend instance or "filesystem"/"redis" string
             backend_config: Backend-specific configuration (used only if backend is a string)
+                - filesystem: {"data_dir": "feedback_data"}
+                - redis: {"redis_client": redis.Redis, "host": "localhost", "port": 6379, "db": 0, "expiration_days": 7}
             channel_manager: Optional Channel instance for writing feedback to channels
         """
         self.channel_manager = channel_manager
@@ -45,8 +46,12 @@ class FeedbackManager:
         # Initialize backend
         if isinstance(backend, FeedbackBackend):
             self._backend = backend
-        elif backend == "memory":
-            self._backend = MemoryFeedbackBackend()
+        elif backend == "filesystem":
+            from graflow.hitl.backend.filesystem import FilesystemFeedbackBackend
+            backend_config = backend_config or {}
+            self._backend = FilesystemFeedbackBackend(
+                data_dir=backend_config.get("data_dir", "feedback_data")
+            )
         elif backend == "redis":
             backend_config = backend_config or {}
             self._backend = RedisFeedbackBackend(
@@ -57,7 +62,7 @@ class FeedbackManager:
                 expiration_days=backend_config.get("expiration_days", 7),
             )
         else:
-            raise ValueError(f"Unsupported backend: {backend}")
+            raise ValueError(f"Unsupported backend: {backend}. Use 'filesystem' or 'redis'.")
 
     def request_feedback(
         self,
@@ -251,6 +256,36 @@ class FeedbackManager:
             List of pending FeedbackRequest objects
         """
         return self._backend.list_pending_requests(session_id)
+
+    def get_request(self, feedback_id: str) -> Optional[FeedbackRequest]:
+        """Get feedback request by ID.
+
+        Args:
+            feedback_id: Feedback request ID
+
+        Returns:
+            FeedbackRequest if found, None otherwise
+        """
+        return self._backend.get_request(feedback_id)
+
+    def get_response(self, feedback_id: str) -> Optional[FeedbackResponse]:
+        """Get feedback response by ID.
+
+        Args:
+            feedback_id: Feedback request ID
+
+        Returns:
+            FeedbackResponse if found, None otherwise
+        """
+        return self._backend.get_response(feedback_id)
+
+    def update_request(self, request: FeedbackRequest) -> None:
+        """Update feedback request in backend.
+
+        Args:
+            request: FeedbackRequest to update
+        """
+        self._backend.store_request(request)
 
     def _poll_for_response(
         self,
