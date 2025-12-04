@@ -5,6 +5,8 @@ from __future__ import annotations
 import threading
 import time
 
+import pytest
+
 from graflow.hitl.manager import FeedbackManager
 from graflow.hitl.types import (
     FeedbackResponse,
@@ -13,12 +15,21 @@ from graflow.hitl.types import (
 )
 
 
-class TestFeedbackManagerMemory:
-    """Tests for FeedbackManager with memory backend."""
+@pytest.fixture
+def feedback_manager(tmp_path):
+    """Create a FeedbackManager with filesystem backend in temp directory."""
+    return FeedbackManager(
+        backend="filesystem",
+        backend_config={"data_dir": str(tmp_path / "feedback_data")}
+    )
 
-    def test_create_feedback_request(self):
+
+class TestFeedbackManagerFilesystem:
+    """Tests for FeedbackManager with filesystem backend."""
+
+    def test_create_feedback_request(self, feedback_manager):
         """Test creating a feedback request."""
-        manager = FeedbackManager(backend="memory")
+        manager = feedback_manager
 
         # Create a request in a thread (since request_feedback blocks)
         result = []
@@ -57,9 +68,9 @@ class TestFeedbackManagerMemory:
         assert isinstance(exception[0], FeedbackTimeoutError)
         assert len(result) == 0
 
-    def test_provide_feedback(self):
+    def test_provide_feedback(self, feedback_manager):
         """Test providing feedback response."""
-        manager = FeedbackManager(backend="memory")
+        manager = feedback_manager
 
         result = []
 
@@ -103,9 +114,9 @@ class TestFeedbackManagerMemory:
         assert result[0].approved is True
         assert result[0].reason == "Looks good"
 
-    def test_response_persistence(self):
+    def test_response_persistence(self, feedback_manager):
         """Test that responses persist and can be retrieved by feedback_id."""
-        manager = FeedbackManager(backend="memory")
+        manager = feedback_manager
 
         # First request
         result1 = []
@@ -148,9 +159,9 @@ class TestFeedbackManagerMemory:
         assert existing_response is not None
         assert existing_response.approved is True
 
-    def test_text_feedback(self):
+    def test_text_feedback(self, feedback_manager):
         """Test text feedback type."""
-        manager = FeedbackManager(backend="memory")
+        manager = feedback_manager
 
         result = []
 
@@ -182,9 +193,9 @@ class TestFeedbackManagerMemory:
         assert len(result) == 1
         assert result[0].text == "This is my comment"
 
-    def test_selection_feedback(self):
+    def test_selection_feedback(self, feedback_manager):
         """Test selection feedback type."""
-        manager = FeedbackManager(backend="memory")
+        manager = feedback_manager
 
         result = []
 
@@ -217,9 +228,9 @@ class TestFeedbackManagerMemory:
         assert len(result) == 1
         assert result[0].selected == "Option B"
 
-    def test_session_filtering(self):
+    def test_session_filtering(self, feedback_manager):
         """Test filtering pending requests by session_id."""
-        manager = FeedbackManager(backend="memory")
+        manager = feedback_manager
 
         # Create requests in different sessions
         threads = []
@@ -255,13 +266,17 @@ class TestFeedbackManagerMemory:
         for thread in threads:
             thread.join(timeout=2.0)
 
-    def test_write_to_channel(self):
+    def test_write_to_channel(self, tmp_path):
         """Test automatic writing of feedback to channel."""
         from graflow.channels.memory_channel import MemoryChannel
 
         # Create manager with channel
         channel = MemoryChannel(name="test_channel")
-        manager = FeedbackManager(backend="memory", channel_manager=channel)
+        manager = FeedbackManager(
+            backend="filesystem",
+            backend_config={"data_dir": str(tmp_path / "feedback_data")},
+            channel_manager=channel
+        )
 
         result = []
 
@@ -369,7 +384,7 @@ class TestConvenienceMethods:
         exec_context = ExecutionContext.create(
             graph=graph,
             start_node="test",  # task_id
-            channel_backend="memory",  # Feedback uses same backend as channel
+            channel_backend="memory",
         )
         task_context = TaskExecutionContext("test", exec_context)
 
@@ -415,7 +430,7 @@ class TestConvenienceMethods:
         exec_context = ExecutionContext.create(
             graph=graph,
             start_node="test",  # task_id
-            channel_backend="memory",  # Feedback uses same backend as channel
+            channel_backend="memory",
         )
         task_context = TaskExecutionContext("test", exec_context)
 
