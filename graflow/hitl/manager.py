@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
+import secrets
+import string
 import threading
 import time
-import uuid
 from typing import TYPE_CHECKING, Optional
 
 from graflow.hitl.backend.base import FeedbackBackend
@@ -97,7 +98,7 @@ class FeedbackManager:
             FeedbackTimeoutException: If timeout exceeded without response
         """
         # Generate feedback ID
-        feedback_id = f"{task_id}_{uuid.uuid4().hex[:8]}"
+        feedback_id = _generate_token(16) # 16-character hex ID
 
         # Check if response already exists (resume case)
         existing_response = self._backend.get_response(feedback_id)
@@ -349,3 +350,8 @@ class FeedbackManager:
             pass
 
         return None
+
+@staticmethod
+def _generate_token(length: int = 16) -> str:
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(length))
