@@ -322,7 +322,7 @@ def main():
             return "result_3"
 
         # Define parallel execution with Redis backend
-        parallel_tasks = (test_task_1 | test_task_2 | test_task_3).set_group_name("parallel_tasks").with_execution(backend=CoordinationBackend.REDIS)  # noqa: F841
+        _ = (test_task_1 | test_task_2 | test_task_3).set_group_name("parallel_tasks").with_execution(backend=CoordinationBackend.REDIS)
 
         # Step 2: Execute workflow
         print("\nStep 2: Executing workflow with Redis backend")
