@@ -46,7 +46,7 @@ class FilesystemFeedbackBackend(FeedbackBackend):
         logger.info(
             "Initialized FilesystemFeedbackBackend with data_dir=%s",
             self.data_dir,
-            extra={"data_dir": str(self.data_dir)}
+            extra={"data_dir": str(self.data_dir)},
         )
 
     def store_request(self, request: FeedbackRequest) -> None:
@@ -58,7 +58,7 @@ class FilesystemFeedbackBackend(FeedbackBackend):
         file_path = self.requests_dir / f"{request.feedback_id}.json"
 
         try:
-            with open(file_path, 'w') as f:
+            with open(file_path, "w") as f:
                 # Acquire exclusive lock
                 fcntl.flock(f.fileno(), fcntl.LOCK_EX)
                 try:
@@ -71,14 +71,14 @@ class FilesystemFeedbackBackend(FeedbackBackend):
                 "Stored feedback request %s to %s",
                 request.feedback_id,
                 file_path,
-                extra={"feedback_id": request.feedback_id, "file_path": str(file_path)}
+                extra={"feedback_id": request.feedback_id, "file_path": str(file_path)},
             )
         except Exception as e:
             logger.error(
                 "Failed to store request %s: %s",
                 request.feedback_id,
                 str(e),
-                extra={"feedback_id": request.feedback_id, "error": str(e)}
+                extra={"feedback_id": request.feedback_id, "error": str(e)},
             )
             raise
 
@@ -97,7 +97,7 @@ class FilesystemFeedbackBackend(FeedbackBackend):
             return None
 
         try:
-            with open(file_path, 'r') as f:
+            with open(file_path) as f:
                 # Acquire shared lock for reading
                 fcntl.flock(f.fileno(), fcntl.LOCK_SH)
                 try:
@@ -112,7 +112,7 @@ class FilesystemFeedbackBackend(FeedbackBackend):
                 "Failed to load request %s: %s",
                 feedback_id,
                 str(e),
-                extra={"feedback_id": feedback_id, "error": str(e)}
+                extra={"feedback_id": feedback_id, "error": str(e)},
             )
             return None
 
@@ -125,7 +125,7 @@ class FilesystemFeedbackBackend(FeedbackBackend):
         file_path = self.responses_dir / f"{response.feedback_id}.json"
 
         try:
-            with open(file_path, 'w') as f:
+            with open(file_path, "w") as f:
                 # Acquire exclusive lock
                 fcntl.flock(f.fileno(), fcntl.LOCK_EX)
                 try:
@@ -138,14 +138,14 @@ class FilesystemFeedbackBackend(FeedbackBackend):
                 "Stored feedback response %s to %s",
                 response.feedback_id,
                 file_path,
-                extra={"feedback_id": response.feedback_id, "file_path": str(file_path)}
+                extra={"feedback_id": response.feedback_id, "file_path": str(file_path)},
             )
         except Exception as e:
             logger.error(
                 "Failed to store response %s: %s",
                 response.feedback_id,
                 str(e),
-                extra={"feedback_id": response.feedback_id, "error": str(e)}
+                extra={"feedback_id": response.feedback_id, "error": str(e)},
             )
             raise
 
@@ -164,7 +164,7 @@ class FilesystemFeedbackBackend(FeedbackBackend):
             return None
 
         try:
-            with open(file_path, 'r') as f:
+            with open(file_path) as f:
                 # Acquire shared lock for reading
                 fcntl.flock(f.fileno(), fcntl.LOCK_SH)
                 try:
@@ -179,7 +179,7 @@ class FilesystemFeedbackBackend(FeedbackBackend):
                 "Failed to load response %s: %s",
                 feedback_id,
                 str(e),
-                extra={"feedback_id": feedback_id, "error": str(e)}
+                extra={"feedback_id": feedback_id, "error": str(e)},
             )
             return None
 
@@ -226,7 +226,7 @@ class FilesystemFeedbackBackend(FeedbackBackend):
                         "Failed to load request from %s: %s",
                         file_path,
                         str(e),
-                        extra={"file_path": str(file_path), "error": str(e)}
+                        extra={"file_path": str(file_path), "error": str(e)},
                     )
                     # Continue with other files
 

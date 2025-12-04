@@ -97,10 +97,8 @@ class FeedbackTimeoutError(Exception):
     def __init__(self, feedback_id: str, timeout: float):
         self.feedback_id = feedback_id
         self.timeout = timeout
-        super().__init__(
-            f"Feedback request {feedback_id} timed out after {timeout} seconds"
-        )
+        super().__init__(f"Feedback request {feedback_id} timed out after {timeout} seconds")
 
-    def __reduce__(self):
+    def __reduce__(self) -> tuple[type[FeedbackTimeoutError], tuple[str, float]]:
         """Allow pickling of this exception."""
         return (self.__class__, (self.feedback_id, self.timeout))

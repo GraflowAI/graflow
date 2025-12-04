@@ -51,9 +51,7 @@ class FeedbackBackend(ABC):
         """
 
     @abstractmethod
-    def list_pending_requests(
-        self, session_id: Optional[str] = None
-    ) -> list[FeedbackRequest]:
+    def list_pending_requests(self, session_id: Optional[str] = None) -> list[FeedbackRequest]:
         """List pending requests, optionally scoped by session.
 
         Args:
@@ -74,9 +72,7 @@ class FeedbackBackend(ABC):
         """
         # Default: no-op for backends without notifications
 
-    def start_listener(
-        self, feedback_id: str, notification_event: threading.Event
-    ) -> Optional[threading.Thread]:
+    def start_listener(self, feedback_id: str, notification_event: threading.Event) -> Optional[threading.Thread]:
         """Start background listener to set notification_event when response arrives.
 
         Args:

@@ -48,6 +48,7 @@ class FeedbackManager:
             self._backend = backend
         elif backend == "filesystem":
             from graflow.hitl.backend.filesystem import FilesystemFeedbackBackend
+
             backend_config = backend_config or {}
             self._backend = FilesystemFeedbackBackend(
                 data_dir=backend_config.get("data_dir", "feedback_data")
@@ -104,7 +105,7 @@ class FeedbackManager:
             logger.info(
                 "Found existing response for %s",
                 feedback_id,
-                extra={"feedback_id": feedback_id, "session_id": session_id}
+                extra={"feedback_id": feedback_id, "session_id": session_id},
             )
             return existing_response
 
@@ -317,7 +318,7 @@ class FeedbackManager:
                         "Received feedback response for %s after %.1f seconds",
                         feedback_id,
                         elapsed,
-                        extra={"feedback_id": feedback_id, "elapsed": elapsed}
+                        extra={"feedback_id": feedback_id, "elapsed": elapsed},
                     )
                     return response
 
@@ -333,7 +334,7 @@ class FeedbackManager:
                                 "Received feedback response for %s via notification after %.1f seconds",
                                 feedback_id,
                                 elapsed,
-                                extra={"feedback_id": feedback_id, "elapsed": elapsed, "via": "notification"}
+                                extra={"feedback_id": feedback_id, "elapsed": elapsed, "via": "notification"},
                             )
                             return response
                         # Clear event and continue waiting
