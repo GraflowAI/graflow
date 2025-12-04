@@ -283,6 +283,7 @@ class TaskExecutionContext:
         Returns:
             True if approved, False if rejected
         """
+        from graflow.hitl.types import FeedbackType
         response = self.request_feedback(
             feedback_type=FeedbackType.APPROVAL,
             prompt=prompt,
@@ -302,6 +303,7 @@ class TaskExecutionContext:
         write_to_channel: bool = False,
     ) -> str:
         """Request free-form text input."""
+        from graflow.hitl.types import FeedbackType
         response = self.request_feedback(
             feedback_type=FeedbackType.TEXT,
             prompt=prompt,
@@ -322,6 +324,7 @@ class TaskExecutionContext:
         write_to_channel: bool = False,
     ) -> str:
         """Request selection from provided options."""
+        from graflow.hitl.types import FeedbackType
         response = self.request_feedback(
             feedback_type=FeedbackType.SELECTION,
             prompt=prompt,
