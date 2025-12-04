@@ -278,6 +278,12 @@ class FeedbackManager:
                 # Check for response
                 response = self._backend.get_response(feedback_id)
                 if response:
+                    logger.info(
+                        "Received feedback response for %s after %.1f seconds",
+                        feedback_id,
+                        elapsed,
+                        extra={"feedback_id": feedback_id, "elapsed": elapsed}
+                    )
                     return response
 
                 # Wait for notification or poll interval
@@ -288,6 +294,12 @@ class FeedbackManager:
                         # Notification received, fetch response
                         response = self._backend.get_response(feedback_id)
                         if response:
+                            logger.info(
+                                "Received feedback response for %s via notification after %.1f seconds",
+                                feedback_id,
+                                elapsed,
+                                extra={"feedback_id": feedback_id, "elapsed": elapsed, "via": "notification"}
+                            )
                             return response
                         # Clear event and continue waiting
                         notification_event.clear()
