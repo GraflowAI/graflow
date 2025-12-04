@@ -128,21 +128,31 @@ class RedisFeedbackBackend(FeedbackBackend):
 
         requests: list[FeedbackRequest] = []
         for key in keys:  # type: ignore
-            data_json = self._redis_client.get(key)
-            if not data_json:
+            try:
+                data_json = self._redis_client.get(key)
+                if not data_json:
+                    continue
+
+                request = FeedbackRequest.model_validate_json(str(data_json))
+
+                # Filter by status
+                if request.status != "pending":
+                    continue
+
+                # Filter by session_id if provided
+                if session_id and request.session_id != session_id:
+                    continue
+
+                requests.append(request)
+            except Exception as e:
+                # Skip keys that can't be read (wrong type, corrupted, etc.)
+                logger.warning(
+                    "Failed to read feedback request from key %s: %s. Skipping.",
+                    key,
+                    str(e),
+                    extra={"key": key, "error": str(e)}
+                )
                 continue
-
-            request = FeedbackRequest.model_validate_json(str(data_json))
-
-            # Filter by status
-            if request.status != "pending":
-                continue
-
-            # Filter by session_id if provided
-            if session_id and request.session_id != session_id:
-                continue
-
-            requests.append(request)
 
         return requests
 
