@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any, Optional
+
+from pydantic import BaseModel, Field
 
 
 class FeedbackType(Enum):
@@ -18,8 +19,7 @@ class FeedbackType(Enum):
     CUSTOM = "custom"  # Custom feedback structure
 
 
-@dataclass
-class FeedbackRequest:
+class FeedbackRequest(BaseModel):
     """Represents a feedback request."""
 
     feedback_id: str  # Unique request ID
@@ -28,8 +28,8 @@ class FeedbackRequest:
     feedback_type: FeedbackType  # Type of feedback
     prompt: str  # Prompt for human
     options: Optional[list[str]] = None  # Options for selection types
-    metadata: dict[str, Any] = field(default_factory=dict)  # Custom metadata
-    created_at: str = field(default_factory=lambda: datetime.now().isoformat())
+    metadata: dict[str, Any] = Field(default_factory=dict)  # Custom metadata
+    created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     timeout: float = 180.0  # Polling timeout in seconds (default: 3 minutes)
     status: str = "pending"  # pending, completed, timeout, cancelled
 
@@ -39,31 +39,20 @@ class FeedbackRequest:
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for storage."""
-        return {
-            "feedback_id": self.feedback_id,
-            "task_id": self.task_id,
-            "session_id": self.session_id,
-            "feedback_type": self.feedback_type.value,
-            "prompt": self.prompt,
-            "options": self.options,
-            "metadata": self.metadata,
-            "created_at": self.created_at,
-            "timeout": self.timeout,
-            "status": self.status,
-            "channel_key": self.channel_key,
-            "write_to_channel": self.write_to_channel,
-        }
+        data = self.model_dump()
+        data["feedback_type"] = self.feedback_type.value
+        return data
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> FeedbackRequest:
         """Restore from dictionary."""
         data = data.copy()
-        data["feedback_type"] = FeedbackType(data["feedback_type"])
+        if isinstance(data.get("feedback_type"), str):
+            data["feedback_type"] = FeedbackType(data["feedback_type"])
         return cls(**data)
 
 
-@dataclass
-class FeedbackResponse:
+class FeedbackResponse(BaseModel):
     """Represents a feedback response."""
 
     feedback_id: str  # Request ID
@@ -84,29 +73,21 @@ class FeedbackResponse:
     custom_data: Optional[dict[str, Any]] = None
 
     # Metadata
-    responded_at: str = field(default_factory=lambda: datetime.now().isoformat())
+    responded_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     responded_by: Optional[str] = None  # User ID or system identifier
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for storage."""
-        return {
-            "feedback_id": self.feedback_id,
-            "response_type": self.response_type.value,
-            "approved": self.approved,
-            "reason": self.reason,
-            "text": self.text,
-            "selected": self.selected,
-            "selected_multiple": self.selected_multiple,
-            "custom_data": self.custom_data,
-            "responded_at": self.responded_at,
-            "responded_by": self.responded_by,
-        }
+        data = self.model_dump()
+        data["response_type"] = self.response_type.value
+        return data
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> FeedbackResponse:
         """Restore from dictionary."""
         data = data.copy()
-        data["response_type"] = FeedbackType(data["response_type"])
+        if isinstance(data.get("response_type"), str):
+            data["response_type"] = FeedbackType(data["response_type"])
         return cls(**data)
 
 
