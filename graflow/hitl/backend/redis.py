@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 from typing import TYPE_CHECKING, Optional
 
@@ -11,17 +12,20 @@ from graflow.hitl.types import FeedbackRequest, FeedbackResponse
 if TYPE_CHECKING:
     import redis
 
+logger = logging.getLogger(__name__)
+
 
 class RedisFeedbackBackend(FeedbackBackend):
     """Redis-based feedback storage backend.
 
-    This backend stores feedback requests and responses in Redis.
+    This backend stores feedback requests and responses in Redis as JSON strings.
     Suitable for distributed workflows with multiple workers.
 
     Features:
     - Persistent storage across process restarts
     - Pub/Sub notifications for real-time feedback delivery
     - Automatic expiration (7 days default)
+    - JSON serialization for simple storage and retrieval
     """
 
     def __init__(
@@ -44,10 +48,7 @@ class RedisFeedbackBackend(FeedbackBackend):
         try:
             import redis as redis_module
         except ImportError as e:
-            raise ImportError(
-                "Redis backend requires redis package. "
-                "Install with: pip install redis"
-            ) from e
+            raise ImportError("Redis backend requires redis package. Install with: pip install redis") from e
 
         self._redis_client: redis.Redis = redis_client or redis_module.Redis(
             host=host,
@@ -59,60 +60,102 @@ class RedisFeedbackBackend(FeedbackBackend):
         self._pubsub = self._redis_client.pubsub()
 
     def store_request(self, request: FeedbackRequest) -> None:
-        """Store feedback request in Redis."""
+        """Store feedback request in Redis as JSON.
+
+        Args:
+            request: FeedbackRequest to store
+        """
         key = f"feedback:request:{request.feedback_id}"
-        self._redis_client.hset(key, mapping=request.to_dict())
+        data_json = request.model_dump_json()
+        self._redis_client.set(key, data_json)
         self._redis_client.expire(key, self._expiration_seconds)
 
     def get_request(self, feedback_id: str) -> Optional[FeedbackRequest]:
-        """Get feedback request from Redis."""
+        """Get feedback request from Redis.
+
+        Args:
+            feedback_id: Feedback request ID
+
+        Returns:
+            FeedbackRequest if found, None otherwise
+        """
         key = f"feedback:request:{feedback_id}"
-        data = self._redis_client.hgetall(key)
-        if data:
-            return FeedbackRequest.from_dict(data)  # type: ignore
-        return None
+        data_json = self._redis_client.get(key)
+        if not data_json:
+            return None
+
+        return FeedbackRequest.model_validate_json(str(data_json))
 
     def store_response(self, response: FeedbackResponse) -> None:
-        """Store feedback response in Redis."""
+        """Store feedback response in Redis as JSON.
+
+        Args:
+            response: FeedbackResponse to store
+        """
         key = f"feedback:response:{response.feedback_id}"
-        self._redis_client.hset(key, mapping=response.to_dict())
+        data_json = response.model_dump_json()
+        self._redis_client.set(key, data_json)
         self._redis_client.expire(key, self._expiration_seconds)
 
     def get_response(self, feedback_id: str) -> Optional[FeedbackResponse]:
-        """Get feedback response from Redis."""
-        key = f"feedback:response:{feedback_id}"
-        data = self._redis_client.hgetall(key)
-        if data:
-            return FeedbackResponse.from_dict(data)  # type: ignore
-        return None
+        """Get feedback response from Redis.
 
-    def list_pending_requests(
-        self, session_id: Optional[str] = None
-    ) -> list[FeedbackRequest]:
-        """List pending feedback requests from Redis."""
+        Args:
+            feedback_id: Feedback request ID
+
+        Returns:
+            FeedbackResponse if found, None otherwise
+        """
+        key = f"feedback:response:{feedback_id}"
+        data_json = self._redis_client.get(key)
+        if not data_json:
+            return None
+
+        return FeedbackResponse.model_validate_json(str(data_json))
+
+    def list_pending_requests(self, session_id: Optional[str] = None) -> list[FeedbackRequest]:
+        """List pending feedback requests from Redis.
+
+        Args:
+            session_id: Optional filter by session ID
+
+        Returns:
+            List of pending FeedbackRequest objects
+        """
         keys = self._redis_client.keys("feedback:request:*")
-        if keys is None:
+        if not keys:
             return []
 
-        requests = []
+        requests: list[FeedbackRequest] = []
         for key in keys:  # type: ignore
-            data = self._redis_client.hgetall(key)
-            if data and data.get("status") == "pending":  # type: ignore
-                requests.append(FeedbackRequest.from_dict(data))  # type: ignore
+            data_json = self._redis_client.get(key)
+            if not data_json:
+                continue
 
-        # Filter by session_id if provided
-        if session_id:
-            requests = [req for req in requests if req.session_id == session_id]
+            request = FeedbackRequest.model_validate_json(str(data_json))
+
+            # Filter by status
+            if request.status != "pending":
+                continue
+
+            # Filter by session_id if provided
+            if session_id and request.session_id != session_id:
+                continue
+
+            requests.append(request)
 
         return requests
 
     def publish(self, feedback_id: str) -> None:
-        """Publish notification via Redis Pub/Sub."""
-        self._redis_client.publish(f"feedback:{feedback_id}", "completed")
+        """Publish notification via Redis Pub/Sub.
 
-    def start_listener(
-        self, feedback_id: str, notification_event: threading.Event
-    ) -> Optional[threading.Thread]:
+        Args:
+            feedback_id: Feedback request ID to publish notification for
+        """
+        channel = f"feedback:{feedback_id}"
+        self._redis_client.publish(channel, "completed")
+
+    def start_listener(self, feedback_id: str, notification_event: threading.Event) -> Optional[threading.Thread]:
         """Start Redis Pub/Sub listener for feedback notifications.
 
         Args:
@@ -120,28 +163,57 @@ class RedisFeedbackBackend(FeedbackBackend):
             notification_event: Event to set when notification arrives
 
         Returns:
-            Thread object that is listening for notifications
+            Thread object that is listening for notifications, or None if failed
         """
         channel = f"feedback:{feedback_id}"
-        self._pubsub.subscribe(channel)
 
-        def listener_thread():
+        try:
+            self._pubsub.subscribe(channel)
+        except Exception as e:
+            logger.warning(
+                "Failed to subscribe to Redis channel %s: %s",
+                channel,
+                str(e),
+                extra={"feedback_id": feedback_id, "channel": channel, "error": str(e)},
+            )
+            return None
+
+        def listener_thread() -> None:
             """Background thread listening for Redis Pub/Sub messages."""
             try:
                 for message in self._pubsub.listen():
-                    if message and message["type"] == "message":
+                    if message and message.get("type") == "message":
                         notification_event.set()
                         break
+            except Exception as e:
+                logger.warning(
+                    "Error in Redis Pub/Sub listener for %s: %s",
+                    feedback_id,
+                    str(e),
+                    extra={"feedback_id": feedback_id, "channel": channel, "error": str(e)},
+                )
             finally:
-                self._pubsub.unsubscribe(channel)
+                try:
+                    self._pubsub.unsubscribe(channel)
+                except Exception as e:
+                    logger.debug(
+                        "Failed to unsubscribe from channel %s: %s",
+                        channel,
+                        str(e),
+                        extra={"feedback_id": feedback_id, "channel": channel, "error": str(e)},
+                    )
 
         thread = threading.Thread(target=listener_thread, daemon=True)
         thread.start()
         return thread
 
     def close(self) -> None:
-        """Close Redis connections."""
+        """Close Redis connections and cleanup resources."""
         try:
             self._pubsub.close()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(
+                "Error closing Redis Pub/Sub connection: %s",
+                str(e),
+                extra={"error": str(e)},
+            )
