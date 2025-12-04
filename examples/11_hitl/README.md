@@ -49,18 +49,18 @@ Demonstrates:
 python examples/11_hitl/03_channel_integration.py
 ```
 
-### 04_api_server.py + 05_distributed_feedback.py
+### 04_api_feedback.py
 **Distributed feedback via REST API**
 
 Demonstrates:
-- Running FastAPI server for feedback management
+- Using the Feedback API server for workflow feedback
 - Distributed execution with Redis backend
 - External feedback submission via HTTP API
 - Cross-process communication
 
 **Requirements:**
 ```bash
-pip install fastapi uvicorn redis
+uv sync --all-extras
 ```
 
 **Setup:**
@@ -71,12 +71,12 @@ pip install fastapi uvicorn redis
 
 2. Start API server (Terminal 1):
    ```bash
-   python examples/11_hitl/04_api_server.py
+   .venv/bin/python -m graflow.api --backend redis --redis-host localhost --redis-port 6379
    ```
 
 3. Run workflow (Terminal 2):
    ```bash
-   python examples/11_hitl/05_distributed_feedback.py
+   .venv/bin/python examples/11_hitl/04_api_feedback.py
    ```
 
 4. Provide feedback via API (Terminal 3):
@@ -99,11 +99,30 @@ pip install fastapi uvicorn redis
 
 ## API Usage
 
-### Creating Feedback API
+### Starting the Feedback API Server
 
+**Using CLI (Recommended):**
+```bash
+# Filesystem backend (local development)
+.venv/bin/python -m graflow.api --backend filesystem
+
+# Redis backend (distributed/production)
+.venv/bin/python -m graflow.api --backend redis --redis-host localhost --redis-port 6379
+
+# With custom configuration
+.venv/bin/python -m graflow.api \
+  --backend redis \
+  --redis-host localhost \
+  --redis-port 6379 \
+  --host 0.0.0.0 \
+  --port 8080 \
+  --enable-cors
+```
+
+**Programmatic Usage:**
 ```python
 import redis
-from graflow.api import create_feedback_api
+from graflow.api.app import create_feedback_api
 
 # Create Redis client
 redis_client = redis.Redis(
@@ -115,8 +134,8 @@ redis_client = redis.Redis(
 
 # Create FastAPI app
 app = create_feedback_api(
-    redis_client=redis_client,
-    feedback_backend="redis"
+    feedback_backend="redis",
+    feedback_config={"redis_client": redis_client}
 )
 
 # Run with uvicorn

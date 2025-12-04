@@ -1,20 +1,20 @@
-"""Distributed HITL Feedback Example.
+"""HITL Feedback API Example.
 
 This example demonstrates workflow execution with feedback requests
 that can be answered via REST API from another process.
 
 Requirements:
-    pip install redis
+    uv sync --all-extras
 
 Usage:
     1. Start Redis:
        docker run -p 6379:6379 redis:7.2
 
     2. Start the API server (in another terminal):
-       python examples/11_hitl/04_api_server.py
+       python -m graflow.api --backend redis --redis-host localhost --redis-port 6379
 
     3. Run this workflow:
-       python examples/11_hitl/05_distributed_feedback.py
+       PYTHONPATH=. python examples/11_hitl/04_api_feedback.py
 
     4. The workflow will wait for feedback. Provide it via API:
        # List pending requests
@@ -63,7 +63,7 @@ def main():
         return
 
     print("\n[Setup] Make sure API server is running:")
-    print("        python examples/11_hitl/04_api_server.py")
+    print("        python -m graflow.api --backend redis --redis-host localhost --redis-port 6379")
     print()
 
     # Create workflow
@@ -157,7 +157,7 @@ def main():
                 return {"status": "cancelled"}
 
         # Define workflow
-        prepare_deployment >> request_approval >> execute_deployment
+        _ = prepare_deployment >> request_approval >> execute_deployment
 
         # Execute with Redis backend
         print("\n" + "=" * 80)
