@@ -23,6 +23,7 @@ from graflow.trace.noop import NoopTracer
 
 if TYPE_CHECKING:
     from graflow.core.task import Executable
+    from graflow.hitl.types import FeedbackResponse, FeedbackType
     from graflow.llm.agents.base import LLMAgent
     from graflow.llm.client import LLMClient
     from graflow.trace.base import Tracer
@@ -170,6 +171,169 @@ class TaskExecutionContext:
     def elapsed_time(self) -> float:
         """Get elapsed time since task started."""
         return time.time() - self.start_time
+
+    # === HITL (Human-in-the-Loop) integration ===
+
+    def request_feedback(
+        self,
+        feedback_type: str | FeedbackType,  # str or FeedbackType enum
+        prompt: str,
+        options: Optional[list[str]] = None,
+        metadata: Optional[dict] = None,
+        timeout: float = 180.0,  # Default: 3 minutes
+        channel_key: Optional[str] = None,
+        write_to_channel: bool = False,
+    ) -> FeedbackResponse:
+        """Request human feedback.
+
+        Args:
+            feedback_type: Type of feedback ("approval", "text", "selection", etc.) or FeedbackType enum
+            prompt: Prompt for human
+            options: Options for selection types
+            metadata: Custom metadata
+            timeout: Polling timeout in seconds (default: 180 / 3 minutes)
+            channel_key: Optional channel key to write response to
+            write_to_channel: Whether to auto-write response to channel
+
+        Returns:
+            FeedbackResponse
+
+        Raises:
+            FeedbackTimeoutError: If timeout exceeded
+
+        Example:
+            ```python
+            @task(inject_context=True)
+            def my_task(context):
+                # Approval feedback
+                response = context.request_feedback(
+                    feedback_type="approval",
+                    prompt="Approve this deployment?",
+                    timeout=180
+                )
+                if response.approved:
+                    deploy()
+
+                # Text input
+                response = context.request_feedback(
+                    feedback_type="text",
+                    prompt="Enter your comment:",
+                    timeout=180
+                )
+                comment = response.text
+
+                # Selection
+                response = context.request_feedback(
+                    feedback_type="selection",
+                    prompt="Choose mode:",
+                    options=["fast", "balanced", "thorough"],
+                    timeout=180
+                )
+                mode = response.selected
+
+                # With channel integration
+                response = context.request_feedback(
+                    feedback_type="approval",
+                    prompt="Approve deployment?",
+                    channel_key="deployment_approved",
+                    write_to_channel=True,
+                    timeout=180
+                )
+                # Response automatically written to channel["deployment_approved"]
+            ```
+        """
+        # Convert string to enum
+        if isinstance(feedback_type, str):
+            from graflow.hitl.types import FeedbackType
+            feedback_type = FeedbackType(feedback_type)
+
+        # Get feedback manager from execution context
+        feedback_manager = self.execution_context.feedback_manager
+
+        # Request feedback
+        return feedback_manager.request_feedback(
+            task_id=self.task_id,
+            session_id=self.execution_context.session_id,
+            feedback_type=feedback_type,
+            prompt=prompt,
+            options=options,
+            metadata=metadata,
+            timeout=timeout,
+            channel_key=channel_key,
+            write_to_channel=write_to_channel,
+        )
+
+    def request_approval(
+        self,
+        prompt: str,
+        metadata: Optional[dict] = None,
+        timeout: float = 180.0,  # Default: 3 minutes
+        channel_key: Optional[str] = None,
+        write_to_channel: bool = False,
+    ) -> bool:
+        """Request approval (convenience method).
+
+        Args:
+            prompt: Approval prompt
+            metadata: Custom metadata
+            timeout: Polling timeout
+            channel_key: Optional channel key to write response to
+            write_to_channel: Whether to auto-write to channel
+
+        Returns:
+            True if approved, False if rejected
+        """
+        response = self.request_feedback(
+            feedback_type=FeedbackType.APPROVAL,
+            prompt=prompt,
+            metadata=metadata,
+            timeout=timeout,
+            channel_key=channel_key,
+            write_to_channel=write_to_channel,
+        )
+        return bool(response.approved)
+
+    def request_text_input(
+        self,
+        prompt: str,
+        metadata: Optional[dict[str, Any]] = None,
+        timeout: float = 180.0,
+        channel_key: Optional[str] = None,
+        write_to_channel: bool = False,
+    ) -> str:
+        """Request free-form text input."""
+        response = self.request_feedback(
+            feedback_type=FeedbackType.TEXT,
+            prompt=prompt,
+            metadata=metadata,
+            timeout=timeout,
+            channel_key=channel_key,
+            write_to_channel=write_to_channel,
+        )
+        return response.text or ""
+
+    def request_selection(
+        self,
+        prompt: str,
+        options: list[str],
+        metadata: Optional[dict[str, Any]] = None,
+        timeout: float = 180.0,
+        channel_key: Optional[str] = None,
+        write_to_channel: bool = False,
+    ) -> str:
+        """Request selection from provided options."""
+        response = self.request_feedback(
+            feedback_type=FeedbackType.SELECTION,
+            prompt=prompt,
+            options=options,
+            metadata=metadata,
+            timeout=timeout,
+            channel_key=channel_key,
+            write_to_channel=write_to_channel,
+        )
+        return response.selected or ""
+
+    # === Checkpointing ===
 
     def checkpoint(
         self,
@@ -319,6 +483,16 @@ class ExecutionContext:
         self._llm_agents: Dict[str, Any] = {}  # LLMAgent registry
         self._llm_agents_yaml: Dict[str, str] = {}  # YAML serialization cache
 
+        # HITL (Human-in-the-Loop) integration
+        from graflow.hitl.manager import FeedbackManager
+
+        # Pass channel to FeedbackManager for write_to_channel support
+        self.feedback_manager = FeedbackManager(
+            backend=channel_backend,  # Use same backend as channel (memory/redis)
+            backend_config=base_config,
+            channel_manager=self.channel
+        )
+
     def create_branch_context(self, branch_id: str) -> ExecutionContext:
         """Create a child execution context for parallel execution.
 
@@ -411,6 +585,15 @@ class ExecutionContext:
             context = ExecutionContext.create(
                 graph, start_node,
                 llm_client=llm_client
+            )
+
+            # Create context with Redis backend for HITL
+            import redis
+            redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
+            context = ExecutionContext.create(
+                graph, start_node,
+                feedback_backend="redis",
+                feedback_config={"redis_client": redis_client}
             )
             ```
         """
@@ -920,6 +1103,7 @@ class ExecutionContext:
         # Remove un-serializable objects (will be reconstructed in __setstate__)
         state.pop('task_queue', None)
         state.pop('channel', None)
+        state.pop('feedback_manager', None)  # Will be reconstructed in __setstate__
 
         # LLM: Exclude agent instances (only keep YAML for distributed execution)
         state['_llm_agents'] = {}  # Agent instances not serialized
@@ -1010,6 +1194,14 @@ class ExecutionContext:
             self._llm_agents = {}
         if not hasattr(self, '_llm_agents_yaml'):
             self._llm_agents_yaml = {}
+
+        # Reconstruct FeedbackManager
+        from graflow.hitl.manager import FeedbackManager
+        self.feedback_manager = FeedbackManager(
+            backend=channel_backend_type,
+            backend_config=config,
+            channel_manager=self.channel
+        )
 
     def save(self, path: str = "execution_context.pkl") -> None:
         """Save execution context to a pickle file using cloudpickle.
