@@ -61,6 +61,18 @@ class FeedbackBackend(ABC):
             List of pending FeedbackRequest objects
         """
 
+    @abstractmethod
+    def list_requests(self, session_id: Optional[str] = None, n_recent: int = 100) -> list[FeedbackRequest]:
+        """List recent requests (all statuses), optionally scoped by session.
+
+        Args:
+            session_id: Optional session ID to filter by
+            n_recent: Maximum number of recent requests to return (default: 100)
+
+        Returns:
+            List of FeedbackRequest objects sorted by created_at descending (newest first)
+        """
+
     def publish(self, feedback_id: str) -> None:
         """Publish a notification that feedback has been provided (optional).
 

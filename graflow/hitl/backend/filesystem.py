@@ -239,6 +239,63 @@ class FilesystemFeedbackBackend(FeedbackBackend):
 
         return pending_requests
 
+    def list_requests(
+        self, session_id: Optional[str] = None, n_recent: int = 100
+    ) -> list[FeedbackRequest]:
+        """List recent feedback requests from filesystem (all statuses).
+
+        Args:
+            session_id: Optional filter by session ID
+            n_recent: Maximum number of recent requests to return (default: 100)
+
+        Returns:
+            List of FeedbackRequest objects sorted by created_at descending (newest first)
+        """
+        requests: list[FeedbackRequest] = []
+
+        # Iterate through all request files
+        try:
+            for file_path in self.requests_dir.glob("*.json"):
+                try:
+                    with open(file_path) as f:
+                        # Acquire shared lock for reading
+                        fcntl.flock(f.fileno(), fcntl.LOCK_SH)
+                        try:
+                            data = json.load(f)
+                        finally:
+                            # Release lock
+                            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+
+                    request = FeedbackRequest.from_dict(data)
+
+                    # Filter by session_id if provided
+                    if session_id and request.session_id != session_id:
+                        continue
+
+                    requests.append(request)
+
+                except Exception as e:
+                    logger.warning(
+                        "Failed to load request from %s: %s",
+                        file_path,
+                        str(e),
+                        extra={"file_path": str(file_path), "error": str(e)},
+                    )
+                    # Continue with other files
+
+        except Exception as e:
+            logger.error(
+                "Failed to list requests: %s",
+                str(e),
+                extra={"error": str(e)}
+            )
+
+        # Sort by created_at descending (newest first)
+        requests.sort(key=lambda r: r.created_at, reverse=True)
+
+        # Limit to n_recent
+        return requests[:n_recent]
+
     # Optional methods - use default implementations (no-op)
     # publish() - inherited no-op
     # start_listener() - inherited returns None

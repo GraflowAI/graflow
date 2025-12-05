@@ -314,6 +314,22 @@ class FeedbackManager:
         """
         return self._backend.list_pending_requests(session_id)
 
+    def list_requests(
+        self,
+        session_id: Optional[str] = None,
+        n_recent: int = 100
+    ) -> list[FeedbackRequest]:
+        """List recent feedback requests (all statuses).
+
+        Args:
+            session_id: Optional filter by session ID
+            n_recent: Maximum number of recent requests to return (default: 100)
+
+        Returns:
+            List of FeedbackRequest objects sorted by created_at descending (newest first)
+        """
+        return self._backend.list_requests(session_id, n_recent)
+
     def get_request(self, feedback_id: str) -> Optional[FeedbackRequest]:
         """Get feedback request by ID.
 
