@@ -109,19 +109,8 @@ class WorkflowContext:
         Returns:
             Result from the last executed task handler (may be ``None``).
         """
-        if start_node is None:
-            # Find start nodes (nodes with no predecessors)
-            candidate_nodes = self.graph.get_start_nodes()
-            if not candidate_nodes:
-                raise GraphCompilationError("No start node specified and no nodes with no predecessors found.")
-            elif len(candidate_nodes) > 1:
-                raise GraphCompilationError("Multiple start nodes found, please specify one.")
-            start_node = candidate_nodes[0]
-            if start_node is None:
-                raise GraphCompilationError("No valid start node found in the workflow graph.")
-
-        from .context import ExecutionContext
-        from .engine import WorkflowEngine
+        from graflow.core.context import ExecutionContext
+        from graflow.core.engine import WorkflowEngine
         exec_context = ExecutionContext.create(self.graph, start_node, max_steps=max_steps, tracer=self._tracer)
 
         self._attach_llm_agents(exec_context)
