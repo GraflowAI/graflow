@@ -396,7 +396,7 @@ class TestCheckpointRestoration:
 
         graph.add_node(task_a_func, "task_a")
 
-        original_context = ExecutionContext.create(graph, "task_a", max_steps=10)
+        original_context = ExecutionContext.create(graph, start_node="task_a", max_steps=10)
         original_context.set_result("task_a", "completed")
         original_context.increment_step()
 
@@ -643,7 +643,7 @@ class TestCheckpointIntegration:
         graph.add_edge("step_1", "step_2")
 
         # Execute first step and checkpoint
-        context = ExecutionContext.create(graph, "step_1", max_steps=10)
+        context = ExecutionContext.create(graph, start_node="step_1", max_steps=10)
 
         # Execute only the first task
         next_task_id = context.task_queue.get_next_task()
