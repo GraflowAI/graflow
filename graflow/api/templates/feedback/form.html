@@ -1,0 +1,93 @@
+{% extends "common/base.html" %}
+
+{% block title %}Feedback Request - {{ feedback_request.prompt }}{% endblock %}
+
+{% block content %}
+<article>
+    <header>
+        <h2>Feedback Request</h2>
+    </header>
+
+    <section>
+        <p><strong>Prompt:</strong></p>
+        <p>{{ feedback_request.prompt }}</p>
+
+        {% if feedback_request.metadata %}
+        <details>
+            <summary>Additional Information</summary>
+            <pre>{{ feedback_request.metadata | tojson(indent=2) }}</pre>
+        </details>
+        {% endif %}
+    </section>
+
+    <section>
+        <form method="POST" action="/ui/feedback/{{ feedback_request.feedback_id }}/submit">
+            {% if feedback_request.feedback_type == "approval" %}
+                <!-- Approval Form -->
+                <fieldset>
+                    <legend>Your Decision</legend>
+                    <label>
+                        <input type="radio" name="approved" value="true" required>
+                        Approve
+                    </label>
+                    <label>
+                        <input type="radio" name="approved" value="false" required>
+                        Reject
+                    </label>
+                </fieldset>
+
+                <label for="reason">Reason (optional):</label>
+                <textarea id="reason" name="reason" rows="3" placeholder="Enter your reason..."></textarea>
+
+            {% elif feedback_request.feedback_type == "text" %}
+                <!-- Text Input Form -->
+                <label for="text">Your Response:</label>
+                <textarea id="text" name="text" rows="5" required placeholder="Enter your response..."></textarea>
+
+            {% elif feedback_request.feedback_type == "selection" %}
+                <!-- Selection Form -->
+                <fieldset>
+                    <legend>Select an Option</legend>
+                    {% for option in feedback_request.options %}
+                    <label>
+                        <input type="radio" name="selected" value="{{ option }}" required>
+                        {{ option }}
+                    </label>
+                    {% endfor %}
+                </fieldset>
+
+            {% elif feedback_request.feedback_type == "multi_selection" %}
+                <!-- Multi-Selection Form -->
+                <fieldset>
+                    <legend>Select Options (multiple allowed)</legend>
+                    {% for option in feedback_request.options %}
+                    <label>
+                        <input type="checkbox" name="selected_multiple" value="{{ option }}">
+                        {{ option }}
+                    </label>
+                    {% endfor %}
+                </fieldset>
+
+            {% elif feedback_request.feedback_type == "custom" %}
+                <!-- Custom Form -->
+                <label for="custom_data">Custom Data (JSON):</label>
+                <textarea id="custom_data" name="custom_data" rows="5" required placeholder='{"key": "value"}'></textarea>
+
+            {% endif %}
+
+            <!-- Common Fields -->
+            <label for="responded_by">Your Name/Email (optional):</label>
+            <input type="text" id="responded_by" name="responded_by" placeholder="john@example.com">
+
+            <button type="submit">Submit Feedback</button>
+        </form>
+    </section>
+
+    <footer>
+        <small>Request ID: {{ feedback_request.feedback_id }}</small>
+        {% if feedback_request.expires_at %}
+        <br><small>Expires at: {{ feedback_request.expires_at }}</small>
+        {% endif %}
+    </footer>
+</article>
+{% endblock %}

@@ -16,6 +16,7 @@ dependencies = [
     "opentelemetry-api>=1.37.0",
     "opentelemetry-exporter-otlp>=1.37.0",
     "wrapt>=1.17.3",
+    "pydantic>=2.10.0",
 ]
 
 classifiers = [
@@ -53,6 +54,8 @@ extras = [
     "langfuse>=3.8.1",
     "nest-asyncio>=1.6.0",
     "openinference-instrumentation-google-adk>=0.1.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
 ]
 
 [build-system]

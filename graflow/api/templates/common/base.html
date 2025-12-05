@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Graflow Feedback{% endblock %}</title>
+
+    <!-- Pico CSS (Classless CSS framework) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+
+    <!-- Auto-refresh for pending status (optional) -->
+    {% if auto_refresh %}
+    <meta http-equiv="refresh" content="{{ refresh_interval|default(30) }}">
+    {% endif %}
+
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <main class="container">
+        <header>
+            <h1>Graflow Feedback</h1>
+        </header>
+
+        {% block content %}{% endblock %}
+
+        <footer>
+            <small>Powered by Graflow</small>
+        </footer>
+    </main>
+</body>
+</html>

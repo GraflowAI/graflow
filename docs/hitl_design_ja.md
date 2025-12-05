@@ -236,8 +236,9 @@ class NotificationType(Enum):
 #### NotificationConfig
 
 ```python
-@dataclass
-class NotificationConfig:
+from pydantic import BaseModel, Field
+
+class NotificationConfig(BaseModel):
     """通知設定"""
     notification_type: NotificationType = NotificationType.CONSOLE
 
@@ -260,28 +261,19 @@ class NotificationConfig:
 
     def to_dict(self) -> dict[str, Any]:
         """辞書に変換（シリアライゼーション用）"""
-        return {
-            "notification_type": self.notification_type.value,
-            "api_base_url": self.api_base_url,
-            "webhook_url": self.webhook_url,
-            "webhook_method": self.webhook_method,
-            "webhook_headers": self.webhook_headers,
-            "webhook_payload_template": self.webhook_payload_template,
-            "webhook_retry_count": self.webhook_retry_count,
-            "webhook_timeout": self.webhook_timeout,
-            "webhook_secret": self.webhook_secret,
-        }
+        data = self.model_dump()
+        data["notification_type"] = self.notification_type.value
+        return data
 ```
 
 #### FeedbackRequest
 
 ```python
-from dataclasses import dataclass, field
+from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import Any, Optional
 
-@dataclass
-class FeedbackRequest:
+class FeedbackRequest(BaseModel):
     """フィードバックリクエストを表す"""
     feedback_id: str                    # 一意のリクエストID
     task_id: str                        # フィードバックを要求するタスク
@@ -289,8 +281,8 @@ class FeedbackRequest:
     feedback_type: FeedbackType         # フィードバックのタイプ
     prompt: str                         # 人間へのプロンプト
     options: Optional[list[str]] = None # 選択タイプのオプション
-    metadata: dict[str, Any] = field(default_factory=dict)  # カスタムメタデータ
-    created_at: str = field(default_factory=lambda: datetime.now().isoformat())
+    metadata: dict[str, Any] = Field(default_factory=dict)  # カスタムメタデータ
+    created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     timeout: float = 180.0              # ポーリングタイムアウト（秒）（デフォルト: 3分）
     status: str = "pending"             # pending, completed, timeout, cancelled
 
@@ -300,13 +292,29 @@ class FeedbackRequest:
 
     # ユーザー通知設定
     notification_config: Optional[NotificationConfig] = None  # 通知設定
+
+    def to_dict(self) -> dict[str, Any]:
+        """辞書に変換（シリアライゼーション用）"""
+        data = self.model_dump()
+        data["feedback_type"] = self.feedback_type.value
+        if self.notification_config:
+            data["notification_config"] = self.notification_config.to_dict()
+        return data
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "FeedbackRequest":
+        """辞書から復元"""
+        data = data.copy()
+        data["feedback_type"] = FeedbackType(data["feedback_type"])
+        if data.get("notification_config"):
+            data["notification_config"] = NotificationConfig.model_validate(data["notification_config"])
+        return cls.model_validate(data)
 ```
 
 #### FeedbackResponse
 
 ```python
-@dataclass
-class FeedbackResponse:
+class FeedbackResponse(BaseModel):
     """フィードバック応答を表す"""
     feedback_id: str                    # リクエストID
     response_type: FeedbackType         # 応答のタイプ
@@ -326,8 +334,21 @@ class FeedbackResponse:
     custom_data: Optional[dict[str, Any]] = None
 
     # メタデータ
-    responded_at: str = field(default_factory=lambda: datetime.now().isoformat())
+    responded_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     responded_by: Optional[str] = None  # ユーザーIDまたはシステム識別子
+
+    def to_dict(self) -> dict[str, Any]:
+        """辞書に変換（シリアライゼーション用）"""
+        data = self.model_dump()
+        data["response_type"] = self.response_type.value
+        return data
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "FeedbackResponse":
+        """辞書から復元"""
+        data = data.copy()
+        data["response_type"] = FeedbackType(data["response_type"])
+        return cls.model_validate(data)
 ```
 
 #### FeedbackManager
@@ -338,16 +359,22 @@ class FeedbackManager:
 
     def __init__(
         self,
-        backend: str = "memory",
+        backend: str = "filesystem",
         backend_config: Optional[dict] = None,
         channel_manager: Optional[Any] = None
     ):
         """フィードバックマネージャーを初期化
 
         Args:
-            backend: "memory" または "redis"
+            backend: "filesystem" または "redis"
             backend_config: バックエンド固有の設定
+                - filesystem: {"data_dir": "feedback_data"}
+                - redis: {"host": "localhost", "port": 6379, "db": 0, "redis_client": redis.Redis}
             channel_manager: チャネルへのフィードバック書き込み用のオプショナルChannelManager
+
+        注意:
+            - filesystem: デフォルト、ローカル開発/シングルノード本番用
+            - redis: 分散実行/本番環境用
         """
         pass
 
@@ -438,21 +465,64 @@ class TaskExecutionContext:
 
 ### フィードバックストレージスキーマ
 
-#### Memoryバックエンド
+#### Filesystemバックエンド（ローカル/開発環境推奨）
 
 ```python
-# インメモリストレージ
-_requests: dict[str, FeedbackRequest] = {
-    "deploy_task_abc123": FeedbackRequest(...),
-    "validate_task_def456": FeedbackRequest(...),
-}
+# ファイルベースストレージ（再起動後も永続化）
+# ディレクトリ構造:
+# feedback_data/
+#   requests/
+#     deploy_task_abc123.json
+#     validate_task_def456.json
+#   responses/
+#     deploy_task_abc123.json
 
-_responses: dict[str, FeedbackResponse] = {
-    "deploy_task_abc123": FeedbackResponse(...),
-}
+# ファイルロックによる並行制御を実装
+import fcntl
+import json
+from pathlib import Path
+
+class FilesystemFeedbackBackend:
+    def __init__(self, data_dir: str = "feedback_data"):
+        self.data_dir = Path(data_dir)
+        self.requests_dir = self.data_dir / "requests"
+        self.responses_dir = self.data_dir / "responses"
+        self.requests_dir.mkdir(parents=True, exist_ok=True)
+        self.responses_dir.mkdir(parents=True, exist_ok=True)
+
+    def store_request(self, request: FeedbackRequest) -> None:
+        """ファイルロック付きでリクエストを保存"""
+        file_path = self.requests_dir / f"{request.feedback_id}.json"
+        with open(file_path, 'w') as f:
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            json.dump(request.to_dict(), f, indent=2, ensure_ascii=False)
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+
+    def get_request(self, feedback_id: str) -> Optional[FeedbackRequest]:
+        """ファイルからリクエストを取得"""
+        file_path = self.requests_dir / f"{feedback_id}.json"
+        if not file_path.exists():
+            return None
+        with open(file_path, 'r') as f:
+            data = json.load(f)
+            return FeedbackRequest.from_dict(data)
 ```
 
-#### Redisバックエンド
+**メリット**:
+- ✅ プロセス再起動後も永続化
+- ✅ 外部依存なし（Redisが不要）
+- ✅ デバッグが簡単（人間が読めるJSON）
+- ✅ ファイルロックによる基本的な並行制御
+- ✅ ローカル開発やシングルノード本番環境に適合
+
+**デメリット**:
+- ❌ クロスノードサポートなし（単一マシンのみ）
+- ❌ Pub/Sub通知なし（ポーリングのみ）
+- ❌ ファイルシステムI/Oオーバーヘッド
+
+**ユースケース**: ローカル開発、テスト、シングルノードデプロイメント
+
+#### Redisバックエンド（本番環境/分散実行推奨）
 
 ```redis
 # リクエストストレージ
@@ -482,6 +552,40 @@ PUBLISH feedback:deploy_task_abc123 "completed"
 EXPIRE feedback:request:deploy_task_abc123 604800
 EXPIRE feedback:response:deploy_task_abc123 604800
 ```
+
+**メリット**:
+- ✅ プロセス再起動後も永続化
+- ✅ クロスプロセス・クロスノード対応
+- ✅ Pub/Sub通知（低レイテンシ）
+- ✅ 組み込みの有効期限（TTL）
+- ✅ Redis Clusterによる高可用性
+- ✅ 分散システムで実績あり
+
+**デメリット**:
+- ❌ Redisサーバーが必要
+- ❌ インフラ複雑性の増加
+- ❌ ネットワークレイテンシ
+
+**ユースケース**: 本番環境、分散ワークフロー、マルチノードデプロイメント
+
+### バックエンド比較
+
+| 機能 | Filesystem | Redis |
+|------|------------|-------|
+| **永続性** | ✅ ファイルベース | ✅ メモリ + 永続化 |
+| **クロスプロセス** | ⚠️ 同一マシンのみ | ✅ 可能（ネットワーク） |
+| **クロスノード** | ❌ 不可 | ✅ 可能 |
+| **Pub/Sub通知** | ❌ なし | ✅ あり |
+| **外部依存** | ✅ なし | ❌ Redisサーバー必要 |
+| **パフォーマンス** | 📁 ファイルI/O | 🌐 ネットワークI/O |
+| **デバッグ** | ✅ JSONファイル | ⚠️ Redis CLI |
+| **並行制御** | ✅ ファイルロック | ✅ Redisアトミック性 |
+| **ユースケース** | 開発/シングルノード | 本番/分散 |
+
+**推奨事項**:
+- **開発/テスト**: `filesystem`（デフォルト）
+- **本番（シングルノード）**: `filesystem` または `redis`
+- **本番（分散）**: `redis`（必須）
 
 ---
 
@@ -1441,7 +1545,7 @@ engine.execute(context)
 - [ ] `FeedbackResponse`データクラス
 - [ ] `FeedbackTimeoutException`
 - [ ] `FeedbackManager`
-  - [ ] Memoryバックエンド実装
+  - [ ] Filesystemバックエンド実装（デフォルト）
   - [ ] Redisバックエンド実装
   - [ ] ハイブリッドポーリングループ（Pub/Sub + フォールバック）
   - [ ] `request_feedback()`メソッド
@@ -1465,14 +1569,18 @@ engine.execute(context)
 ### フェーズ2: REST API
 
 - [ ] Pydanticスキーマ（`graflow/api/schemas/feedback.py`）
-- [ ] APIルーター（`graflow/api/router.py`）
+- [ ] APIルーター（`graflow/api/endpoints/feedback.py`）
   - [ ] `GET /api/feedback` - 保留中リスト
   - [ ] `GET /api/feedback/{feedback_id}` - 詳細取得
   - [ ] `POST /api/feedback/{feedback_id}/respond` - 応答提供
   - [ ] `DELETE /api/feedback/{feedback_id}` - キャンセル
-- [ ] FastAPIアプリケーション（`graflow/api/__init__.py`）
+- [ ] FastAPIアプリケーション（`graflow/api/app.py`）
   - [ ] `create_feedback_api()`ファクトリ
   - [ ] 依存性注入のセットアップ
+  - [ ] `endpoints/feedback.py`からルーターをインクルード
+- [ ] パッケージ初期化（`graflow/api/__init__.py`）
+  - [ ] 最小限のパッケージファイル（`__all__ = []`）
+  - [ ] 使用方法のdocstring
 
 ### フェーズ3: テストとドキュメント
 

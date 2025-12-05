@@ -1,0 +1,71 @@
+{% extends "common/base.html" %}
+
+{% block title %}Pending Feedback Requests{% endblock %}
+
+{% block content %}
+<article>
+    <header>
+        <h2>Pending Feedback Requests</h2>
+        <p>Total: {{ count }} request(s)</p>
+    </header>
+
+    {% if count == 0 %}
+    <section>
+        <p><em>No pending feedback requests.</em></p>
+    </section>
+    {% else %}
+    <section>
+        <figure>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Type</th>
+                        <th>Task</th>
+                        <th>Prompt</th>
+                        <th>Status</th>
+                        <th>Created</th>
+                        <th>Timeout</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for request in requests %}
+                    <tr>
+                        <td><code>{{ request.feedback_id }}</code></td>
+                        <td>
+                            {% if request.feedback_type == "approval" %}
+                                ✓ Approval
+                            {% elif request.feedback_type == "text" %}
+                                📝 Text
+                            {% elif request.feedback_type == "selection" %}
+                                🔘 Selection
+                            {% elif request.feedback_type == "multi_selection" %}
+                                ☑️ Multi-select
+                            {% else %}
+                                {{ request.feedback_type }}
+                            {% endif %}
+                        </td>
+                        <td><small>{{ request.task_id }}</small></td>
+                        <td>{{ request.prompt }}</td>
+                        <td>
+                            {% if request.status == "pending" %}
+                                <mark>{{ request.status }}</mark>
+                            {% else %}
+                                {{ request.status }}
+                            {% endif %}
+                        </td>
+                        <td><small>{{ request.created_at[:19].replace('T', ' ') }}</small></td>
+                        <td><small>{{ request.timeout }}s</small></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </figure>
+    </section>
+    {% endif %}
+
+    <footer>
+        <p><small>Note: Feedback IDs are masked for security. Access individual requests via direct URLs.</small></p>
+    </footer>
+</article>
+{% endblock %}

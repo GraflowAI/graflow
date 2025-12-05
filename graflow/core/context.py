@@ -23,6 +23,7 @@ from graflow.trace.noop import NoopTracer
 
 if TYPE_CHECKING:
     from graflow.core.task import Executable
+    from graflow.hitl.types import FeedbackResponse, FeedbackType
     from graflow.llm.agents.base import LLMAgent
     from graflow.llm.client import LLMClient
     from graflow.trace.base import Tracer
@@ -171,6 +172,193 @@ class TaskExecutionContext:
         """Get elapsed time since task started."""
         return time.time() - self.start_time
 
+    # === HITL (Human-in-the-Loop) integration ===
+
+    def request_feedback(
+        self,
+        feedback_type: str | FeedbackType,  # str or FeedbackType enum
+        prompt: str,
+        options: Optional[list[str]] = None,
+        metadata: Optional[dict] = None,
+        timeout: float = 180.0,  # Default: 3 minutes
+        channel_key: Optional[str] = None,
+        write_to_channel: bool = False,
+        handler: Optional[Any] = None,  # FeedbackHandler (avoid circular import)
+    ) -> FeedbackResponse:
+        """Request human feedback with optional callback handler.
+
+        Args:
+            feedback_type: Type of feedback ("approval", "text", "selection", etc.) or FeedbackType enum
+            prompt: Prompt for human
+            options: Options for selection types
+            metadata: Custom metadata
+            timeout: Polling timeout in seconds (default: 180 / 3 minutes)
+            channel_key: Optional channel key to write response to
+            write_to_channel: Whether to auto-write response to channel
+            handler: Optional FeedbackHandler for callbacks (on_request_created, on_response_received, on_request_timeout)
+
+        Returns:
+            FeedbackResponse
+
+        Raises:
+            FeedbackTimeoutError: If timeout exceeded
+
+        Example:
+            ```python
+            @task(inject_context=True)
+            def my_task(context):
+                # Approval feedback
+                response = context.request_feedback(
+                    feedback_type="approval",
+                    prompt="Approve this deployment?",
+                    timeout=180
+                )
+                if response.approved:
+                    deploy()
+
+                # Text input
+                response = context.request_feedback(
+                    feedback_type="text",
+                    prompt="Enter your comment:",
+                    timeout=180
+                )
+                comment = response.text
+
+                # Selection
+                response = context.request_feedback(
+                    feedback_type="selection",
+                    prompt="Choose mode:",
+                    options=["fast", "balanced", "thorough"],
+                    timeout=180
+                )
+                mode = response.selected
+
+                # With channel integration
+                response = context.request_feedback(
+                    feedback_type="approval",
+                    prompt="Approve deployment?",
+                    channel_key="deployment_approved",
+                    write_to_channel=True,
+                    timeout=180
+                )
+                # Response automatically written to channel["deployment_approved"]
+            ```
+        """
+        # Convert string to enum
+        if isinstance(feedback_type, str):
+            from graflow.hitl.types import FeedbackType
+            feedback_type = FeedbackType(feedback_type)
+
+        # Get feedback manager from execution context
+        feedback_manager = self.execution_context.feedback_manager
+
+        # Check if we're resuming from a checkpoint with an existing feedback_id
+        # This allows reusing the same feedback_id after checkpoint resume
+        existing_feedback_id = None
+        if hasattr(self.execution_context, 'checkpoint_metadata') and self.execution_context.checkpoint_metadata:
+            # Check if this task has a pending feedback_id in checkpoint metadata
+            user_metadata = self.execution_context.checkpoint_metadata.get("user_metadata", {})
+            checkpoint_task_id = user_metadata.get("task_id")
+            if checkpoint_task_id == self.task_id:
+                existing_feedback_id = user_metadata.get("feedback_id")
+                if existing_feedback_id:
+                    logger.info(
+                        "Found feedback_id in checkpoint metadata for task %s: %s",
+                        self.task_id,
+                        existing_feedback_id,
+                        extra={"task_id": self.task_id, "feedback_id": existing_feedback_id},
+                    )
+
+        # Request feedback (with optional existing feedback_id for resume case)
+        return feedback_manager.request_feedback(
+            task_id=self.task_id,
+            session_id=self.execution_context.session_id,
+            feedback_type=feedback_type,
+            prompt=prompt,
+            options=options,
+            metadata=metadata,
+            timeout=timeout,
+            channel_key=channel_key,
+            write_to_channel=write_to_channel,
+            feedback_id=existing_feedback_id,
+            handler=handler,
+        )
+
+    def request_approval(
+        self,
+        prompt: str,
+        metadata: Optional[dict] = None,
+        timeout: float = 180.0,  # Default: 3 minutes
+        channel_key: Optional[str] = None,
+        write_to_channel: bool = False,
+    ) -> bool:
+        """Request approval (convenience method).
+
+        Args:
+            prompt: Approval prompt
+            metadata: Custom metadata
+            timeout: Polling timeout
+            channel_key: Optional channel key to write response to
+            write_to_channel: Whether to auto-write to channel
+
+        Returns:
+            True if approved, False if rejected
+        """
+        from graflow.hitl.types import FeedbackType
+        response = self.request_feedback(
+            feedback_type=FeedbackType.APPROVAL,
+            prompt=prompt,
+            metadata=metadata,
+            timeout=timeout,
+            channel_key=channel_key,
+            write_to_channel=write_to_channel,
+        )
+        return bool(response.approved)
+
+    def request_text_input(
+        self,
+        prompt: str,
+        metadata: Optional[dict[str, Any]] = None,
+        timeout: float = 180.0,
+        channel_key: Optional[str] = None,
+        write_to_channel: bool = False,
+    ) -> str:
+        """Request free-form text input."""
+        from graflow.hitl.types import FeedbackType
+        response = self.request_feedback(
+            feedback_type=FeedbackType.TEXT,
+            prompt=prompt,
+            metadata=metadata,
+            timeout=timeout,
+            channel_key=channel_key,
+            write_to_channel=write_to_channel,
+        )
+        return response.text or ""
+
+    def request_selection(
+        self,
+        prompt: str,
+        options: list[str],
+        metadata: Optional[dict[str, Any]] = None,
+        timeout: float = 180.0,
+        channel_key: Optional[str] = None,
+        write_to_channel: bool = False,
+    ) -> str:
+        """Request selection from provided options."""
+        from graflow.hitl.types import FeedbackType
+        response = self.request_feedback(
+            feedback_type=FeedbackType.SELECTION,
+            prompt=prompt,
+            options=options,
+            metadata=metadata,
+            timeout=timeout,
+            channel_key=channel_key,
+            write_to_channel=write_to_channel,
+        )
+        return response.selected or ""
+
+    # === Checkpointing ===
+
     def checkpoint(
         self,
         metadata: Optional[dict[str, Any]] = None,
@@ -204,22 +392,15 @@ class TaskExecutionContext:
             )
             return None
 
-        # Immediate checkpoint: capture current task as pending work so resume
+        # Immediate checkpoint: capture current task_id so resume
         # continues from the same task.
         from graflow.core.checkpoint import CheckpointManager
-        from graflow.queue.base import TaskSpec
-
-        current_task = self.execution_context.graph.get_node(self.task_id)
-        current_spec = TaskSpec(
-            executable=current_task,
-            execution_context=self.execution_context,
-        )
 
         checkpoint_path, checkpoint_metadata = CheckpointManager.create_checkpoint(
             self.execution_context,
             path=path,
             metadata=enriched_metadata,
-            include_current_task=current_spec,
+            resuming_task_id=self.task_id,
         )
         self.execution_context.checkpoint_metadata = checkpoint_metadata.to_dict()
         self.execution_context.last_checkpoint_path = checkpoint_path
@@ -319,6 +500,18 @@ class ExecutionContext:
         self._llm_agents: Dict[str, Any] = {}  # LLMAgent registry
         self._llm_agents_yaml: Dict[str, str] = {}  # YAML serialization cache
 
+        # HITL (Human-in-the-Loop) integration
+        from graflow.hitl.manager import FeedbackManager
+
+        # Pass channel to FeedbackManager for write_to_channel support
+        # Use same backend as channel for consistency (redis for distributed, filesystem for local)
+        feedback_backend = "redis" if channel_backend == "redis" else "filesystem"
+        self.feedback_manager = FeedbackManager(
+            backend=feedback_backend,
+            backend_config=base_config,
+            channel_manager=self.channel
+        )
+
     def create_branch_context(self, branch_id: str) -> ExecutionContext:
         """Create a child execution context for parallel execution.
 
@@ -411,6 +604,15 @@ class ExecutionContext:
             context = ExecutionContext.create(
                 graph, start_node,
                 llm_client=llm_client
+            )
+
+            # Create context with Redis backend for HITL
+            import redis
+            redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
+            context = ExecutionContext.create(
+                graph, start_node,
+                feedback_backend="redis",
+                feedback_config={"redis_client": redis_client}
             )
             ```
         """
@@ -920,6 +1122,7 @@ class ExecutionContext:
         # Remove un-serializable objects (will be reconstructed in __setstate__)
         state.pop('task_queue', None)
         state.pop('channel', None)
+        state.pop('feedback_manager', None)  # Will be reconstructed in __setstate__
 
         # LLM: Exclude agent instances (only keep YAML for distributed execution)
         state['_llm_agents'] = {}  # Agent instances not serialized
@@ -1010,6 +1213,16 @@ class ExecutionContext:
             self._llm_agents = {}
         if not hasattr(self, '_llm_agents_yaml'):
             self._llm_agents_yaml = {}
+
+        # Reconstruct FeedbackManager
+        # Use same backend as channel for consistency (redis for distributed, filesystem for local)
+        feedback_backend = "redis" if channel_backend_type == "redis" else "filesystem"
+        from graflow.hitl.manager import FeedbackManager
+        self.feedback_manager = FeedbackManager(
+            backend=feedback_backend,
+            backend_config=config,
+            channel_manager=self.channel
+        )
 
     def save(self, path: str = "execution_context.pkl") -> None:
         """Save execution context to a pickle file using cloudpickle.

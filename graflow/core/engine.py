@@ -9,9 +9,10 @@ from graflow import exceptions
 from graflow.core.graph import TaskGraph
 
 if TYPE_CHECKING:
-    from .context import ExecutionContext
-    from .handler import TaskHandler
-    from .task import Executable
+    from graflow.core.context import ExecutionContext
+    from graflow.core.handler import TaskHandler
+    from graflow.core.task import Executable
+    from graflow.hitl.types import FeedbackTimeoutError
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,90 @@ class WorkflowEngine:
         """
         handler = self._get_handler(task)
         return handler.execute_task(task, context)
+
+    def _handle_feedback_timeout(
+        self,
+        error: FeedbackTimeoutError,  # FeedbackTimeoutError (imported dynamically to avoid circular import)
+        task_id: str,
+        task: Executable,
+        context: ExecutionContext
+    ) -> None:
+        """Handle feedback timeout by creating checkpoint and exiting.
+
+        Args:
+            error: FeedbackTimeoutError exception with feedback_id and timeout attributes
+            task_id: ID of task that timed out waiting for feedback
+            context: Execution context
+
+        Note:
+            This method is called only when error is an instance of FeedbackTimeoutError.
+            Type is Any to avoid circular import issues.
+        """
+        logger.info(
+            "Feedback timeout for %s, creating checkpoint",
+            error.feedback_id,
+            extra={
+                "feedback_id": error.feedback_id,
+                "task_id": task_id,
+                "session_id": context.session_id,
+                "timeout": error.timeout
+            }
+        )
+
+        # Create checkpoint with resuming task_id (task will be resolved from graph on resume)
+        from graflow.core.checkpoint import CheckpointManager
+        checkpoint_path, checkpoint_metadata = CheckpointManager.create_checkpoint(
+            context,
+            metadata={
+                "reason": "feedback_timeout",
+                "feedback_id": error.feedback_id,
+                "task_id": task_id,
+                "timeout": error.timeout,
+            },
+            resuming_task_id=task_id
+        )
+
+        logger.info(
+            "Checkpoint created at: %s - Waiting for feedback: %s",
+            checkpoint_path,
+            error.feedback_id,
+            extra={
+                "checkpoint_path": checkpoint_path,
+                "checkpoint_id": checkpoint_metadata.checkpoint_id,
+                "feedback_id": error.feedback_id,
+                "session_id": context.session_id
+            }
+        )
+
+        # Store checkpoint info in context
+        context.checkpoint_metadata = checkpoint_metadata.to_dict()
+        context.last_checkpoint_path = checkpoint_path
+
+    def _handle_deferred_checkpoint(self, context: ExecutionContext) -> None:
+        """Handle deferred checkpoint requests.
+
+        Args:
+            context: Execution context with checkpoint request
+        """
+        from graflow.core.checkpoint import CheckpointManager
+
+        checkpoint_path, checkpoint_metadata = CheckpointManager.create_checkpoint(
+            context,
+            path=context.checkpoint_request_path,
+            metadata=context.checkpoint_request_metadata,
+        )
+        logger.info(
+            "Checkpoint created at: %s",
+            checkpoint_path,
+            extra={
+                "session_id": context.session_id,
+                "checkpoint_id": checkpoint_metadata.checkpoint_id,
+                "checkpoint_steps": checkpoint_metadata.steps
+            }
+        )
+        context.checkpoint_metadata = checkpoint_metadata.to_dict()
+        context.last_checkpoint_path = checkpoint_path
+        context.clear_checkpoint_request()
 
     def execute(
         self,
@@ -146,6 +231,16 @@ class WorkflowEngine:
                     # Handler is responsible for setting result
                     last_result = self._execute_task(task, context)
             except Exception as e:
+                # Check if this is a FeedbackTimeoutError (HITL)
+                from graflow.hitl.types import FeedbackTimeoutError
+
+                if isinstance(e, FeedbackTimeoutError):
+                    # Handle feedback timeout by creating checkpoint
+                    self._handle_feedback_timeout(e, task_id, task, context)
+                    # Exit workflow (feedback pending)
+                    # Return early to allow external process to provide feedback
+                    return None
+
                 # Exception already stored by handler, just re-raise
                 raise exceptions.as_runtime_error(e)
 
@@ -168,25 +263,7 @@ class WorkflowEngine:
 
             # Handle deferred checkpoint requests after queue updates
             if context.checkpoint_requested:
-                from graflow.core.checkpoint import CheckpointManager
-
-                checkpoint_path, checkpoint_metadata = CheckpointManager.create_checkpoint(
-                    context,
-                    path=context.checkpoint_request_path,
-                    metadata=context.checkpoint_request_metadata,
-                )
-                logger.info(
-                    "Checkpoint created at: %s",
-                    checkpoint_path,
-                    extra={
-                        "session_id": context.session_id,
-                        "checkpoint_id": checkpoint_metadata.checkpoint_id,
-                        "checkpoint_steps": checkpoint_metadata.steps
-                    }
-                )
-                context.checkpoint_metadata = checkpoint_metadata.to_dict()
-                context.last_checkpoint_path = checkpoint_path
-                context.clear_checkpoint_request()
+                self._handle_deferred_checkpoint(context)
 
             task_id = context.get_next_task()
 

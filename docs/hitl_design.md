@@ -276,12 +276,11 @@ class FeedbackType(Enum):
 #### FeedbackRequest
 
 ```python
-from dataclasses import dataclass, field
+from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import Any, Optional
 
-@dataclass
-class FeedbackRequest:
+class FeedbackRequest(BaseModel):
     """Represents a feedback request."""
     feedback_id: str                    # Unique request ID
     task_id: str                        # Task requesting feedback
@@ -289,8 +288,8 @@ class FeedbackRequest:
     feedback_type: FeedbackType         # Type of feedback
     prompt: str                         # Prompt for human
     options: Optional[list[str]] = None # Options for selection types
-    metadata: dict[str, Any] = field(default_factory=dict)  # Custom metadata
-    created_at: str = field(default_factory=lambda: datetime.now().isoformat())
+    metadata: dict[str, Any] = Field(default_factory=dict)  # Custom metadata
+    created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     timeout: float = 180.0              # Polling timeout in seconds (default: 3 minutes)
     status: str = "pending"             # pending, completed, timeout, cancelled
 
@@ -300,34 +299,22 @@ class FeedbackRequest:
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for storage."""
-        return {
-            "feedback_id": self.feedback_id,
-            "task_id": self.task_id,
-            "session_id": self.session_id,
-            "feedback_type": self.feedback_type.value,
-            "prompt": self.prompt,
-            "options": self.options,
-            "metadata": self.metadata,
-            "created_at": self.created_at,
-            "timeout": self.timeout,
-            "status": self.status,
-            "channel_key": self.channel_key,
-            "write_to_channel": self.write_to_channel,
-        }
+        data = self.model_dump()
+        data["feedback_type"] = self.feedback_type.value
+        return data
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "FeedbackRequest":
         """Restore from dictionary."""
         data = data.copy()
         data["feedback_type"] = FeedbackType(data["feedback_type"])
-        return cls(**data)
+        return cls.model_validate(data)
 ```
 
 #### FeedbackResponse
 
 ```python
-@dataclass
-class FeedbackResponse:
+class FeedbackResponse(BaseModel):
     """Represents a feedback response."""
     feedback_id: str                    # Request ID
     response_type: FeedbackType         # Type of response
@@ -347,30 +334,21 @@ class FeedbackResponse:
     custom_data: Optional[dict[str, Any]] = None
 
     # Metadata
-    responded_at: str = field(default_factory=lambda: datetime.now().isoformat())
+    responded_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     responded_by: Optional[str] = None  # User ID or system identifier
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for storage."""
-        return {
-            "feedback_id": self.feedback_id,
-            "response_type": self.response_type.value,
-            "approved": self.approved,
-            "reason": self.reason,
-            "text": self.text,
-            "selected": self.selected,
-            "selected_multiple": self.selected_multiple,
-            "custom_data": self.custom_data,
-            "responded_at": self.responded_at,
-            "responded_by": self.responded_by,
-        }
+        data = self.model_dump()
+        data["response_type"] = self.response_type.value
+        return data
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "FeedbackResponse":
         """Restore from dictionary."""
         data = data.copy()
         data["response_type"] = FeedbackType(data["response_type"])
-        return cls(**data)
+        return cls.model_validate(data)
 ```
 
 #### FeedbackManager
@@ -395,15 +373,17 @@ class FeedbackManager:
 
     def __init__(
         self,
-        backend: str = "memory",
+        backend: str = "filesystem",
         backend_config: Optional[dict] = None,
         channel_manager: Optional[Any] = None  # NEW: Channel manager for writing
     ):
         """Initialize feedback manager.
 
         Args:
-            backend: "memory" or "redis"
+            backend: "filesystem" or "redis"
             backend_config: Backend-specific configuration
+                - filesystem: {"data_dir": "feedback_data"}
+                - redis: {"host": "localhost", "port": 6379, "db": 0, "redis_client": redis.Redis}
             channel_manager: Optional ChannelManager for writing feedback to channels
         """
         self.backend = backend
@@ -412,21 +392,23 @@ class FeedbackManager:
         self._lock = threading.Lock()
 
         # Backend initialization
-        if backend == "memory":
-            self._requests: dict[str, FeedbackRequest] = {}
-            self._responses: dict[str, FeedbackResponse] = {}
+        if backend == "filesystem":
+            from graflow.hitl.backend.filesystem import FilesystemFeedbackBackend
+            self._backend = FilesystemFeedbackBackend(
+                data_dir=backend_config.get("data_dir", "feedback_data")
+            )
         elif backend == "redis":
+            from graflow.hitl.backend.redis import RedisFeedbackBackend
             import redis
-            self._redis_client = backend_config.get("redis_client") or redis.Redis(
+            redis_client = backend_config.get("redis_client") or redis.Redis(
                 host=backend_config.get("host", "localhost"),
                 port=backend_config.get("port", 6379),
                 db=backend_config.get("db", 0),
                 decode_responses=True
             )
-            # Subscribe to feedback notifications
-            self._pubsub = self._redis_client.pubsub()
+            self._backend = RedisFeedbackBackend(redis_client=redis_client)
         else:
-            raise ValueError(f"Unsupported backend: {backend}")
+            raise ValueError(f"Unsupported backend: {backend}. Use 'filesystem' or 'redis'.")
 
     def request_feedback(
         self,
@@ -884,12 +866,11 @@ class TaskExecutionContext:
 ### ExecutionContext Integration
 
 ```python
-from dataclasses import dataclass, field
+from pydantic import BaseModel, Field
 
-@dataclass
-class ExecutionContext:
+class ExecutionContext(BaseModel):
     # Existing fields...
-    feedback_manager: FeedbackManager = field(default_factory=lambda: FeedbackManager())
+    feedback_manager: FeedbackManager = Field(default_factory=lambda: FeedbackManager())
 
     @classmethod
     def create(
@@ -897,7 +878,7 @@ class ExecutionContext:
         graph,
         start_node,
         *,
-        feedback_backend: str = "memory",
+        feedback_backend: str = "filesystem",
         feedback_config: Optional[dict] = None,
         **kwargs
     ):
@@ -906,7 +887,7 @@ class ExecutionContext:
         Args:
             graph: Task graph
             start_node: Start node
-            feedback_backend: "memory" or "redis"
+            feedback_backend: "filesystem" or "redis"
             feedback_config: Backend-specific configuration
         """
         # Create feedback manager
@@ -981,21 +962,64 @@ class WorkflowEngine:
 
 ### Feedback Storage Schema
 
-#### Memory Backend
+#### Filesystem Backend (Recommended for Local/Development)
 
 ```python
-# In-memory storage
-_requests: dict[str, FeedbackRequest] = {
-    "deploy_task_abc123": FeedbackRequest(...),
-    "validate_task_def456": FeedbackRequest(...),
-}
+# File-based storage (persistent across restarts)
+# Directory structure:
+# feedback_data/
+#   requests/
+#     deploy_task_abc123.json
+#     validate_task_def456.json
+#   responses/
+#     deploy_task_abc123.json
 
-_responses: dict[str, FeedbackResponse] = {
-    "deploy_task_abc123": FeedbackResponse(...),
-}
+# Implementation uses file locking for concurrency control
+import fcntl
+import json
+from pathlib import Path
+
+class FilesystemFeedbackBackend:
+    def __init__(self, data_dir: str = "feedback_data"):
+        self.data_dir = Path(data_dir)
+        self.requests_dir = self.data_dir / "requests"
+        self.responses_dir = self.data_dir / "responses"
+        self.requests_dir.mkdir(parents=True, exist_ok=True)
+        self.responses_dir.mkdir(parents=True, exist_ok=True)
+
+    def store_request(self, request: FeedbackRequest) -> None:
+        """Store request with file locking."""
+        file_path = self.requests_dir / f"{request.feedback_id}.json"
+        with open(file_path, 'w') as f:
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            json.dump(request.to_dict(), f, indent=2)
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+
+    def get_request(self, feedback_id: str) -> Optional[FeedbackRequest]:
+        """Get request from file."""
+        file_path = self.requests_dir / f"{feedback_id}.json"
+        if not file_path.exists():
+            return None
+        with open(file_path, 'r') as f:
+            data = json.load(f)
+            return FeedbackRequest.from_dict(data)
 ```
 
-#### Redis Backend
+**Pros**:
+- ✅ Persistent across process restarts
+- ✅ No external dependencies (Redis)
+- ✅ Simple debugging (human-readable JSON)
+- ✅ File locking for basic concurrency control
+- ✅ Works for local development and single-node production
+
+**Cons**:
+- ❌ No cross-node support (single machine only)
+- ❌ No Pub/Sub notifications (polling only)
+- ❌ File system I/O overhead
+
+**Use Cases**: Local development, testing, single-node deployments
+
+#### Redis Backend (Recommended for Production/Distributed)
 
 ```redis
 # Request storage
@@ -1025,6 +1049,40 @@ PUBLISH feedback:deploy_task_abc123 "completed"
 EXPIRE feedback:request:deploy_task_abc123 604800
 EXPIRE feedback:response:deploy_task_abc123 604800
 ```
+
+**Pros**:
+- ✅ Persistent across process restarts
+- ✅ Cross-process and cross-node support
+- ✅ Pub/Sub notifications (low latency)
+- ✅ Built-in expiration (TTL)
+- ✅ High availability with Redis Cluster
+- ✅ Battle-tested for distributed systems
+
+**Cons**:
+- ❌ Requires Redis server
+- ❌ Additional infrastructure complexity
+- ❌ Network latency
+
+**Use Cases**: Production, distributed workflows, multi-node deployments
+
+### Backend Comparison
+
+| Feature | Filesystem | Redis |
+|---------|------------|-------|
+| **Persistence** | ✅ File-based | ✅ In-memory + persistence |
+| **Cross-process** | ⚠️ Same machine only | ✅ Yes (network) |
+| **Cross-node** | ❌ No | ✅ Yes |
+| **Pub/Sub notifications** | ❌ No | ✅ Yes |
+| **External dependencies** | ✅ None | ❌ Redis server |
+| **Performance** | 📁 File I/O | 🌐 Network I/O |
+| **Debugging** | ✅ JSON files | ⚠️ Redis CLI |
+| **Concurrency** | ✅ File locks | ✅ Redis atomicity |
+| **Use case** | Dev/single-node | Production/distributed |
+
+**Recommendation**:
+- **Development/Testing**: `filesystem` (default)
+- **Production (single-node)**: `filesystem` or `redis`
+- **Production (distributed)**: `redis` (required)
 
 ### Idempotency Handling
 
@@ -1289,7 +1347,7 @@ class MessageResponse(BaseModel):
 
 #### API Router
 
-**Module**: `graflow/api/router.py`
+**Module**: `graflow/api/endpoints/feedback.py`
 
 ```python
 from fastapi import APIRouter, HTTPException, Depends
@@ -1418,7 +1476,7 @@ async def cancel_feedback(feedback_id: str) -> dict:
 
 #### Creating the FastAPI Application
 
-**Module**: `graflow/api/__init__.py`
+**Module**: `graflow/api/app.py`
 
 ```python
 from typing import Optional
@@ -1478,7 +1536,7 @@ def create_feedback_api(
     app.state.feedback_manager = feedback_manager
 
     # Import and include router
-    from graflow.api.router import router as feedback_router
+    from graflow.api.endpoints.feedback import router as feedback_router
     app.include_router(feedback_router)
 
     return app
@@ -1489,8 +1547,22 @@ def get_feedback_manager():
     """Get feedback manager from app state (for dependency injection)."""
     from fastapi import Request
     # This is a placeholder - actual implementation uses FastAPI dependency injection
-    # See graflow/api/router.py for proper usage
+    # See graflow/api/endpoints/feedback.py for proper usage
     pass
+```
+
+**Module**: `graflow/api/__init__.py`
+
+```python
+"""Graflow Feedback API package.
+
+This package provides REST API endpoints for Human-in-the-Loop (HITL) feedback management.
+
+Import the app factory directly:
+    from graflow.api.app import create_feedback_api
+"""
+
+__all__ = []
 ```
 
 **Usage Example**:
@@ -1498,7 +1570,7 @@ def get_feedback_manager():
 ```python
 # API server (separate process)
 import redis
-from graflow.api import create_feedback_api
+from graflow.api.app import create_feedback_api
 
 # Create Redis client
 redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
@@ -1553,10 +1625,14 @@ The API is designed to support **optional OAuth 2.0 authentication** using FastA
 **Module Structure (Extended)**:
 ```
 graflow/api/
-├── __init__.py
-├── router.py
+├── __init__.py              # Package exports (minimal)
+├── app.py                   # FastAPI app creation (create_feedback_api)
+├── endpoints/
+│   ├── __init__.py
+│   └── feedback.py          # Feedback API endpoints (router)
 ├── schemas/
-│   ├── feedback.py
+│   ├── __init__.py
+│   ├── feedback.py          # Feedback request/response models
 │   └── auth.py              # OAuth 2.0 token models
 ├── dependencies/
 │   ├── __init__.py
@@ -1820,7 +1896,7 @@ async def require_feedback_admin(
 
 #### 4. Updated Router with Authentication
 
-**File**: `graflow/api/router.py` (Updated)
+**File**: `graflow/api/endpoints/feedback.py` (Updated)
 
 ```python
 from fastapi import APIRouter, HTTPException, Depends
@@ -2036,7 +2112,7 @@ def create_feedback_api(
         # app.include_router(auth_router)
 
     # Include feedback router
-    from graflow.api.router import router as feedback_router
+    from graflow.api.endpoints.feedback import router as feedback_router
     app.include_router(feedback_router)
 
     return app
@@ -2458,7 +2534,7 @@ except SystemExit:
     print("Workflow paused for feedback")
 
 # API server (separate process)
-from graflow.api import create_feedback_api
+from graflow.api.app import create_feedback_api
 
 # Create FastAPI app with feedback routes
 app = create_feedback_api(
@@ -2633,14 +2709,12 @@ response = context.request_feedback_from_template(
 ### Phase 5: Feedback Audit Trail
 
 ```python
-@dataclass
-class FeedbackAudit:
+class FeedbackAudit(BaseModel):
     """Audit trail for feedback."""
     feedback_id: str
     events: list[FeedbackAuditEvent]
 
-@dataclass
-class FeedbackAuditEvent:
+class FeedbackAuditEvent(BaseModel):
     """Single audit event."""
     event_type: str  # "created", "responded", "cancelled", "escalated"
     timestamp: str
@@ -2986,8 +3060,7 @@ redis_client.expire(key, FEEDBACK_TTL)
 **B: Per-Request TTL**
 ```python
 # Configurable TTL per request
-@dataclass
-class FeedbackRequest:
+class FeedbackRequest(BaseModel):
     ttl: int = 7 * 24 * 60 * 60  # Default 7 days
 
 # Usage
@@ -3555,96 +3628,114 @@ config = {
 
 ## Implementation Checklist
 
-### Phase 1: Core Functionality (Module: `graflow/hitl/`)
+### Phase 1: Core Functionality (Module: `graflow/hitl/`) ✅ **COMPLETED**
 
 **Module Structure**:
 ```
 graflow/
 ├── hitl/
 │   ├── __init__.py
-│   ├── types.py          # FeedbackType, FeedbackRequest, FeedbackResponse
-│   ├── exceptions.py     # FeedbackTimeoutException, FeedbackStorageError
+│   ├── types.py          # FeedbackType, FeedbackRequest, FeedbackResponse, Exceptions
 │   ├── manager.py        # FeedbackManager
-│   └── backends/
+│   └── backend/          # Note: uses 'backend' (singular) not 'backends'
 │       ├── __init__.py
 │       ├── base.py       # Abstract backend interface
-│       ├── memory.py     # Memory backend
+│       ├── filesystem.py # Filesystem backend (default)
 │       └── redis.py      # Redis backend with Pub/Sub
 ```
 
 **Tasks**:
-- [ ] Create `graflow/hitl/` module structure
-- [ ] Implement `graflow/hitl/types.py`:
-  - [ ] `FeedbackType` enum
-  - [ ] `FeedbackRequest` dataclass
-  - [ ] `FeedbackResponse` dataclass
-- [ ] Implement `graflow/hitl/exceptions.py`:
-  - [ ] `FeedbackTimeoutException`
-  - [ ] `FeedbackStorageError`
-- [ ] Implement `graflow/hitl/manager.py`:
-  - [ ] `FeedbackManager` class
-  - [ ] `request_feedback()` with hybrid polling (Pub/Sub + polling fallback)
-  - [ ] `provide_feedback()` for external responses
-  - [ ] `list_pending_requests()`
-  - [ ] Channel integration support:
-    - [ ] `channel_key` and `write_to_channel` parameters
-    - [ ] Auto-write response to channel in `provide_feedback()`
-    - [ ] Write full response to `{channel_key}.__feedback_response__`
-    - [ ] `channel_manager` parameter in `__init__()`
-- [ ] Implement `graflow/hitl/backends/`:
-  - [ ] `base.py` - Abstract backend interface
-  - [ ] `memory.py` - Memory backend support
-  - [ ] `redis.py` - Redis backend with Pub/Sub integration
-- [ ] Update `graflow/core/context.py`:
-  - [ ] Add `feedback_manager` to `ExecutionContext`
-  - [ ] Add `request_feedback()` to `TaskExecutionContext`
-  - [ ] Add convenience methods (`request_approval`, `request_text_input`, `request_selection`)
-- [ ] Update `graflow/core/engine.py`:
-  - [ ] Handle `FeedbackTimeoutException` in `WorkflowEngine.execute()`
-  - [ ] Create checkpoint on timeout
-- [ ] Update `graflow/core/checkpoint.py`:
-  - [ ] Update checkpoint state schema to include feedback metadata
-  - [ ] Store pending feedback request references
+- [x] Create `graflow/hitl/` module structure
+- [x] Implement `graflow/hitl/types.py`:
+  - [x] `FeedbackType` enum
+  - [x] `FeedbackRequest` Pydantic model
+  - [x] `FeedbackResponse` Pydantic model
+  - [x] `FeedbackTimeoutError` exception (consolidated in types.py)
+- [x] Implement `graflow/hitl/manager.py`:
+  - [x] `FeedbackManager` class
+  - [x] `request_feedback()` with hybrid polling (Pub/Sub + polling fallback)
+  - [x] `provide_feedback()` for external responses
+  - [x] `list_pending_requests()`
+  - [x] Channel integration support:
+    - [x] `channel_key` and `write_to_channel` parameters
+    - [x] Auto-write response to channel in `provide_feedback()`
+    - [x] Write full response to `{channel_key}.__feedback_response__`
+    - [x] `channel_manager` parameter in `__init__()`
+- [x] Implement `graflow/hitl/backend/`:
+  - [x] `base.py` - Abstract backend interface
+  - [x] `filesystem.py` - Filesystem backend (default, JSON files with file locking)
+  - [x] `redis.py` - Redis backend with Pub/Sub integration and JSON serialization
+- [x] Update `graflow/core/context.py`:
+  - [x] Add `feedback_manager` to `ExecutionContext`
+  - [x] Add `request_feedback()` to `TaskExecutionContext`
+  - [x] Add convenience methods (`request_approval`, `request_text_input`, `request_selection`)
+- [x] Update `graflow/core/engine.py`:
+  - [x] Handle `FeedbackTimeoutError` in `WorkflowEngine.execute()`
+  - [x] Create checkpoint on timeout
+- [x] Update `graflow/core/checkpoint.py`:
+  - [x] Update checkpoint state schema to include feedback metadata
+  - [x] Store pending feedback request references
 
-### Phase 2: REST API (Module: `graflow/api/`)
+### Phase 2: REST API (Module: `graflow/api/`) ✅ **COMPLETED**
 
 **Module Structure**:
 ```
 graflow/
 ├── api/
-│   ├── __init__.py           # create_feedback_api() factory
-│   ├── router.py             # FastAPI router with endpoints
-│   └── schemas/
-│       ├── __init__.py
-│       └── feedback.py       # Pydantic schemas for request/response
+│   ├── __init__.py           # Minimal package with docstring
+│   ├── __main__.py           # CLI entry point (python -m graflow.api)
+│   ├── main.py               # CLI argument parsing and server launch
+│   ├── app.py                # create_feedback_api() factory
+│   ├── endpoints/
+│   │   ├── __init__.py
+│   │   └── feedback.py       # FastAPI router with all endpoints
+│   ├── schemas/
+│   │   ├── __init__.py
+│   │   └── feedback.py       # Pydantic schemas for request/response
+│   └── README.md             # API documentation
 ```
 
 **Tasks**:
-- [ ] Create `graflow/api/` module structure
-- [ ] Implement `graflow/api/schemas/feedback.py`:
-  - [ ] `FeedbackResponseRequest` Pydantic schema
-  - [ ] `FeedbackRequestResponse` Pydantic schema
-  - [ ] `FeedbackListResponse` Pydantic schema
-  - [ ] Request/response validation models
-- [ ] Implement `graflow/api/router.py`:
-  - [ ] FastAPI `APIRouter` for feedback endpoints
-  - [ ] `GET /api/feedback` (list pending requests)
-  - [ ] `GET /api/feedback/{id}` (get feedback details)
-  - [ ] `POST /api/feedback/{id}/respond` (provide feedback response)
-  - [ ] `DELETE /api/feedback/{id}` (cancel request)
-  - [ ] Dependency injection for `FeedbackManager`
-- [ ] Implement `graflow/api/__init__.py`:
-  - [ ] `create_feedback_api()` factory function
-  - [ ] Optional FastAPI dependency handling
-  - [ ] Include router from `router.py`
-- [ ] Add API authentication/authorization (optional OAuth 2.0)
+- [x] Create `graflow/api/` module structure
+- [x] Implement `graflow/api/schemas/feedback.py`:
+  - [x] `FeedbackResponseRequest` Pydantic schema
+  - [x] `FeedbackRequestResponse` Pydantic schema
+  - [x] `FeedbackDetailResponse` Pydantic schema
+  - [x] `MessageResponse` schema
+  - [x] `PendingFeedbackListResponse` schema
+  - [x] Request/response validation models with full validation and examples
+- [x] Implement `graflow/api/endpoints/feedback.py`:
+  - [x] FastAPI `APIRouter` for feedback endpoints
+  - [x] `GET /api/feedback` (list pending requests with count)
+  - [x] `GET /api/feedback/{id}` (get feedback details)
+  - [x] `POST /api/feedback/{id}/respond` (provide feedback response)
+  - [x] `DELETE /api/feedback/{id}` (cancel request)
+  - [x] App state pattern for `FeedbackManager` dependency injection
+- [x] Implement `graflow/api/app.py`:
+  - [x] `create_feedback_api()` factory function
+  - [x] `create_feedback_api_with_redis()` convenience function
+  - [x] CORS middleware support
+  - [x] Health check endpoint
+  - [x] Root info endpoint
+  - [x] Optional FastAPI dependency handling (import guard)
+- [x] Implement `graflow/api/main.py`:
+  - [x] CLI argument parsing (backend, host, port, workers, etc.)
+  - [x] Backend configuration (filesystem/redis)
+  - [x] Uvicorn server integration
+  - [x] Redis connection testing
+- [x] Implement `graflow/api/__main__.py`:
+  - [x] Module entry point for `python -m graflow.api`
+- [x] Implement `graflow/api/__init__.py`:
+  - [x] Minimal package file (no exports per project convention)
+  - [x] Docstring with usage instructions
+- [x] Generate OpenAPI/Swagger documentation (automatic via FastAPI)
+- [ ] Add API authentication/authorization (optional OAuth 2.0) - **DEFERRED** (future enhancement)
   - [ ] Implement `api/dependencies/auth.py` with `Depends` injection
   - [ ] Implement `api/security/oauth2.py` for OAuth 2.0 support
   - [ ] Implement `api/schemas/auth.py` for token models
   - [ ] Add scope-based permissions (read, write, admin)
   - [ ] Support optional authentication (configurable)
-- [ ] Generate OpenAPI/Swagger documentation
-- [ ] Create simple web UI for feedback management (optional)
+- [ ] Create simple web UI for feedback management - **DEFERRED** (optional)
 
 ### Phase 3: Testing
 
@@ -3837,7 +3928,7 @@ def test_feedback_auto_write_to_channel():
 **Test Case 5: API Endpoints**
 ```python
 from fastapi.testclient import TestClient
-from graflow.api import create_feedback_api
+from graflow.api.app import create_feedback_api
 
 def test_api_list_pending_feedback():
     """Test GET /api/feedback lists pending requests."""
@@ -4212,10 +4303,16 @@ The design prioritizes:
 
 ---
 
-**Document Status**: ✅ Design Confirmed - Ready for Implementation
+**Document Status**: ✅ Phase 1 & 2 Implementation Complete
 **Design Version**: 1.2
 **Finalized Date**: 2025-01-28
-**Next Steps**: Begin Phase 1 implementation (Core Functionality)
+**Implementation Status**:
+- ✅ Phase 1 (Core Functionality) - Complete
+- ✅ Phase 2 (REST API) - Complete
+- ⏳ Phase 3 (Testing) - Partial (API tests complete, integration tests pending)
+- ⏳ Phase 4 (Documentation) - Partial (examples complete, comprehensive docs pending)
+
+**Next Steps**: Complete Phase 3 testing (integration and scenario tests)
 
 **Key Design Decisions**:
 - Hybrid notification approach (Redis Pub/Sub + Polling Fallback) confirmed
@@ -4225,32 +4322,50 @@ The design prioritizes:
 - Channel integration support included
 - Module structure defined: `graflow/hitl/` for core, `graflow/api/` for REST API
 
-**Module Structure Summary**:
+**Module Structure Summary** (Actual Implementation):
 ```
 graflow/
-├── hitl/                      # Core HITL implementation
-│   ├── types.py              # Data types and enums
-│   ├── exceptions.py         # Exceptions
+├── hitl/                      # Core HITL implementation ✅
+│   ├── __init__.py
+│   ├── types.py              # Data types, enums, and exceptions (Pydantic models)
 │   ├── manager.py            # FeedbackManager
-│   └── backends/             # Backend implementations
+│   └── backend/              # Backend implementations (singular, not plural)
+│       ├── __init__.py
 │       ├── base.py           # Abstract interface
-│       ├── memory.py         # Memory backend
-│       └── redis.py          # Redis backend with Pub/Sub
-├── api/                       # REST API (optional, with OAuth 2.0)
-│   ├── __init__.py           # create_feedback_api()
-│   ├── router.py             # FastAPI router with endpoints
+│       ├── filesystem.py     # Filesystem backend (default, JSON files)
+│       └── redis.py          # Redis backend with Pub/Sub and JSON serialization
+├── api/                       # REST API ✅
+│   ├── __init__.py           # Minimal package with docstring only
+│   ├── __main__.py           # CLI entry point (python -m graflow.api)
+│   ├── main.py               # CLI argument parsing and server launch
+│   ├── app.py                # create_feedback_api() factory
+│   ├── endpoints/
+│   │   ├── __init__.py
+│   │   └── feedback.py       # FastAPI router with all endpoints
 │   ├── schemas/
-│   │   ├── feedback.py       # Feedback request/response schemas
-│   │   └── auth.py           # OAuth 2.0 token schemas (optional)
-│   ├── dependencies/
-│   │   └── auth.py           # Authentication dependencies (optional)
-│   └── security/
-│       ├── oauth2.py         # OAuth 2.0 implementation (optional)
-│       └── permissions.py    # Scope-based permissions (optional)
-└── core/                      # Core workflow updates
-    ├── context.py            # Add feedback_manager, request_feedback()
-    ├── engine.py             # Handle FeedbackTimeoutException
-    └── checkpoint.py         # Include feedback metadata
+│   │   ├── __init__.py
+│   │   └── feedback.py       # Pydantic schemas with full validation
+│   └── README.md             # API documentation
+└── core/                      # Core workflow updates ✅
+    ├── context.py            # feedback_manager, request_feedback(), convenience methods
+    ├── engine.py             # FeedbackTimeoutError handling
+    └── checkpoint.py         # Feedback metadata in checkpoint state
+```
+
+**Examples** ✅:
+```
+examples/11_hitl/
+├── 01_basic_approval.py          # Basic approval with immediate feedback
+├── 02_timeout_checkpoint.py      # Timeout handling and checkpoint creation
+├── 03_channel_integration.py     # Channel integration for inter-task communication
+└── 04_api_feedback.py            # Distributed feedback via REST API with Redis
+```
+
+**Tests** ✅ (Partial):
+```
+tests/hitl/
+├── test_feedback_manager.py      # FeedbackManager unit tests
+└── test_api.py                    # API endpoint tests (19 test cases)
 ```
 
 **Related Documents**:
