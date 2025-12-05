@@ -167,6 +167,63 @@ def execute(context: ExecutionContext, start_task_id: Optional[str] = None) -> A
     return last_result
 ```
 
+### 実行ループフローチャート
+
+以下は、`WorkflowEngine.execute()`の実行ループをMermaidフローチャートで視覚化したものです。
+
+```mermaid
+flowchart TB
+    subgraph "ワークフロー準備"
+        D[開始タスク決定]
+    end
+
+    subgraph "実行ループ"
+        D --> E{実行可能タスク<br/>存在?}
+        E -->|存在| F[タスク取得]
+        E -->|なし/上限到達| Z([終了])
+
+        F --> G[タスク実行準備]
+        G --> H[ハンドラー実行]
+
+        H -->|成功| I[結果保存]
+        H -.HITL中断.-> T{HITL中断処理}
+        H -.その他エラー.-> Z
+
+        T -->|Checkpoint保存| S[Checkpoint保存]
+        T -->|Terminate| Z
+
+        I --> J{Successor処理}
+        J -->|通常フロー| K[依存タスクをキューへ]
+        J -->|Goto制御| L[指定タスクへジャンプ]
+
+        K --> M[実行状態更新]
+        L --> M
+        M --> N{チェックポイント<br/>要求?}
+
+        N -->|要| O[状態保存]
+        N -->|否| E
+        O --> S
+        S --> Z
+    end
+
+    style E fill:#ffcccc,color:#000
+    style J fill:#ccffcc,color:#000
+    style O fill:#ffffcc,color:#000
+    style H fill:#cce5ff,color:#000
+    style Z fill:#ffe1e1,color:#000
+```
+
+**フローチャート解説**:
+
+- **ワークフロー準備**: 開始タスクの決定（`start_task_id`指定 or キューから取得）
+- **実行ループ** (中央):
+  - 実行可能タスクの有無をチェック（キュー空 or ステップ上限）
+  - タスク取得 → ハンドラー実行 → 結果保存（Channel更新）
+  - **Successor処理**: 通常フロー（全successorをキューへ）またはGoto制御（指定タスクへジャンプ）
+  - 実行状態更新（完了タスク記録、ステップカウント増分）
+  - チェックポイント要求があれば状態を保存
+- **永続化・中断処理**: Checkpoint保存、HITL（Human-in-the-Loop）による中断対応
+
 ## ExecutionContext: ステートマシン管理
 
 ExecutionContextはタスクの状態を一元管理する**ステートコンテナ**として機能する。
