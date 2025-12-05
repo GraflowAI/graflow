@@ -199,7 +199,7 @@ Build AI-powered workflows with LLM integration:
 
 ### Level 8: Production Use Cases 💼
 
-**09_real_world/** - Complete real-world applications
+**08_real_world/** - Complete real-world applications
 1. `data_pipeline.py` - ETL workflow (20 min)
 2. `ml_training.py` - ML training pipeline (20 min)
 3. `batch_processing.py` - Large-scale batch processing (15 min)
@@ -207,17 +207,25 @@ Build AI-powered workflows with LLM integration:
 
 ### Level 9: Workflow Visualization 📊
 
-**10_visualization/** - Visualize workflows and graphs
+**09_visualization/** - Visualize workflows and graphs
 1. `workflow_visualization.py` - Visualizing Graflow workflows (20 min)
 2. `graph_utilities.py` - Graph visualization utilities (25 min)
 
-### Level 10: LLM Integration 🤖
+### Level 10: Group Execution Policy
 
-**12_llm_integration/** - AI-powered workflows
+to appear
+
+### Level 11: LLM Integration 🤖
+
+**11_llm_integration/** - AI-powered workflows
 1. `simple_llm_client.py` - Basic LLMClient injection (15 min)
 2. `model_override.py` - Cost optimization with model selection (20 min)
 3. `llm_agent.py` - ReAct patterns with Google ADK (25 min)
 4. `multi_agent_workflow.py` - Multi-agent collaboration (30 min)
+
+### Level 12: Human-in-the-Loop (HITL) 👦
+
+to appear
 
 **Total Learning Time**: ~10.25 hours to complete all examples
 
@@ -341,24 +349,30 @@ examples/
 │   ├── batch_processing.py
 │   └── sales_analysis.py
 │
-├── 10_visualization/    # Workflow visualization
+├── 09_visualization/    # Workflow visualization
 │   ├── README.md       # Category documentation
 │   ├── workflow_visualization.py
 │   └── graph_utilities.py
-│
-├── 12_llm_integration/  # LLM integration
+|
+├── 10_group_exec_policy
+|   ├── (to appear)
+|
+├── 11_llm_integration/  # LLM integration
 │   ├── README.md       # Category documentation
 │   ├── simple_llm_client.py
 │   ├── model_override.py
 │   ├── llm_agent.py
 │   └── multi_agent_workflow.py
 │
+├── 12_hitl
+|   ├── (to appear)
+|
 └── README.md           # This file
 ```
 
 ## Development Status
 
-✅ **Completed** (31 examples): Fully functional and tested with comprehensive documentation
+✅ Fully functional and tested with comprehensive documentation
 
 ### Progress Overview
 
@@ -371,11 +385,11 @@ examples/
 | 05_distributed | ✅ Complete | 3/3 | Redis-based distribution |
 | 06_advanced | ✅ Complete | 4/4 | Advanced patterns |
 | 07_dynamic_tasks | ✅ Complete | 2/2 | Dynamic task generation |
-| 09_real_world | ✅ Complete | 4/4 | Production use cases |
-| 10_visualization | ✅ Complete | 2/2 | Workflow visualization |
-| 12_llm_integration | ✅ Complete | 4/4 | LLM-powered workflows |
-
-**Total Progress**: 31/31 examples (100% complete) 🎉
+| 08_real_world | ✅ Complete | 4/4 | Production use cases |
+| 09_visualization | ✅ Complete | 2/2 | Workflow visualization |
+| 10_group_exec_policy | ✅ Complete | (to appear) | (to appear) |
+| 11_llm_integration | ✅ Complete | 4/4 | LLM-powered workflows |
+| 12_hitl | ✅ Complete | (to appear)  | (to appear)  |
 
 ## Troubleshooting
 

@@ -14,7 +14,7 @@ Usage:
        uv run python -m graflow.api --backend redis --redis-host localhost --redis-port 6379
 
     3. Run this workflow:
-       uv run python examples/11_hitl/04_api_feedback.py
+       uv run python examples/12_hitl/04_api_feedback.py
 
     4. The workflow will wait for feedback. Provide it via API:
        # List pending requests

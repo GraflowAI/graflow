@@ -20,17 +20,17 @@ and overriding :meth:`on_group_finished` for custom behavior. When passing a pol
 Run any example:
 
 ```bash
-PYTHONPATH=. uv run python examples/11_error_handling/parallel_group_strict_mode.py
-PYTHONPATH=. uv run python examples/11_error_handling/parallel_group_best_effort.py
-PYTHONPATH=. uv run python examples/11_error_handling/parallel_group_at_least_n.py
-PYTHONPATH=. uv run python examples/11_error_handling/parallel_group_critical_tasks.py
-PYTHONPATH=. uv run python examples/11_error_handling/parallel_group_custom_policy.py
+uv run python examples/10_group_exec_policy/parallel_group_strict_mode.py
+uv run python examples/10_group_exec_policy/parallel_group_best_effort.py
+uv run python examples/10_group_exec_policy/parallel_group_at_least_n.py
+uv run python examples/10_group_exec_policy/parallel_group_critical_tasks.py
+uv run python examples/10_group_exec_policy/parallel_group_custom_policy.py
 ```
 
 Or use the make command:
 
 ```bash
-make py examples/11_error_handling/parallel_group_strict_mode.py
+make py examples/10_group_exec_policy/parallel_group_strict_mode.py
 ```
 
 ## Examples
@@ -403,13 +403,13 @@ Run tests:
 
 ```bash
 # Unit tests
-PYTHONPATH=. uv run pytest tests/core/test_parallel_group_error_handling.py -v
+uv run pytest tests/core/test_parallel_group_error_handling.py -v
 
 # Scenario tests
-PYTHONPATH=. uv run pytest tests/scenario/test_parallel_group_error_handling_scenarios.py -v
+uv run pytest tests/scenario/test_parallel_group_error_handling_scenarios.py -v
 
 # All error handling tests
-PYTHONPATH=. uv run pytest tests/ -k "parallel_group_error" -v
+uv run pytest tests/ -k "parallel_group_error" -v
 ```
 
 ## Best Practices
