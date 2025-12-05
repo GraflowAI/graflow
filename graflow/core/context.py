@@ -16,11 +16,10 @@ from graflow.channels.typed import TypedChannel
 from graflow.core.cycle import CycleController
 from graflow.core.engine import WorkflowEngine
 from graflow.core.graph import TaskGraph
-from graflow.exceptions import CycleLimitExceededError
+from graflow.exceptions import CycleLimitExceededError, GraphCompilationError
 from graflow.queue.base import TaskSpec
 from graflow.queue.local import LocalTaskQueue
 from graflow.trace.noop import NoopTracer
-from graflow.exceptions import GraphCompilationError
 
 if TYPE_CHECKING:
     from graflow.core.task import Executable
@@ -65,6 +64,11 @@ class TaskExecutionContext:
     def session_id(self) -> str:
         """Get session ID from execution context."""
         return self.execution_context.session_id
+
+    @property
+    def graph(self) -> TaskGraph:
+        """Get the task graph."""
+        return self.execution_context.graph
 
     def can_iterate(self) -> bool:
         """Check if this task can execute another cycle."""
@@ -1383,10 +1387,14 @@ def create_execution_context(
         max_steps: Maximum execution steps
         tracer: Optional tracer for workflow execution tracking
     """
+    from graflow.core.task import Task
     from graflow.trace.noop import NoopTracer
+
     if tracer is None:
         tracer = NoopTracer()
     graph = TaskGraph()
+    # Add dummy task for start_node to satisfy validation
+    graph.add_node(Task(start_node), start_node)
     return ExecutionContext.create(graph, start_node, max_steps=max_steps, tracer=tracer)
 
 def execute_with_cycles(graph: TaskGraph, start_node: str, max_steps: int = 10) -> None:
