@@ -642,17 +642,6 @@ class ExecutionContext:
             )
             ```
         """
-        if start_node is None:
-            # Find start nodes (nodes with no predecessors)
-            candidate_nodes = graph.get_start_nodes()
-            if not candidate_nodes:
-                raise GraphCompilationError("No start node specified and no nodes with no predecessors found.")
-            elif len(candidate_nodes) > 1:
-                raise GraphCompilationError("Multiple start nodes found, please specify one.")
-            start_node = candidate_nodes[0]
-            if start_node is None:
-                raise GraphCompilationError("No valid start node found in the workflow graph.")
-
         return cls(
             graph=graph,
             start_node=start_node,
