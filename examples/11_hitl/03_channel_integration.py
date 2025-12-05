@@ -8,12 +8,20 @@ This example demonstrates:
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 
 from graflow.core.decorators import task
 from graflow.core.workflow import workflow
 from graflow.hitl.types import FeedbackResponse, FeedbackType
+
+# Configure logging to show INFO level messages from graflow.hitl
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
 
 
 def main():

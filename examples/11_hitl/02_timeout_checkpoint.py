@@ -13,10 +13,18 @@ Note: This is a simplified example. In production, you would:
 
 from __future__ import annotations
 
+import logging
 import time
 
 from graflow.core.decorators import task
 from graflow.core.workflow import workflow
+
+# Configure logging to show INFO level messages from graflow.hitl
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
 
 
 def main():
@@ -78,7 +86,7 @@ def main():
             return {"status": "completed", "review": review}
 
         # Define workflow
-        analyze_data >> request_review >> finalize_report
+        _ = analyze_data >> request_review >> finalize_report
 
         # Execute
         print("\n" + "=" * 80)

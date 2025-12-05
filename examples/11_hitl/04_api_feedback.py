@@ -11,10 +11,10 @@ Usage:
        docker run -p 6379:6379 redis:7.2
 
     2. Start the API server (in another terminal):
-       python -m graflow.api --backend redis --redis-host localhost --redis-port 6379
+       uv run python -m graflow.api --backend redis --redis-host localhost --redis-port 6379
 
     3. Run this workflow:
-       PYTHONPATH=. python examples/11_hitl/04_api_feedback.py
+       uv run python examples/11_hitl/04_api_feedback.py
 
     4. The workflow will wait for feedback. Provide it via API:
        # List pending requests
@@ -30,10 +30,18 @@ Usage:
 
 from __future__ import annotations
 
+import logging
 import time
 
 from graflow.core.decorators import task
 from graflow.core.workflow import workflow
+
+# Configure logging to show INFO level messages from graflow.hitl
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
 
 
 def main():
