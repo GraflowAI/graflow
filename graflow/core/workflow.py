@@ -7,7 +7,6 @@ import uuid
 from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 from graflow.core.graph import TaskGraph
-from graflow.exceptions import GraphCompilationError
 from graflow.trace.base import Tracer
 
 if TYPE_CHECKING:
