@@ -380,7 +380,7 @@ class TaskWorker:
             }
         except GraflowRuntimeError as e:
             duration = time.time() - start_time
-            logger.error(f"Task {task_id} failed with GraflowRuntimeError after {duration:.3f}s: {e}")
+            logger.error(f"Task {task_id} failed with GraflowRuntimeError after {duration:.3f}s: {e}", exc_info=True)
             return {
                 "success": False,
                 "error": str(e),
