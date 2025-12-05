@@ -216,7 +216,13 @@ class TestRedisCoordinator:
         mock_pubsub.listen.return_value = listen()
         mock_redis.pubsub.return_value = mock_pubsub
 
-        mocker.patch("graflow.coordination.redis_coordinator.time.time", side_effect=[0, 0.5, 1.5])
+        def fake_time():
+            t = 0
+            while True:
+                yield t
+                t += 0.5
+
+        mocker.patch("graflow.coordination.redis_coordinator.time.time", side_effect=fake_time())
 
         result = coordinator.wait_barrier("timeout_barrier", timeout=1)
 
