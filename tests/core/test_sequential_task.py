@@ -6,7 +6,7 @@ from graflow.core.context import ExecutionContext
 from graflow.core.decorators import task
 from graflow.core.engine import WorkflowEngine
 from graflow.core.graph import TaskGraph
-from graflow.core.task import ParallelGroup, SequentialTask, Task, TaskWrapper
+from graflow.core.task import ParallelGroup, SequentialTask, Task, TaskWrapper, chain
 from graflow.core.workflow import WorkflowContext
 
 
@@ -14,7 +14,7 @@ from graflow.core.workflow import WorkflowContext
 def execution_context():
     """Create execution context for tests."""
     graph = TaskGraph()
-    return ExecutionContext.create(graph, "test", max_steps=10)
+    return ExecutionContext.create(graph, start_node=None, max_steps=10)
 
 
 class TestSequentialTaskBasics:
@@ -37,6 +37,22 @@ class TestSequentialTaskBasics:
             assert result.tasks[0] == task_a
             assert result.tasks[1] == task_b
             assert result.tasks[2] == task_c
+
+    def test_chain_helper_creates_dependencies(self):
+        """chain helper should mirror >> semantics and add graph edges."""
+        with WorkflowContext("test_workflow") as ctx:
+            task_a = Task("task_a")
+            task_b = Task("task_b")
+            task_c = Task("task_c")
+
+            chained = chain(task_a, task_b, task_c)
+
+            assert isinstance(chained, SequentialTask)
+            assert [t.task_id for t in chained.tasks] == ["task_a", "task_b", "task_c"]
+
+            graph = ctx.graph._graph
+            assert ("task_a", "task_b") in graph.edges()
+            assert ("task_b", "task_c") in graph.edges()
 
     def test_sequential_task_leftmost_property(self):
         """Test leftmost property returns first task in chain."""
@@ -214,7 +230,7 @@ class TestSequentialTaskGraphStructure:
             task_b = Task("task_b")
             task_c = Task("task_c")
 
-            task_a >> task_b >> task_c
+            _ = task_a >> task_b >> task_c
 
             graph = ctx.graph._graph
 
@@ -229,7 +245,7 @@ class TestSequentialTaskGraphStructure:
             task_b = Task("task_b")
             task_c = Task("task_c")
 
-            (task_a >> task_b) | task_c
+            _ = (task_a >> task_b) | task_c
 
             graph = ctx.graph._graph
 
@@ -259,7 +275,7 @@ class TestSequentialTaskGraphStructure:
             store = Task("store")
 
             # Build the workflow
-            fetch >> ((transform_a >> subtask_a) | transform_b) >> store
+            _ = fetch >> ((transform_a >> subtask_a) | transform_b) >> store
 
             graph = ctx.graph._graph
 
@@ -326,7 +342,7 @@ class TestSequentialTaskGraphStructure:
             task_e = Task("task_e")
 
             # Create: ((a >> b) | (c >> d)) >> e
-            ((task_a >> task_b) | (task_c >> task_d)) >> task_e
+            _ =((task_a >> task_b) | (task_c >> task_d)) >> task_e
 
             graph = ctx.graph._graph
 
@@ -460,7 +476,7 @@ class TestSequentialTaskEdgeCases:
             task_a = Task("task_a")
             task_b = Task("task_b")
 
-            sequential = task_a >> task_b
+            _sequential = task_a >> task_b
 
             graph = ctx.graph._graph
 

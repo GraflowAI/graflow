@@ -2,10 +2,11 @@
 
 import pytest
 
+from graflow.coordination.coordinator import CoordinationBackend
 from graflow.coordination.executor import GroupExecutor
 from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
-from graflow.core.task import ParallelGroup, SequentialTask, Task, TaskWrapper
+from graflow.core.task import ParallelGroup, SequentialTask, Task, TaskWrapper, parallel
 from graflow.core.workflow import WorkflowContext
 
 
@@ -13,7 +14,7 @@ from graflow.core.workflow import WorkflowContext
 def execution_context():
     """Create execution context for tests."""
     graph = TaskGraph()
-    return ExecutionContext.create(graph, "test", max_steps=10)
+    return ExecutionContext.create(graph, start_node=None, max_steps=10)
 
 
 class TestParallelGroup:
@@ -41,6 +42,21 @@ class TestParallelGroup:
 
             assert isinstance(parallel_group, ParallelGroup)
             assert len(parallel_group.tasks) == 3
+
+    def test_parallel_helper_creates_group(self):
+        """parallel helper should mirror | semantics and register membership."""
+        with WorkflowContext("test") as ctx:
+            task1 = Task("task1")
+            task2 = Task("task2")
+            task3 = Task("task3")
+
+            parallel_group = parallel(task1, task2, task3)
+
+            assert isinstance(parallel_group, ParallelGroup)
+            assert set(parallel_group.tasks) == {task1, task2, task3}
+
+            members = ctx.graph.get_parallel_group_members(parallel_group.task_id)
+            assert set(members) == {"task1", "task2", "task3"}
 
     def test_parallel_group_run_with_default_executor(self, execution_context, mocker):
         """Test ParallelGroup.run() with default GroupExecutor."""
@@ -453,22 +469,16 @@ class TestParallelGroupIntegration:
             task1 = TaskWrapper("task1", task_func_1)
             task2 = TaskWrapper("task2", task_func_2)
 
-            parallel_group = ParallelGroup([task1, task2])
+            parallel_group = ParallelGroup([task1, task2]).with_execution(backend=CoordinationBackend.DIRECT)
 
             # Use the workflow context's graph instead of creating a new one
-            context = ExecutionContext.create(wf_ctx.graph, "test")
+            context = ExecutionContext.create(wf_ctx.graph)
 
             parallel_group.set_execution_context(context)
 
-            # Capture print output to verify execution
-            mock_print = mocker.patch('builtins.print')
             parallel_group.run()
 
-            # Verify print calls show direct execution
-            print_calls = [str(call) for call in mock_print.call_args_list]
-            assert any("Running parallel group:" in call for call in print_calls)
-            assert any("Direct tasks:" in call for call in print_calls)
-
             # Verify both tasks were executed
-            assert "task1_executed" in results
-            assert "task2_executed" in results
+            assert results == ["task1_executed", "task2_executed"]
+            assert context.get_result("task1") == "result1"
+            assert context.get_result("task2") == "result2"
