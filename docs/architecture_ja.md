@@ -48,12 +48,6 @@ graph TB
         Memory[(In-Memory)]
     end
 
-    subgraph "Utilities"
-        FR[FunctionRegistry]
-        CC[CycleController]
-        EXC[Exceptions]
-    end
-
     APP --> WF
     WF --> WE
     WE --> EC
@@ -79,10 +73,6 @@ graph TB
     MC --> Memory
     TQ --> Redis
     TQ --> Memory
-
-    EC --> FR
-    EC --> CC
-    WE --> EXC
 ```
 
 ## コンポーネント詳細
