@@ -1,11 +1,13 @@
 # Graflow Unique Features & Originality
 ## Comprehensive Comparison with LangGraph, LangChain, Celery, and Airflow
 
-**Document Version**: 1.1
-**Last Updated**: 2025-10-23
+**Document Version**: 1.3
+**Last Updated**: 2025-12-05
 **Author**: Graflow Team
 
 **Changelog**:
+- v1.3 (2025-12-05): Added workflow control (terminate_workflow/cancel_workflow) to core feature #3 "State Machine Execution"
+- v1.2 (2025-12-05): Added "Human-in-the-Loop (HITL)" as core feature #10, updated comparative analysis and use cases
 - v1.1 (2025-10-23): Added Checkpoint/Resume System as core feature #9
 - v1.0 (2025-10-22): Initial version
 
@@ -33,7 +35,7 @@ Graflow is a **general-purpose workflow execution engine** that combines the bes
 |---------|-------------|-----------------|
 | **Worker Fleet Management** | Distributed parallel execution of grouped tasks via TaskWorker | Celery, Airflow (partial) |
 | **Runtime Dynamic Tasks** | Modify workflow graph during execution | None (LangGraph: compile-time only) |
-| **State Machine Execution** | First-class state machines via next_iteration() | None |
+| **State Machine Execution** | Cycles via next_iteration(), early termination via terminate_workflow/cancel_workflow | None |
 | **Pythonic Operators DSL** | Mathematical syntax (`>>`, `\|`) for workflow graph construction (DAG + cycles) | None |
 | **Pluggable Task Handlers** | Custom execution strategies (GPU, SSH, cloud, Docker) | Limited in Celery/Airflow |
 | **Docker Execution** | Built-in containerized task execution | External tools required |
@@ -41,6 +43,7 @@ Graflow is a **general-purpose workflow execution engine** that combines the bes
 | **Seamless Local/Distributed** | Single-line backend switching | None (most require infrastructure) |
 | **Channel-based Communication** | Namespaced key-value store for workflow state sharing | XCom (Airflow), State (LangGraph) |
 | **Checkpoint/Resume** | User-controlled checkpointing from within tasks | LangGraph (automatic only), Airflow (limited) |
+| **Human-in-the-Loop (HITL)** | Runtime human intervention and feedback waiting, universal webhook notifications | LangGraph (limited), others none |
 
 ---
 
@@ -48,17 +51,18 @@ Graflow is a **general-purpose workflow execution engine** that combines the bes
 
 ### Overview
 
-Graflow's unique features can be grouped into **9 major categories**:
+Graflow's unique features can be grouped into **10 major categories**:
 
 1. **Worker Fleet Management** - Distributed parallel task execution
 2. **Runtime Dynamic Tasks** - Graph mutation during execution
-3. **State Machine Execution** - First-class state machine support (cycles via next_iteration)
+3. **State Machine Execution** - Cycle control via next_iteration, early termination via terminate/cancel_workflow
 4. **Pluggable Task Handlers** - Custom execution strategies (including Docker)
 5. **Granular Error Policies** - Flexible parallel group error handling
 6. **Pythonic Operators DSL** - Mathematical workflow graph syntax (DAG + cycles)
 7. **Seamless Local/Distributed** - Backend switching
 8. **Channel Communication** - Namespaced KVS for state sharing
 9. **Checkpoint/Resume** - Workflow state persistence and recovery
+10. **Human-in-the-Loop (HITL)** - Runtime human intervention and feedback collection
 
 ### 1. Worker Fleet Management 🚀
 
@@ -275,11 +279,91 @@ def optimize_hyperparameters(context: TaskExecutionContext, params=None):
 
 ### 3. State Machine Execution 🔄
 
-**Implementation**: `examples/07_dynamic_tasks/runtime_dynamic_tasks.py:265-319`
+**Implementation**: `graflow/core/context.py`, `graflow/core/engine.py`
 
 #### What Makes It Unique?
 
-Graflow enables **true state machine implementations** using `next_iteration()` and channel-based state persistence, allowing complex control flows without explicit state machine libraries.
+Graflow provides advanced workflow control capabilities, offering unified handling of iteration, early termination, and cancellation.
+
+#### Iteration Control
+
+Use `next_iteration()` to express convergence processing and state transitions explicitly. Storing state in channels while looping is the recommended pattern.
+
+```python
+@task(inject_context=True)
+def iterative_task(context: TaskExecutionContext):
+    channel = context.get_channel()
+    iteration = channel.get("iteration", default=0)
+
+    result = compute_step(iteration)
+
+    if result.converged:
+        channel.set("final_result", result)
+        return "DONE"
+    else:
+        channel.set("iteration", iteration + 1)
+        context.next_iteration()
+        return "CONTINUE"
+```
+
+#### Workflow Normal Termination (terminate_workflow)
+
+Calling `context.terminate_workflow(message)` from a task marks the current task as completed while terminating the workflow normally without executing subsequent tasks.
+
+```python
+@task(inject_context=True)
+def check_cache(context):
+    cache_result = get_from_cache()
+
+    if cache_result is not None:
+        # Cache hit - skip remaining processing
+        context.terminate_workflow("Data found in cache")
+        return cache_result
+
+    # Cache miss - proceed with normal flow to execute subsequent tasks
+    return None
+```
+
+**Use Cases**:
+- Early completion on cache hit
+- No further steps needed when condition is met
+- Data already up-to-date, no update required
+
+#### Workflow Cancellation (cancel_workflow)
+
+Calling `context.cancel_workflow(message)` from a task terminates the entire workflow abnormally. The current task is not marked as completed, and a `GraflowWorkflowCanceledError` exception is raised.
+
+```python
+@task(inject_context=True)
+def validate_data(context, data):
+    if not data.is_valid():
+        # Data validation failed - cancel entire workflow
+        context.cancel_workflow("Data validation failed: invalid format")
+
+    return process(data)
+```
+
+**Use Cases**:
+- Invalid data detected
+- Critical error occurred, cannot continue
+- User explicitly requested cancellation
+
+#### Control Flow Priority
+
+```python
+# Control flow priority (processing order within the engine):
+# 1. cancel_workflow  ← Exception before task completion (abnormal termination)
+# 2. terminate_workflow ← Task completed, loop terminates (normal termination)
+# 3. goto_called  ← Task completed, successors skipped
+# 4. Normal flow  ← Task completed, successors executed
+```
+
+#### Feature Summary
+
+- Cycle count limited by CycleController to prevent infinite loops
+- Can be combined with checkpoints to recover intermediate progress
+- `terminate_workflow`: Task completed, successors skipped, normal termination
+- `cancel_workflow`: Task not completed, exception raised, abnormal termination
 
 #### State Machine Pattern
 
@@ -517,8 +601,10 @@ def game_loop(context):
 | **Distributed State** | ✅ Redis channels | ❌ | ❌ | ⚠️ DB-backed |
 | **State Transitions** | ✅ Dynamic (runtime) | ⚠️ Static (graph-defined) | N/A | N/A |
 | **Max Iterations** | ✅ `max_steps` | ⚠️ Manual tracking | N/A | N/A |
+| **Early Termination** | ✅ `terminate_workflow()` | ❌ | ❌ | ❌ |
+| **Workflow Cancellation** | ✅ `cancel_workflow()` | ❌ | ❌ | ❌ |
 
-**Key Advantage**: Graflow allows **implementing complex state machines** as workflows, with distributed state persistence and seamless integration with other tasks.
+**Key Advantage**: Graflow allows **implementing complex state machines** as workflows, with distributed state persistence, early termination control, and seamless integration with other tasks.
 
 #### Best Practices
 
@@ -1634,6 +1720,290 @@ print(f"Records: {metadata.user_metadata['records_processed']}")
 
 ---
 
+### 10. Human-in-the-Loop (HITL) 👤
+
+**Implementation**: `graflow/hitl/manager.py`, `graflow/hitl/types.py`, `docs/hitl/hitl_design.md`
+
+Graflow enables workflows to wait for human feedback during execution, accepting responses for approval, text input, selection, and more. It intelligently handles both immediate and delayed responses.
+
+#### Core APIs
+
+##### Request Feedback from Tasks
+
+```python
+@task(inject_context=True)
+def approval_task(context):
+    # Request approval (wait 3 minutes)
+    response = context.request_approval(
+        prompt="Approve deployment to production?",
+        timeout=180
+    )
+
+    if response:
+        deploy_to_production()
+    else:
+        cancel_deployment()
+```
+
+##### Multiple Feedback Types
+
+```python
+# Text input
+comments = context.request_text_input(
+    prompt="Enter your comments on this report",
+    timeout=300
+)
+
+# Selection from options
+action = context.request_selection(
+    prompt="Select the next action",
+    options=["retry", "skip", "abort"],
+    timeout=180
+)
+
+# Custom feedback
+response = context.request_feedback(
+    feedback_type=FeedbackType.CUSTOM,
+    prompt="Adjust parameters",
+    metadata={"current_params": {...}},
+    timeout=300
+)
+```
+
+##### Channel Integration
+
+```python
+@task(inject_context=True)
+def approval_with_channel(context):
+    # Automatically write feedback response to channel
+    response = context.request_approval(
+        prompt="Approve deployment?",
+        channel_key="deployment_approved",
+        write_to_channel=True,
+        timeout=180
+    )
+
+@task(inject_context=True)
+def execute_deployment(context):
+    # Other tasks read approval status from channel
+    approved = context.get_channel().get("deployment_approved")
+    if approved:
+        deploy()
+```
+
+#### User Notification System
+
+##### Console Notification (Default)
+
+```python
+@task(inject_context=True)
+def approval_task(context):
+    # Default: Display API endpoint to console
+    response = context.request_approval(
+        prompt="Approve deployment?",
+        timeout=180
+    )
+```
+
+Example output:
+```
+================================================================================
+🔔 Feedback Request: deploy_task_a1b2c3d4
+Type: approval
+Prompt: Approve deployment?
+Timeout: 180 seconds
+
+📋 Feedback API Endpoint:
+   http://localhost:8000/api/feedback/deploy_task_a1b2c3d4/respond
+
+Example:
+  curl -X POST http://localhost:8000/api/feedback/deploy_task_a1b2c3d4/respond \
+    -H "Content-Type: application/json" \
+    -d '{"approved": true, "reason": "Approved"}'
+================================================================================
+```
+
+##### Slack Webhook Notification
+
+```python
+from graflow.hitl.types import NotificationConfig, NotificationType
+
+@task(inject_context=True)
+def approval_with_slack(context):
+    notification_config = NotificationConfig(
+        notification_type=NotificationType.WEBHOOK,
+        api_base_url="https://api.example.com",
+        webhook_url="https://hooks.slack.com/services/YOUR/WEBHOOK/URL",
+        webhook_payload_template="""
+        {
+            "text": "🔔 *Feedback Request*",
+            "blocks": [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "*Prompt:*\\n{{ prompt }}"
+                    }
+                },
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "*API Endpoint:*\\n<{{ api_url }}|Submit Feedback>"
+                    }
+                }
+            ]
+        }
+        """
+    )
+
+    response = context.request_feedback(
+        feedback_type=FeedbackType.APPROVAL,
+        prompt="Approve deployment to production?",
+        timeout=300,
+        notification_config=notification_config
+    )
+```
+
+##### Universal Webhook (Discord, Teams, Custom Endpoints)
+
+```python
+@task(inject_context=True)
+def approval_with_custom_endpoint(context):
+    notification_config = NotificationConfig(
+        notification_type=NotificationType.WEBHOOK,
+        api_base_url="https://api.example.com",
+        webhook_url="https://your-system.com/api/notifications",
+        webhook_method="POST",
+        webhook_headers={"Authorization": "Bearer YOUR_TOKEN"},
+        webhook_secret="your-hmac-secret",  # For HMAC signature
+        webhook_retry_count=3,
+        webhook_timeout=10
+    )
+
+    response = context.request_feedback(
+        feedback_type=FeedbackType.APPROVAL,
+        prompt="Approval required",
+        timeout=180,
+        notification_config=notification_config
+    )
+```
+
+##### Custom Notification Handler
+
+```python
+def my_custom_notifier(feedback_request, api_url):
+    """Custom notification logic"""
+    send_email(
+        to="admin@example.com",
+        subject=f"Feedback Request: {feedback_request.task_id}",
+        body=f"API URL: {api_url}"
+    )
+
+@task(inject_context=True)
+def approval_with_custom(context):
+    notification_config = NotificationConfig(
+        notification_type=NotificationType.CUSTOM,
+        api_base_url="https://api.example.com",
+        custom_handler=my_custom_notifier
+    )
+
+    response = context.request_feedback(
+        feedback_type=FeedbackType.APPROVAL,
+        prompt="Custom notification test",
+        timeout=180,
+        notification_config=notification_config
+    )
+```
+
+#### Intelligent Timeout Handling
+
+**Scenario 1: Immediate Approval (within 3 minutes)**
+```
+Task requests approval → Polling (3 min) → Human approves → Task continues
+```
+
+**Scenario 2: Delayed Approval (hours/days later)**
+```
+Task requests approval → Polling (3 min) → Timeout
+→ Create checkpoint → Workflow terminates
+→ (Later) Human approves via API → Workflow resumes from checkpoint
+→ Task continues with approval
+```
+
+**Scenario 3: Distributed Execution**
+```
+Worker 1: Task requests feedback → Timeout → Checkpoint → Worker exits
+→ Human provides feedback via API (stored in Redis)
+→ Worker 2: Resume from checkpoint → Retrieve feedback → Continue
+```
+
+#### Provide Feedback via External API
+
+```bash
+# List pending feedback requests
+GET /api/feedback?session_id={session_id}
+
+# Provide approval
+POST /api/feedback/{feedback_id}/respond
+{
+  "approved": true,
+  "reason": "Approved by manager",
+  "responded_by": "alice@example.com"
+}
+
+# Provide text feedback
+POST /api/feedback/{feedback_id}/respond
+{
+  "text": "Fix typo in section 3",
+  "responded_by": "bob@example.com"
+}
+```
+
+#### Backend Support
+
+| Feature | Filesystem | Redis |
+|---------|------------|-------|
+| **Persistence** | ✅ File-based | ✅ Memory + persistence |
+| **Cross-process** | ⚠️ Same machine only | ✅ Possible (network) |
+| **Cross-node** | ❌ Not possible | ✅ Possible |
+| **Pub/Sub Notification** | ❌ None | ✅ Available |
+| **Use Case** | Development/single-node | Production/distributed |
+
+#### Notification Mechanism (Hybrid Approach)
+
+- **Redis Pub/Sub**: Low-latency notification (active polling optimization)
+- **Polling Fallback**: Reliability when Pub/Sub fails
+- **Storage as Source of Truth**: Guaranteed response retrieval on resume
+
+#### Representative Use Cases
+
+1. **Approval Workflows**: Approval for deployment, payment processing, critical operations
+2. **Data Validation**: Human verification of ML predictions and quality checks
+3. **Parameter Tuning**: Runtime parameter adjustments
+4. **Error Recovery**: Human decision on errors (retry, skip, abort)
+5. **Batch Processing Review**: Processes requiring periodic human review
+
+#### Feature Summary
+
+- **Multiple Feedback Types**: Approval, text input, selection, multi-selection, custom
+- **Intelligent Timeout**: Short-term polling → Checkpoint → Resume
+- **Persistent Feedback State**: Retained after process restart
+- **Channel Integration**: Automatic channel writing of feedback responses
+- **Universal User Notification**: Console, Slack, Discord, Teams, custom endpoints, custom handlers
+- **HMAC Signature**: Webhook security
+- **Distributed Execution Support**: Cross-process/cross-node feedback via Redis
+
+#### Best Practices
+
+1. Set appropriate timeouts (immediate: 3-5 min, delayed: assume hours+)
+2. Include context information in metadata
+3. Use Redis backend for production
+4. Enable HMAC signature for webhook notifications
+5. Share feedback with other tasks via channel integration
+
+---
+
 ## Comparative Analysis
 
 ### Feature Matrix
@@ -1642,7 +2012,7 @@ print(f"Records: {metadata.user_metadata['records_processed']}")
 |---------|---------|-----------|--------|---------|
 | **Pythonic DSL** | ✅ `>>`, `\|` (DAG + cycles) | ❌ | ⚠️ Partial | ⚠️ Partial |
 | **Runtime Dynamic Tasks** | ✅ `next_task()` | ❌ | ❌ | ⚠️ Dynamic DAG |
-| **State Machine Execution** | ✅ `next_iteration()` + Channel | ⚠️ Graph cycles | ❌ | ❌ |
+| **State Machine Execution** | ✅ `next_iteration()` + `terminate/cancel_workflow()` | ⚠️ Graph cycles | ❌ | ❌ |
 | **Worker Fleet CLI** | ✅ Built-in | ❌ | ✅ | ✅ |
 | **Custom Handlers** | ✅ Pluggable | ❌ | ⚠️ Task classes | ⚠️ Operators |
 | **Docker Execution** | ✅ Built-in handler | ❌ | ⚠️ Via operators | ⚠️ DockerOperator |
@@ -1655,6 +2025,7 @@ print(f"Records: {metadata.user_metadata['records_processed']}")
 | **Context Managers** | ✅ `with workflow()` | ❌ | ❌ | ❌ |
 | **Type Safety** | ✅ TypedChannel | ✅ Pydantic | ❌ | ❌ |
 | **Checkpoint/Resume** | ✅ Production-ready | ⚠️ Memory only | ❌ | ⚠️ Task retry |
+| **Human-in-the-Loop (HITL)** | ✅ Fully implemented | ⚠️ Limited | ❌ | ❌ |
 
 ### Performance Characteristics
 
@@ -1705,6 +2076,7 @@ print(f"Records: {metadata.user_metadata['records_processed']}")
    - Order processing workflows
    - Game loops and interactive systems
    - ML training state management
+   - Early termination and cancellation control
 
 7. **Containerized Execution**
    - Security sandboxing (untrusted code)
@@ -1718,6 +2090,14 @@ print(f"Records: {metadata.user_metadata['records_processed']}")
    - Workflows requiring fault tolerance
    - Resume from failure scenarios
    - Distributed workflows with worker failures
+
+9. **Approval Workflows**
+   - Deployment approvals
+   - Payment processing
+   - Critical operation human approval required
+
+10. **Interactive Pipelines**
+   - Processes requiring human feedback or adjustments
 
 ### When to Use LangGraph ✅
 
@@ -1866,6 +2246,12 @@ redis:
    - Automatic checkpoint cleanup policies
    - Checkpoint compression
 
+6. **HITL Feature Extensions**
+   - Web UI for feedback management
+   - Server-Sent Events (SSE) notifications
+   - OAuth 2.0 authentication
+   - Feedback history management
+
 ---
 
 ## Conclusion
@@ -1876,13 +2262,14 @@ Graflow represents a **new generation of workflow orchestration**, combining:
 - **Production robustness** (worker fleet, error policies, checkpoint/resume)
 - **Development agility** (local/distributed switching)
 - **Extensibility** (custom handlers, policies)
-- **Dynamic capabilities** (runtime task generation)
+- **Dynamic capabilities** (runtime task generation, state machine control, workflow early termination/cancellation)
 - **Fault tolerance** (checkpoint/resume for long-running workflows)
+- **Human integration** (HITL capabilities for runtime approval and feedback collection)
 
 It fills the gap between lightweight tools (LangGraph) and heavyweight infrastructure (Airflow), providing a **sweet spot for modern data engineering and ML workflows**.
 
 ---
 
 **Document Maintainer**: Graflow Team
-**Last Review**: 2025-10-23 (Updated: Checkpoint/Resume implementation completed)
+**Last Review**: 2025-12-05 (Updated: Workflow control features added)
 **Next Review**: Quarterly
