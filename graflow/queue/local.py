@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections import deque
 from typing import TYPE_CHECKING, Optional
 
@@ -10,6 +11,8 @@ from graflow.queue.base import TaskQueue, TaskSpec, TaskStatus
 if TYPE_CHECKING:
     from graflow.core.context import ExecutionContext
 
+
+logger = logging.getLogger(__name__)
 
 class LocalTaskQueue(TaskQueue):
     """In-memory task queue with TaskSpec support."""
@@ -22,19 +25,19 @@ class LocalTaskQueue(TaskQueue):
             # This ensures single source of truth and preserves task metadata
             start_task = execution_context.graph.get_node(start_node)
 
-            if start_task is None:
+            if start_task:
+                task_spec = TaskSpec(
+                    executable=start_task,
+                    execution_context=execution_context
+                )
+                self._queue.append(task_spec)
+                self._task_specs[start_node] = task_spec
+            else:
                 available_nodes = list(execution_context.graph.nodes.keys())
-                raise ValueError(
+                logger.warning(
                     f"Start node '{start_node}' not found in graph. "
                     f"Available nodes: {available_nodes}"
                 )
-
-            task_spec = TaskSpec(
-                executable=start_task,
-                execution_context=execution_context
-            )
-            self._queue.append(task_spec)
-            self._task_specs[start_node] = task_spec
 
     def enqueue(self, task_spec: TaskSpec) -> bool:
         """Add TaskSpec to queue (FIFO)."""
