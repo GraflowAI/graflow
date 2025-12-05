@@ -117,8 +117,9 @@ def test_normal_workflow_without_control():
             executed_tasks.append("task_c")
             return "c_result"
 
-        task_a >> task_b >> task_c
+        _ = task_a >> task_b >> task_c
         result = wf.execute("task_a")
+        print(f"task_a result: {result}")
 
     print("✓ Normal workflow completed")
     print(f"  Executed tasks: {executed_tasks}")
@@ -144,7 +145,7 @@ def test_conditional_termination():
             executed_tasks_1.append("task_b")
             return "b_result"
 
-        check_condition_true >> task_b_1
+        _ = check_condition_true >> task_b_1
         wf.execute("check_condition_true")
 
     print("✓ Conditional termination (True) completed")
