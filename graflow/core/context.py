@@ -183,8 +183,9 @@ class TaskExecutionContext:
         timeout: float = 180.0,  # Default: 3 minutes
         channel_key: Optional[str] = None,
         write_to_channel: bool = False,
+        handler: Optional[Any] = None,  # FeedbackHandler (avoid circular import)
     ) -> FeedbackResponse:
-        """Request human feedback.
+        """Request human feedback with optional callback handler.
 
         Args:
             feedback_type: Type of feedback ("approval", "text", "selection", etc.) or FeedbackType enum
@@ -194,6 +195,7 @@ class TaskExecutionContext:
             timeout: Polling timeout in seconds (default: 180 / 3 minutes)
             channel_key: Optional channel key to write response to
             write_to_channel: Whether to auto-write response to channel
+            handler: Optional FeedbackHandler for callbacks (on_request_created, on_response_received, on_request_timeout)
 
         Returns:
             FeedbackResponse
@@ -279,6 +281,7 @@ class TaskExecutionContext:
             channel_key=channel_key,
             write_to_channel=write_to_channel,
             feedback_id=existing_feedback_id,
+            handler=handler,
         )
 
     def request_approval(

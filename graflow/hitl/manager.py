@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Optional
 
 from graflow.hitl.backend.base import FeedbackBackend
 from graflow.hitl.backend.redis import RedisFeedbackBackend
+from graflow.hitl.handler import FeedbackHandler
 from graflow.hitl.types import (
     FeedbackRequest,
     FeedbackResponse,
@@ -78,6 +79,7 @@ class FeedbackManager:
         channel_key: Optional[str] = None,
         write_to_channel: bool = False,
         feedback_id: Optional[str] = None,  # Optional: reuse existing feedback_id (for checkpoint resume)
+        handler: Optional[FeedbackHandler] = None,  # Optional: per-request handler
     ) -> FeedbackResponse:
         """Request feedback and wait for response.
 
@@ -92,6 +94,7 @@ class FeedbackManager:
             channel_key: Optional channel key to write response to
             write_to_channel: Whether to auto-write response to channel
             feedback_id: Optional feedback_id to reuse (for checkpoint resume)
+            handler: Optional per-request handler (in addition to global handlers)
 
         Returns:
             FeedbackResponse
@@ -152,6 +155,18 @@ class FeedbackManager:
             }
         )
 
+        # Call handler: on_request_created (before polling)
+        if handler:
+            try:
+                handler.on_request_created(request)
+            except Exception as e:
+                logger.error(
+                    "Error in handler %s.on_request_created: %s",
+                    handler.__class__.__name__,
+                    e,
+                    exc_info=True,
+                )
+
         # Poll for response
         response = self._poll_for_response(feedback_id, timeout)
 
@@ -159,11 +174,37 @@ class FeedbackManager:
             # Update request status
             request.status = "completed"
             self._backend.store_request(request)
+
+            # Call handler: on_response_received (after successful response)
+            if handler:
+                try:
+                    handler.on_response_received(request, response)
+                except Exception as e:
+                    logger.error(
+                        "Error in handler %s.on_response_received: %s",
+                        handler.__class__.__name__,
+                        e,
+                        exc_info=True,
+                    )
+
             return response
         else:
             # Timeout - update status and raise exception
             request.status = "timeout"
             self._backend.store_request(request)
+
+            # Call handler: on_request_timeout (on timeout)
+            if handler:
+                try:
+                    handler.on_request_timeout(request)
+                except Exception as e:
+                    logger.error(
+                        "Error in handler %s.on_request_timeout: %s",
+                        handler.__class__.__name__,
+                        e,
+                        exc_info=True,
+                    )
+
             raise FeedbackTimeoutError(feedback_id, timeout)
 
     def provide_feedback(
