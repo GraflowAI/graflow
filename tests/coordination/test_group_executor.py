@@ -57,8 +57,10 @@ class TestGroupExecutor:
         assert executor._resolve_backend("redis") == CoordinationBackend.REDIS
         assert executor._resolve_backend("DIRECT") == CoordinationBackend.DIRECT
 
-    def test_execute_parallel_group_direct(self, mocker):
+    def test_execute_parallel_group_direct(self, caplog: pytest.LogCaptureFixture):
         """Test direct execution without coordination."""
+        import logging
+
         from graflow.core.decorators import task
         from graflow.core.task import Executable
 
@@ -84,17 +86,16 @@ class TestGroupExecutor:
             t.set_execution_context(exec_context)
             graph.add_node(t)
 
-        mock_print = mocker.patch('builtins.print')
-        executor.execute_parallel_group("test_group", tasks, exec_context, backend="direct")
+        with caplog.at_level(logging.DEBUG):
+            executor.execute_parallel_group("test_group", tasks, exec_context, backend="direct")
 
         # Verify tasks were executed
         assert "task1" in results
         assert "task2" in results
 
-        # Verify print output
-        print_calls = [str(call) for call in mock_print.call_args_list]
-        assert any("Running parallel group: test_group" in call for call in print_calls)
-        assert any("Direct tasks:" in call for call in print_calls)
+        # Verify log output
+        assert "Running parallel group: test_group" in caplog.text
+        assert "Direct tasks:" in caplog.text
 
     def test_execute_parallel_group_direct_with_args(self):
         """Test direct execution with args and kwargs."""
