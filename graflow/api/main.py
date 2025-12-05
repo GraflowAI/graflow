@@ -146,6 +146,11 @@ Examples:
         default=["*"],
         help="CORS allowed origins (default: *)"
     )
+    api_group.add_argument(
+        "--disable-web-ui",
+        action="store_true",
+        help="Disable Web UI (API only mode) (default: False)"
+    )
 
     return parser.parse_args(args)
 
@@ -213,7 +218,8 @@ def create_app_from_args(args: argparse.Namespace) -> FastAPI:
         feedback_config=backend_config,
         title=args.title,
         enable_cors=args.enable_cors,
-        cors_origins=args.cors_origins if args.enable_cors else None
+        cors_origins=args.cors_origins if args.enable_cors else None,
+        enable_web_ui=not args.disable_web_ui
     )
 
     print("\nGraflow Feedback API")
@@ -224,6 +230,8 @@ def create_app_from_args(args: argparse.Namespace) -> FastAPI:
         print(f"Redis: {args.redis_host}:{args.redis_port} (db={args.redis_db})")
     print(f"Server: http://{args.host}:{args.port}")
     print(f"Docs: http://{args.host}:{args.port}/docs")
+    if not args.disable_web_ui:
+        print(f"Web UI: http://{args.host}:{args.port}/ui/feedback/{{feedback_id}}")
     print()
 
     return app

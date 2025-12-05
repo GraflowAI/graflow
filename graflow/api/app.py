@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 
 from graflow.hitl.backend.base import FeedbackBackend
 from graflow.hitl.manager import FeedbackManager
@@ -19,6 +22,7 @@ def create_feedback_api(
     version: str = "1.0.0",
     enable_cors: bool = True,
     cors_origins: Optional[list[str]] = None,
+    enable_web_ui: bool = True,
 ) -> FastAPI:
     """Create FastAPI application with feedback endpoints.
 
@@ -35,6 +39,7 @@ def create_feedback_api(
         version: API version
         enable_cors: Whether to enable CORS middleware
         cors_origins: List of allowed CORS origins (default: ["*"])
+        enable_web_ui: Whether to enable Web UI endpoints (default: True)
 
     Returns:
         FastAPI application with feedback routes
@@ -110,7 +115,24 @@ def create_feedback_api(
     # Store in app state
     app.state.feedback_manager = feedback_manager
 
-    # Import and include router
+    # Setup Web UI if enabled
+    if enable_web_ui:
+        # Setup Jinja2 templates
+        template_dir = Path(__file__).parent / "templates"
+        if template_dir.exists():
+            templates = Jinja2Templates(directory=str(template_dir))
+            app.state.templates = templates
+
+            # Setup static files (optional)
+            static_dir = Path(__file__).parent / "static"
+            if static_dir.exists():
+                app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+            # Include feedback UI router
+            from graflow.api.endpoints.feedback_ui import router as feedback_ui_router
+            app.include_router(feedback_ui_router)
+
+    # Import and include API router
     from graflow.api.endpoints.feedback import router as feedback_router
     app.include_router(feedback_router)
 
@@ -122,6 +144,24 @@ def create_feedback_api(
         Returns:
             Dictionary with API info and links
         """
+        endpoints_info = {
+            "api": {
+                "list_feedback": "GET /api/feedback",
+                "get_feedback": "GET /api/feedback/{feedback_id}",
+                "respond_feedback": "POST /api/feedback/{feedback_id}/respond",
+                "cancel_feedback": "DELETE /api/feedback/{feedback_id}"
+            }
+        }
+
+        if enable_web_ui:
+            endpoints_info["web_ui"] = {
+                "feedback_list": "GET /ui/feedback/",
+                "feedback_form": "GET /ui/feedback/{feedback_id}",
+                "submit_feedback": "POST /ui/feedback/{feedback_id}/submit",
+                "success_page": "GET /ui/feedback/{feedback_id}/success",
+                "expired_page": "GET /ui/feedback/{feedback_id}/expired"
+            }
+
         return {
             "name": title,
             "version": version,
@@ -130,12 +170,8 @@ def create_feedback_api(
             "redoc": "/redoc",
             "openapi": "/openapi.json",
             "health": "/health",
-            "endpoints": {
-                "list_feedback": "GET /api/feedback",
-                "get_feedback": "GET /api/feedback/{feedback_id}",
-                "respond_feedback": "POST /api/feedback/{feedback_id}/respond",
-                "cancel_feedback": "DELETE /api/feedback/{feedback_id}"
-            }
+            "web_ui_enabled": enable_web_ui,
+            "endpoints": endpoints_info
         }
 
     # Add health check endpoint

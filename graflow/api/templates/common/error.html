@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}Error{% endblock %}
+
+{% block content %}
+<article>
+    <header>
+        <h2>❌ Error</h2>
+    </header>
+
+    <section>
+        <p>{{ error_message | default("An unexpected error occurred.") }}</p>
+
+        {% if error_detail %}
+        <details>
+            <summary>Error Details</summary>
+            <pre>{{ error_detail }}</pre>
+        </details>
+        {% endif %}
+    </section>
+
+    <footer>
+        <a href="javascript:history.back()">Go Back</a>
+    </footer>
+</article>
+{% endblock %}

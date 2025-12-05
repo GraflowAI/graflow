@@ -1,6 +1,6 @@
 # Graflow Feedback API
 
-REST API for Human-in-the-Loop (HITL) feedback management in Graflow workflows.
+REST API and Web UI for Human-in-the-Loop (HITL) feedback management in Graflow workflows.
 
 ## Installation
 
@@ -28,6 +28,7 @@ python -m graflow.api --backend redis --redis-host localhost --redis-port 6379
 ```
 
 The server will start at `http://localhost:8000` with:
+- Web UI: `http://localhost:8000/ui/feedback/{feedback_id}`
 - API docs: http://localhost:8000/docs
 - Health check: http://localhost:8000/health
 
@@ -80,6 +81,84 @@ curl -X POST http://localhost:8000/api/feedback/{feedback_id}/respond \
   -d '{"selected": "option_b"}'
 ```
 
+## Web UI
+
+The API includes a web-based interface for providing feedback through a browser.
+
+### Using the Web UI
+
+1. **Get the feedback URL:**
+   - When a workflow requests feedback, it receives a `feedback_id`
+   - Access the web form at: `http://localhost:8000/ui/feedback/{feedback_id}`
+
+2. **Share the URL:**
+   - The `feedback_id` acts as an authentication token
+   - Share the URL via email, Slack, or other messaging platforms
+   - No additional login required - URL access is sufficient
+
+3. **Submit feedback:**
+   - Fill out the form in your browser
+   - Click "Submit Feedback"
+   - Success page confirms submission
+
+### Web UI Features
+
+- **No authentication required** - `feedback_id` in URL provides access
+- **Responsive design** - Works on desktop and mobile devices
+- **Automatic validation** - Form validation based on feedback type
+- **Simple styling** - Uses Pico CSS (classless CSS framework)
+- **Expiration handling** - Shows appropriate message for expired requests
+
+### Web UI Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/ui/feedback/` | List all pending feedback requests (masked IDs) |
+| `GET` | `/ui/feedback/{id}` | Show feedback form |
+| `POST` | `/ui/feedback/{id}/submit` | Submit feedback (redirects to success) |
+| `GET` | `/ui/feedback/{id}/success` | Success confirmation page |
+| `GET` | `/ui/feedback/{id}/expired` | Expired/already responded page |
+
+### Disabling Web UI
+
+To run the API without the Web UI (API only):
+
+```bash
+python -m graflow.api --disable-web-ui
+```
+
+This disables all `/ui/*` endpoints while keeping the REST API functional.
+
+### Example: Sending Feedback URL
+
+```python
+from graflow.core.decorators import task
+
+@task(inject_context=True)
+def request_approval_with_notification(ctx):
+    try:
+        response = ctx.request_feedback(
+            feedback_type="approval",
+            prompt="Approve deployment to production?",
+            timeout=300.0  # 5 minutes
+        )
+        return response.approved
+    except FeedbackTimeoutError as e:
+        # Timeout - send notification with Web UI link
+        feedback_id = e.feedback_id
+        web_url = f"http://localhost:8000/ui/feedback/{feedback_id}"
+
+        # Send via email, Slack, etc.
+        send_email(
+            to="approver@example.com",
+            subject="Deployment Approval Required",
+            body=f"Please review and approve: {web_url}"
+        )
+
+        # Workflow checkpointed, will resume when feedback provided
+        raise
+```
+
 ## API Endpoints
 
 | Method | Endpoint | Description |
@@ -114,6 +193,7 @@ python -m graflow.api --help
 **API Options:**
 - `--enable-cors` - Enable CORS
 - `--cors-origins URL [URL ...]` - Allowed CORS origins
+- `--disable-web-ui` - Disable Web UI (API only mode)
 
 ## Examples
 
@@ -159,6 +239,8 @@ python -m graflow.api --reload
 
 ## See Also
 
-- Design document: `docs/hitl_design.md`
+- API design: `docs/hitl_design.md`
+- Web UI design: `docs/hitl_web_ui_design.md`
 - HITL manager: `graflow/hitl/manager.py`
 - Feedback types: `graflow/hitl/types.py`
+- Examples: `examples/11_hitl/`

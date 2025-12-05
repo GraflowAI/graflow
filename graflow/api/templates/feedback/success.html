@@ -1,0 +1,56 @@
+{% extends "common/base.html" %}
+
+{% block title %}Feedback Submitted{% endblock %}
+
+{% block content %}
+<article>
+    <header>
+        <h2>✓ Feedback Submitted</h2>
+    </header>
+
+    <section>
+        <p>Thank you! Your feedback has been successfully submitted.</p>
+
+        {% if response %}
+        <details>
+            <summary>Submitted Response</summary>
+            <dl>
+                {% if response.approved is not none %}
+                <dt>Decision:</dt>
+                <dd>{{ "Approved" if response.approved else "Rejected" }}</dd>
+                {% endif %}
+
+                {% if response.text %}
+                <dt>Text:</dt>
+                <dd>{{ response.text }}</dd>
+                {% endif %}
+
+                {% if response.selected %}
+                <dt>Selected:</dt>
+                <dd>{{ response.selected }}</dd>
+                {% endif %}
+
+                {% if response.selected_multiple %}
+                <dt>Selected (multiple):</dt>
+                <dd>{{ response.selected_multiple | join(", ") }}</dd>
+                {% endif %}
+
+                {% if response.reason %}
+                <dt>Reason:</dt>
+                <dd>{{ response.reason }}</dd>
+                {% endif %}
+
+                {% if response.responded_by %}
+                <dt>Responded by:</dt>
+                <dd>{{ response.responded_by }}</dd>
+                {% endif %}
+            </dl>
+        </details>
+        {% endif %}
+    </section>
+
+    <footer>
+        <p><small>You can safely close this window.</small></p>
+    </footer>
+</article>
+{% endblock %}
