@@ -41,7 +41,11 @@ def test_context_injection():
 
     # Create execution context
     graph = TaskGraph()
-    context = ExecutionContext.create(graph, "test_start", max_steps=10)
+    graph.add_node(regular_task, "regular_task")
+    graph.add_node(context_task, "context_task")
+    graph.add_node(custom_context_task, "custom_context_task")
+
+    context = ExecutionContext.create(graph, start_node="regular_task", max_steps=10)
 
     # Set execution context for tasks
     regular_task.set_execution_context(context)
@@ -104,7 +108,10 @@ def test_context_access_patterns():
 
     # Setup
     graph = TaskGraph()
-    context = ExecutionContext.create(graph, "analysis_start", max_steps=20)
+    graph.add_node(analyze_context, "analyze_context")
+    graph.add_node(iteration_example, "iteration_example")
+
+    context = ExecutionContext.create(graph, start_node="analyze_context", max_steps=20)
 
     analyze_context.set_execution_context(context)
     iteration_example.set_execution_context(context)
@@ -116,8 +123,7 @@ def test_context_access_patterns():
         result = analyze_context.func(task_ctx)
         print(f"Analysis result: {result}")
 
-    # Add iteration task to graph for testing
-    graph.add_node(iteration_example, "iteration_example")
+
 
     # Test iteration pattern
     print("\n2. Testing iteration pattern:")
