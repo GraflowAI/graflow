@@ -74,7 +74,7 @@ LANGFUSE_HOST=https://cloud.langfuse.com
 
 **Run**:
 ```bash
-PYTHONPATH=. uv run python examples/12_llm_integration/simple_llm_client.py
+uv run python examples/12_llm_integration/simple_llm_client.py
 ```
 
 **Key code**:
@@ -100,7 +100,7 @@ def my_task(llm_client):
 
 **Run**:
 ```bash
-PYTHONPATH=. uv run python examples/12_llm_integration/model_override.py
+uv run python examples/12_llm_integration/model_override.py
 ```
 
 **Key code**:
@@ -128,7 +128,7 @@ def complex_task(llm_client):
 
 **Run**:
 ```bash
-PYTHONPATH=. uv run python examples/12_llm_integration/llm_agent.py
+uv run python examples/12_llm_integration/llm_agent.py
 ```
 
 **Key code**:
@@ -173,7 +173,7 @@ def my_task(llm_agent):
 
 **Run**:
 ```bash
-PYTHONPATH=. uv run python examples/12_llm_integration/multi_agent_workflow.py
+uv run python examples/12_llm_integration/multi_agent_workflow.py
 ```
 
 **Key code**:

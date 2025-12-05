@@ -4,7 +4,7 @@ Welcome to the Graflow examples! This directory contains progressive examples to
 
 ## 🎉 What's Available
 
-**33 comprehensive, production-ready examples** covering:
+**41 comprehensive, production-ready examples** covering:
 - ✅ **Task Basics** - Define and execute tasks with parameters
 - ✅ **Workflow Orchestration** - Sequential and parallel task composition
 - ✅ **Data Flow** - Channels, typed communication, and result storage
@@ -13,7 +13,9 @@ Welcome to the Graflow examples! This directory contains progressive examples to
 - ✅ **Advanced Patterns** - Dynamic tasks, lambdas, and custom serialization
 - ✅ **Real-World Use Cases** - Production-ready ETL, ML, and batch processing
 - ✅ **Workflow Visualization** - ASCII, Mermaid, and PNG graph visualizations
+- ✅ **Group Execution Policies** - Flexible error handling for parallel tasks
 - ✅ **LLM Integration** - AI-powered workflows with LLMClient and agents
+- ✅ **Human-in-the-Loop** - Interactive workflows with human feedback
 
 All examples include detailed documentation, real-world use cases, and hands-on experiments!
 
@@ -104,7 +106,7 @@ Dynamic task generation patterns:
 
 [View dynamic task examples →](07_dynamic_tasks/)
 
-### ✅ 09_real_world - Real-World Use Cases
+### ✅ 08_real_world - Real-World Use Cases
 **Status**: Complete | **Difficulty**: Intermediate to Advanced
 
 Complete production-ready examples:
@@ -113,9 +115,9 @@ Complete production-ready examples:
 - Batch processing for large datasets
 - Sales data analysis with anomaly detection
 
-[View real-world examples →](09_real_world/)
+[View real-world examples →](08_real_world/)
 
-### ✅ 10_visualization - Workflow Visualization
+### ✅ 09_visualization - Workflow Visualization
 **Status**: Complete | **Difficulty**: Intermediate
 
 Visualize workflows and graphs in multiple formats:
@@ -125,11 +127,23 @@ Visualize workflows and graphs in multiple formats:
 - PNG generation for presentations and reports
 - Graph analysis and dependency visualization
 
-[View visualization examples →](10_visualization/)
+[View visualization examples →](09_visualization/)
 
 **Note**: Some features require optional dependencies (grandalf, pygraphviz). See directory README for details.
 
-### ✅ 12_llm_integration - LLM Integration
+### ✅ 10_group_exec_policy - Parallel Group Error Handling
+**Status**: Complete | **Difficulty**: Advanced
+
+Master error handling strategies for parallel task execution:
+- Strict mode (all tasks must succeed)
+- Best-effort execution (continue despite failures)
+- At-least-N policy (minimum success threshold)
+- Critical tasks policy (only specific tasks must succeed)
+- Custom policy implementation
+
+[View group execution policy examples →](10_group_exec_policy/)
+
+### ✅ 11_llm_integration - LLM Integration
 **Status**: Complete | **Difficulty**: Intermediate to Advanced
 
 Build AI-powered workflows with LLM integration:
@@ -139,9 +153,21 @@ Build AI-powered workflows with LLM integration:
 - Multi-agent workflows with specialized agents
 - Unified tracing with Langfuse integration
 
-[View LLM integration examples →](12_llm_integration/)
+[View LLM integration examples →](11_llm_integration/)
 
 **Note**: Requires LiteLLM (`uv add litellm`). Agent examples require Google ADK (`uv add google-adk`).
+
+### ✅ 12_hitl - Human-in-the-Loop
+**Status**: Complete | **Difficulty**: Intermediate to Advanced
+
+Build interactive workflows with human feedback:
+- Basic approval workflows with immediate feedback
+- Timeout handling and checkpoint creation
+- Channel integration for feedback sharing
+- REST API for external feedback submission
+- Distributed HITL with Redis backend
+
+[View HITL examples →](12_hitl/)
 
 ## Learning Path
 
@@ -211,9 +237,14 @@ Build AI-powered workflows with LLM integration:
 1. `workflow_visualization.py` - Visualizing Graflow workflows (20 min)
 2. `graph_utilities.py` - Graph visualization utilities (25 min)
 
-### Level 10: Group Execution Policy
+### Level 10: Group Execution Policy ⚖️
 
-to appear
+**10_group_exec_policy/** - Parallel group error handling strategies
+1. `parallel_group_strict_mode.py` - All tasks must succeed (15 min)
+2. `parallel_group_best_effort.py` - Continue even if some fail (15 min)
+3. `parallel_group_at_least_n.py` - Require minimum successes (20 min)
+4. `parallel_group_critical_tasks.py` - Only critical tasks must succeed (20 min)
+5. `parallel_group_custom_policy.py` - Build custom policies (25 min)
 
 ### Level 11: LLM Integration 🤖
 
@@ -223,11 +254,15 @@ to appear
 3. `llm_agent.py` - ReAct patterns with Google ADK (25 min)
 4. `multi_agent_workflow.py` - Multi-agent collaboration (30 min)
 
-### Level 12: Human-in-the-Loop (HITL) 👦
+### Level 12: Human-in-the-Loop (HITL) 👤
 
-to appear
+**12_hitl/** - Workflows with human feedback
+1. `01_basic_approval.py` - Basic approval workflow (15 min)
+2. `02_timeout_checkpoint.py` - Timeout and checkpoint handling (20 min)
+3. `03_channel_integration.py` - Feedback via channels (20 min)
+4. `04_api_feedback.py` - REST API feedback submission (25 min)
 
-**Total Learning Time**: ~10.25 hours to complete all examples
+**Total Learning Time**: ~12.2 hours to complete all examples
 
 ### Quick Start Path (30 minutes)
 
@@ -342,7 +377,7 @@ examples/
 │   ├── dynamic_tasks.py
 │   └── runtime_dynamic_tasks.py
 │
-├── 09_real_world/       # Real-world use cases
+├── 08_real_world/       # Real-world use cases
 │   ├── README.md       # Category documentation
 │   ├── data_pipeline.py
 │   ├── ml_training.py
@@ -353,10 +388,15 @@ examples/
 │   ├── README.md       # Category documentation
 │   ├── workflow_visualization.py
 │   └── graph_utilities.py
-|
-├── 10_group_exec_policy
-|   ├── (to appear)
-|
+│
+├── 10_group_exec_policy/ # Parallel group error handling
+│   ├── README.md       # Category documentation
+│   ├── parallel_group_strict_mode.py
+│   ├── parallel_group_best_effort.py
+│   ├── parallel_group_at_least_n.py
+│   ├── parallel_group_critical_tasks.py
+│   └── parallel_group_custom_policy.py
+│
 ├── 11_llm_integration/  # LLM integration
 │   ├── README.md       # Category documentation
 │   ├── simple_llm_client.py
@@ -364,9 +404,13 @@ examples/
 │   ├── llm_agent.py
 │   └── multi_agent_workflow.py
 │
-├── 12_hitl
-|   ├── (to appear)
-|
+├── 12_hitl/            # Human-in-the-Loop
+│   ├── README.md       # Category documentation
+│   ├── 01_basic_approval.py
+│   ├── 02_timeout_checkpoint.py
+│   ├── 03_channel_integration.py
+│   └── 04_api_feedback.py
+│
 └── README.md           # This file
 ```
 
@@ -387,9 +431,9 @@ examples/
 | 07_dynamic_tasks | ✅ Complete | 2/2 | Dynamic task generation |
 | 08_real_world | ✅ Complete | 4/4 | Production use cases |
 | 09_visualization | ✅ Complete | 2/2 | Workflow visualization |
-| 10_group_exec_policy | ✅ Complete | (to appear) | (to appear) |
+| 10_group_exec_policy | ✅ Complete | 5/5 | Parallel group error handling policies |
 | 11_llm_integration | ✅ Complete | 4/4 | LLM-powered workflows |
-| 12_hitl | ✅ Complete | (to appear)  | (to appear)  |
+| 12_hitl | ✅ Complete | 4/4 | Human-in-the-Loop workflows |
 
 ## Troubleshooting
 
@@ -453,21 +497,23 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md) for details.
 
 All planned examples are now complete! 🎉
 
-The **31 examples** provide comprehensive coverage from basic concepts to AI-powered production applications. You can now:
+The **41 examples** provide comprehensive coverage from basic concepts to AI-powered production applications. You can now:
 
-1. **Build Production Workflows** - Use patterns from 09_real_world
+1. **Build Production Workflows** - Use patterns from 08_real_world
 2. **Scale with Redis** - Deploy distributed workflows from 05_distributed
 3. **Apply Advanced Patterns** - Leverage techniques from 06_advanced
 4. **Implement Runtime Dynamics** - Use next_task() and next_iteration() from 07_dynamic_tasks
 5. **Analyze Data** - Build data analysis pipelines with anomaly detection
-6. **Visualize Workflows** - Document and debug with ASCII, Mermaid, and PNG from 10_visualization
-7. **Integrate LLMs** - Build AI-powered workflows with LLMClient and agents from 12_llm_integration
+6. **Visualize Workflows** - Document and debug with ASCII, Mermaid, and PNG from 09_visualization
+7. **Handle Parallel Errors** - Implement flexible error policies from 10_group_exec_policy
+8. **Integrate LLMs** - Build AI-powered workflows with LLMClient and agents from 11_llm_integration
+9. **Add Human Feedback** - Build interactive workflows with HITL from 12_hitl
 
 Additional examples may be added based on community feedback and emerging use cases.
 
 ## API Notes
 
-**Important**: The examples in this directory use stable, tested API patterns. All 31 examples are fully functional and production-ready. See [docs/examples_api_issues.md](../docs/examples_api_issues.md) for historical notes on API evolution.
+**Important**: The examples in this directory use stable, tested API patterns. All 41 examples are fully functional and production-ready. See [docs/examples_api_issues.md](../docs/examples_api_issues.md) for historical notes on API evolution.
 
 ## Getting Help
 
