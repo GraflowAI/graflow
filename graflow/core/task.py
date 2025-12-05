@@ -206,6 +206,9 @@ class SequentialTask(Executable):
         The full chain execution should be managed by WorkflowEngine
         following the graph dependencies.
         """
+        context = self.get_execution_context()
+        for task in self.tasks:
+            task.set_execution_context(context)
         return self.leftmost.run(*args, **kwargs)
 
     def __call__(self, *args, **kwargs) -> Any:
@@ -739,3 +742,30 @@ class TaskWrapper(Executable):
     def __repr__(self) -> str:
         """Return string representation of this task wrapper."""
         return f"TaskWrapper({self._task_id})"
+
+
+def chain(*tasks: Executable) -> SequentialTask:
+    """Create a SequentialTask with the same semantics as chaining via >>."""
+    if not tasks:
+        raise ValueError("chain requires at least one task")
+
+    first, *rest = tasks
+    if not rest:
+        return first if isinstance(first, SequentialTask) else SequentialTask([first])
+
+    sequence: SequentialTask = first >> rest[0]
+    for task in rest[1:]:
+        sequence = sequence >> task
+    return sequence
+
+
+def parallel(*tasks: Executable) -> ParallelGroup:
+    """Create a ParallelGroup with the same semantics as combining via |."""
+    if len(tasks) < 2:
+        raise ValueError("parallel requires at least two tasks")
+
+    first, *rest = tasks
+    group: ParallelGroup = first | rest[0]
+    for task in rest[1:]:
+        group = group | task
+    return group
