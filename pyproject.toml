@@ -65,6 +65,11 @@ build-backend = "hatchling.build"
 [tool.hatch.metadata]
 allow-direct-references = true
 
+[tool.hatch.build.targets.sdist]
+only-include = [
+    "graflow",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["graflow"]
 
