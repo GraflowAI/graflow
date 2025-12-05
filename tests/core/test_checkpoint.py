@@ -23,7 +23,7 @@ from graflow.core.context import ExecutionContext
 from graflow.core.decorators import task
 from graflow.core.graph import TaskGraph
 from graflow.core.task import TaskWrapper
-from graflow.queue.base import TaskSpec, TaskStatus
+from graflow.queue.base import TaskSpec
 
 
 class TestCheckpointMetadata:
@@ -313,19 +313,12 @@ class TestCheckpointCreation:
             assert any(task["task_id"] == "task_a" for task in state["pending_tasks"])
 
     def test_create_checkpoint_with_current_task(self):
-        """Test creating checkpoint including currently running task."""
+        """Test creating checkpoint with resuming task_id."""
         graph = TaskGraph()
         task_wrapper = TaskWrapper("running_task", lambda: "result")
         graph.add_node(task_wrapper, "running_task")
 
         context = ExecutionContext.create(graph, "running_task", max_steps=10)
-
-        # Create TaskSpec for currently running task
-        current_task_spec = TaskSpec(
-            executable=task_wrapper,
-            execution_context=context,
-            status=TaskStatus.RUNNING
-        )
 
         with tempfile.TemporaryDirectory() as tmpdir:
             checkpoint_path = os.path.join(tmpdir, "checkpoint_current")
@@ -333,16 +326,14 @@ class TestCheckpointCreation:
             pkl_path, metadata = CheckpointManager.create_checkpoint(
                 context,
                 path=checkpoint_path,
-                include_current_task=current_task_spec
+                resuming_task_id="running_task"
             )
 
-            # Verify current task is first in pending tasks
+            # Verify resuming_task_id is stored in state
             with open(f"{checkpoint_path}.state.json") as f:
                 state = json.load(f)
 
-            assert state["resume_from_current_task"] is True
-            assert len(state["pending_tasks"]) >= 1
-            assert state["pending_tasks"][0]["task_id"] == "running_task"
+            assert state["resuming_task_id"] == "running_task"
 
     def test_create_checkpoint_auto_path_generation(self):
         """Test checkpoint creation with auto-generated path."""

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from dataclasses import dataclass
@@ -11,6 +12,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from graflow.core.context import ExecutionContext
 from graflow.queue.base import TaskSpec, TaskStatus
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -81,9 +84,16 @@ class CheckpointManager:
         *,
         path: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
-        include_current_task: Optional[TaskSpec] = None,
+        resuming_task_id: Optional[str] = None,
     ) -> Tuple[str, CheckpointMetadata]:
-        """Create a checkpoint for the provided execution context."""
+        """Create a checkpoint for the provided execution context.
+
+        Args:
+            context: Execution context to checkpoint
+            path: Optional path for checkpoint file
+            metadata: Optional user metadata
+            resuming_task_id: Optional task_id to resume from (will be queued first on resume)
+        """
 
         # 1. Determine target storage backend from the supplied path.
         backend = cls._infer_backend_from_path(path)
@@ -94,11 +104,8 @@ class CheckpointManager:
         base_path = cls._resolve_base_path(context, path)
         cls._ensure_directory(os.path.dirname(base_path) or ".")
 
-        # 3. Gather pending tasks, optionally adding the currently running task for
-        #    immediate checkpoints so resume restarts from the same task.
+        # 3. Gather pending tasks from the queue
         pending_specs = cls._get_pending_task_specs(context)
-        if include_current_task is not None:
-            pending_specs.insert(0, include_current_task)
 
         # 4. Serialize TaskSpec data for JSON persistence.
         serialized_specs = [cls._serialize_task_spec(spec) for spec in pending_specs]
@@ -108,7 +115,7 @@ class CheckpointManager:
         state.update(
             {
                 "pending_tasks": serialized_specs,
-                "resume_from_current_task": include_current_task is not None,
+                "resuming_task_id": resuming_task_id,
             }
         )
 
@@ -168,8 +175,28 @@ class CheckpointManager:
 
         # 5. Rebuild queue state for in-memory backends by enqueuing TaskSpecs.
         pending_specs = state.get("pending_tasks", [])
+        resuming_task_id = state.get("resuming_task_id")
+
         # Reset queue state reconstructed during deserialization
         context.task_queue.cleanup()
+
+        # If there's a resuming task, enqueue it first
+        if resuming_task_id is not None:
+            try:
+                executable = context.graph.get_node(resuming_task_id)
+                resuming_spec = TaskSpec(
+                    executable=executable,
+                    execution_context=context,
+                )
+                context.task_queue.enqueue(resuming_spec)
+            except (KeyError, AttributeError) as e:
+                logger.warning(
+                    "Could not resolve resuming task '%s' from graph: %s",
+                    resuming_task_id,
+                    e,
+                )
+
+        # Enqueue remaining pending tasks
         for spec_data in pending_specs:
             task_spec = cls._deserialize_task_spec(spec_data, context)
             context.task_queue.enqueue(task_spec)

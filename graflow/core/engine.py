@@ -9,9 +9,10 @@ from graflow import exceptions
 from graflow.core.graph import TaskGraph
 
 if TYPE_CHECKING:
-    from .context import ExecutionContext
-    from .handler import TaskHandler
-    from .task import Executable
+    from graflow.core.context import ExecutionContext
+    from graflow.core.handler import TaskHandler
+    from graflow.core.task import Executable
+    from graflow.hitl.types import FeedbackTimeoutError
 
 logger = logging.getLogger(__name__)
 
@@ -75,8 +76,9 @@ class WorkflowEngine:
 
     def _handle_feedback_timeout(
         self,
-        error: Any,  # FeedbackTimeoutError (imported dynamically to avoid circular import)
+        error: FeedbackTimeoutError,  # FeedbackTimeoutError (imported dynamically to avoid circular import)
         task_id: str,
+        task: Executable,
         context: ExecutionContext
     ) -> None:
         """Handle feedback timeout by creating checkpoint and exiting.
@@ -101,9 +103,8 @@ class WorkflowEngine:
             }
         )
 
-        # Create checkpoint (current task NOT completed)
+        # Create checkpoint with resuming task_id (task will be resolved from graph on resume)
         from graflow.core.checkpoint import CheckpointManager
-
         checkpoint_path, checkpoint_metadata = CheckpointManager.create_checkpoint(
             context,
             metadata={
@@ -111,7 +112,8 @@ class WorkflowEngine:
                 "feedback_id": error.feedback_id,
                 "task_id": task_id,
                 "timeout": error.timeout,
-            }
+            },
+            resuming_task_id=task_id
         )
 
         logger.info(
@@ -234,7 +236,7 @@ class WorkflowEngine:
 
                 if isinstance(e, FeedbackTimeoutError):
                     # Handle feedback timeout by creating checkpoint
-                    self._handle_feedback_timeout(e, task_id, context)
+                    self._handle_feedback_timeout(e, task_id, task, context)
                     # Exit workflow (feedback pending)
                     # Return early to allow external process to provide feedback
                     return None

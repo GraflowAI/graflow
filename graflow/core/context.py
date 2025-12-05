@@ -250,7 +250,24 @@ class TaskExecutionContext:
         # Get feedback manager from execution context
         feedback_manager = self.execution_context.feedback_manager
 
-        # Request feedback
+        # Check if we're resuming from a checkpoint with an existing feedback_id
+        # This allows reusing the same feedback_id after checkpoint resume
+        existing_feedback_id = None
+        if hasattr(self.execution_context, 'checkpoint_metadata') and self.execution_context.checkpoint_metadata:
+            # Check if this task has a pending feedback_id in checkpoint metadata
+            user_metadata = self.execution_context.checkpoint_metadata.get("user_metadata", {})
+            checkpoint_task_id = user_metadata.get("task_id")
+            if checkpoint_task_id == self.task_id:
+                existing_feedback_id = user_metadata.get("feedback_id")
+                if existing_feedback_id:
+                    logger.info(
+                        "Found feedback_id in checkpoint metadata for task %s: %s",
+                        self.task_id,
+                        existing_feedback_id,
+                        extra={"task_id": self.task_id, "feedback_id": existing_feedback_id},
+                    )
+
+        # Request feedback (with optional existing feedback_id for resume case)
         return feedback_manager.request_feedback(
             task_id=self.task_id,
             session_id=self.execution_context.session_id,
@@ -261,6 +278,7 @@ class TaskExecutionContext:
             timeout=timeout,
             channel_key=channel_key,
             write_to_channel=write_to_channel,
+            feedback_id=existing_feedback_id,
         )
 
     def request_approval(
@@ -371,22 +389,15 @@ class TaskExecutionContext:
             )
             return None
 
-        # Immediate checkpoint: capture current task as pending work so resume
+        # Immediate checkpoint: capture current task_id so resume
         # continues from the same task.
         from graflow.core.checkpoint import CheckpointManager
-        from graflow.queue.base import TaskSpec
-
-        current_task = self.execution_context.graph.get_node(self.task_id)
-        current_spec = TaskSpec(
-            executable=current_task,
-            execution_context=self.execution_context,
-        )
 
         checkpoint_path, checkpoint_metadata = CheckpointManager.create_checkpoint(
             self.execution_context,
             path=path,
             metadata=enriched_metadata,
-            include_current_task=current_spec,
+            resuming_task_id=self.task_id,
         )
         self.execution_context.checkpoint_metadata = checkpoint_metadata.to_dict()
         self.execution_context.last_checkpoint_path = checkpoint_path
@@ -1201,9 +1212,11 @@ class ExecutionContext:
             self._llm_agents_yaml = {}
 
         # Reconstruct FeedbackManager
+        # Use same backend as channel for consistency (redis for distributed, filesystem for local)
+        feedback_backend = "redis" if channel_backend_type == "redis" else "filesystem"
         from graflow.hitl.manager import FeedbackManager
         self.feedback_manager = FeedbackManager(
-            backend=channel_backend_type,
+            backend=feedback_backend,
             backend_config=config,
             channel_manager=self.channel
         )

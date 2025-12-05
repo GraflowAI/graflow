@@ -77,6 +77,7 @@ class FeedbackManager:
         timeout: float = 180.0,  # Default: 3 minutes
         channel_key: Optional[str] = None,
         write_to_channel: bool = False,
+        feedback_id: Optional[str] = None,  # Optional: reuse existing feedback_id (for checkpoint resume)
     ) -> FeedbackResponse:
         """Request feedback and wait for response.
 
@@ -90,6 +91,7 @@ class FeedbackManager:
             timeout: Polling timeout in seconds (default: 180s / 3 minutes)
             channel_key: Optional channel key to write response to
             write_to_channel: Whether to auto-write response to channel
+            feedback_id: Optional feedback_id to reuse (for checkpoint resume)
 
         Returns:
             FeedbackResponse
@@ -97,8 +99,20 @@ class FeedbackManager:
         Raises:
             FeedbackTimeoutException: If timeout exceeded without response
         """
-        # Generate feedback ID
-        feedback_id = _generate_token(16) # 16-character hex ID
+        # Use provided feedback_id or generate new one
+        if feedback_id is None:
+            feedback_id = _generate_token(16)  # 16-character hex ID
+            logger.info(
+                "Generated new feedback_id: %s",
+                feedback_id,
+                extra={"feedback_id": feedback_id, "task_id": task_id},
+            )
+        else:
+            logger.info(
+                "Reusing feedback_id from checkpoint: %s",
+                feedback_id,
+                extra={"feedback_id": feedback_id, "task_id": task_id},
+            )
 
         # Check if response already exists (resume case)
         existing_response = self._backend.get_response(feedback_id)
