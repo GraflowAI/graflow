@@ -1,4 +1,4 @@
-# ParallelGroup.with_execution() 実装設計書 v2
+# ParallelGroup.with_execution() 実装設計書
 
 ## 概要
 
