@@ -108,6 +108,11 @@ def execute(context: ExecutionContext, start_task_id: Optional[str] = None) -> A
     # ========================================
     while task_id is not None and context.steps < context.max_steps:
         # ----------------------------------
+        # ステップ0: 制御フローフラグリセット
+        # ----------------------------------
+        context.reset_control_flags()  # goto, terminate, cancel フラグをリセット
+
+        # ----------------------------------
         # ステップ1: タスク取得と検証
         # ----------------------------------
         task = context.graph.get_node(task_id)
@@ -135,21 +140,20 @@ def execute(context: ExecutionContext, start_task_id: Optional[str] = None) -> A
             raise exceptions.as_runtime_error(e)
 
         # ----------------------------------
-        # ステップ3: Successor処理（依存関係解決）
+        # ステップ3: 制御フロー判定（優先順位: cancel > その他）
         # ----------------------------------
-        if context.goto_called:
-            # Goto制御: 通常のSuccessor処理をスキップ
-            pass
-        else:
-            # 通常フロー: Successorを自動キューイング
-            successors = context.graph.successors(task_id)
-            for succ in successors:
-                succ_task = context.graph.get_node(succ)
-                context.add_to_queue(succ_task)  # 新しいPENDING状態生成
+        if context.cancel_called:
+            # ワークフローキャンセル要求（異常終了）
+            # タスクを完了としてマークしない（失敗扱い）
+            raise GraflowWorkflowCanceledError(
+                context.ctrl_message or "Workflow canceled",
+                task_id=task_id
+            )
 
         # ----------------------------------
         # ステップ4: 状態遷移 EXECUTING → COMPLETED
         # ----------------------------------
+        # キャンセル以外の場合はタスクを完了としてマーク
         context.mark_task_completed(task_id)
         context.increment_step()
 
@@ -160,7 +164,27 @@ def execute(context: ExecutionContext, start_task_id: Optional[str] = None) -> A
             self._handle_deferred_checkpoint(context)
 
         # ----------------------------------
-        # ステップ6: 次タスク取得
+        # ステップ6: 制御フロー分岐とSuccessor処理
+        # ----------------------------------
+        if context.terminate_called:
+            # ワークフロー終了要求（正常終了）
+            # タスクは完了済み、後続タスクを実行せずループ終了
+            break
+
+        elif context.goto_called:
+            # Goto制御: 通常のSuccessor処理をスキップ
+            # next_task()で指定されたタスクのみ実行
+            pass
+
+        else:
+            # 通常フロー: Successorを自動キューイング
+            successors = context.graph.successors(task_id)
+            for succ in successors:
+                succ_task = context.graph.get_node(succ)
+                context.add_to_queue(succ_task)  # 新しいPENDING状態生成
+
+        # ----------------------------------
+        # ステップ7: 次タスク取得
         # ----------------------------------
         task_id = context.get_next_task()  # キューから次のPENDINGタスク取得
 
@@ -174,55 +198,119 @@ def execute(context: ExecutionContext, start_task_id: Optional[str] = None) -> A
 ```mermaid
 flowchart TB
     subgraph "ワークフロー準備"
-        D[開始タスク決定]
+        START([開始])
+        START --> INIT[開始タスク決定]
     end
 
     subgraph "実行ループ"
-        D --> E{実行可能タスク<br/>存在?}
-        E -->|存在| F[タスク取得]
-        E -->|なし/上限到達| Z([終了])
+        INIT --> CHK{実行可能タスク<br/>存在?}
+        CHK -->|存在| RESET[制御フローフラグリセット]
+        CHK -->|なし/上限到達| END([正常終了])
 
-        F --> G[タスク実行準備]
-        G --> H[ハンドラー実行]
+        RESET --> FETCH[タスク取得]
+        FETCH --> EXEC[ハンドラー実行]
 
-        H -->|成功| I[結果保存]
-        H -.HITL中断.-> T{HITL中断処理}
-        H -.その他エラー.-> Z
+        EXEC -->|成功| RESULT[結果保存]
+        EXEC -.HITL中断.-> HITL_CHK{FeedbackTimeout?}
+        EXEC -.その他エラー.-> ERR([エラー終了])
 
-        T -->|Checkpoint保存| S[Checkpoint保存]
-        T -->|Terminate| Z
+        HITL_CHK -->|Yes| HITL_CP[Checkpoint作成]
+        HITL_CP --> HITL_END([一時停止])
 
-        I --> J{Successor処理}
-        J -->|通常フロー| K[依存タスクをキューへ]
-        J -->|Goto制御| L[指定タスクへジャンプ]
+        RESULT --> CANCEL_CHK{cancel_called?}
+        CANCEL_CHK -->|Yes| CANCEL_ERR([異常終了<br/>GraflowWorkflowCanceledError])
+        CANCEL_CHK -->|No| COMPLETE[タスク完了マーク<br/>ステップ増分]
 
-        K --> M[実行状態更新]
-        L --> M
-        M --> N{チェックポイント<br/>要求?}
+        COMPLETE --> CP_CHK{checkpoint_requested?}
+        CP_CHK -->|Yes| CP_SAVE[Checkpoint保存]
+        CP_CHK -->|No| TERM_CHK{terminate_called?}
+        CP_SAVE --> TERM_CHK
 
-        N -->|要| O[状態保存]
-        N -->|否| E
-        O --> S
-        S --> Z
+        TERM_CHK -->|Yes| END
+        TERM_CHK -->|No| GOTO_CHK{goto_called?}
+
+        GOTO_CHK -->|Yes| NEXT[次タスク取得]
+        GOTO_CHK -->|No| SUCC[Successorキューイング]
+
+        SUCC --> NEXT
+        NEXT --> CHK
     end
 
-    style E fill:#ffcccc,color:#000
-    style J fill:#ccffcc,color:#000
-    style O fill:#ffffcc,color:#000
-    style H fill:#cce5ff,color:#000
-    style Z fill:#ffe1e1,color:#000
+    style CHK fill:#ffcccc,color:#000
+    style CANCEL_CHK fill:#ff9999,color:#000
+    style TERM_CHK fill:#99ccff,color:#000
+    style GOTO_CHK fill:#99ff99,color:#000
+    style EXEC fill:#cce5ff,color:#000
+    style END fill:#ccffcc,color:#000
+    style CANCEL_ERR fill:#ff6666,color:#000
+    style ERR fill:#ff6666,color:#000
+    style HITL_END fill:#ffffcc,color:#000
 ```
 
 **フローチャート解説**:
 
-- **ワークフロー準備**: 開始タスクの決定（`start_task_id`指定 or キューから取得）
-- **実行ループ** (中央):
-  - 実行可能タスクの有無をチェック（キュー空 or ステップ上限）
-  - タスク取得 → ハンドラー実行 → 結果保存（Channel更新）
-  - **Successor処理**: 通常フロー（全successorをキューへ）またはGoto制御（指定タスクへジャンプ）
-  - 実行状態更新（完了タスク記録、ステップカウント増分）
-  - チェックポイント要求があれば状態を保存
-- **永続化・中断処理**: Checkpoint保存、HITL（Human-in-the-Loop）による中断対応
+### **ワークフロー準備**
+- 開始タスクの決定（`start_task_id`指定 or キューから取得）
+
+### **実行ループ（メインフロー）**
+
+#### **1. タスク実行前処理**
+- **制御フローフラグリセット**: goto, terminate, cancel フラグをクリア
+- **タスク取得**: グラフからタスクノードを取得
+- **ハンドラー実行**: TaskHandler経由でタスクを実行
+
+#### **2. 例外処理**
+- **FeedbackTimeout (HITL)**: チェックポイント作成して一時停止
+- **その他エラー**: ワークフロー異常終了
+
+#### **3. 制御フロー判定（優先順位順）**
+
+**第1優先: キャンセルチェック**
+- `cancel_called?` → **Yes**: GraflowWorkflowCanceledError を発生（異常終了）
+  - タスクは完了としてマークされない（失敗扱い）
+  - 後続タスク実行なし
+- `cancel_called?` → **No**: 次のステップへ
+
+**第2ステップ: タスク完了処理**
+- タスクを completed_tasks に追加
+- ステップカウンタを増分
+- チェックポイント要求があれば保存
+
+**第3優先: ワークフロー終了チェック**
+- `terminate_called?` → **Yes**: ワークフロー正常終了
+  - タスクは完了済み（成功）
+  - 後続タスク実行なし
+- `terminate_called?` → **No**: 次のステップへ
+
+**第4優先: Goto制御チェック**
+- `goto_called?` → **Yes**: Successorスキップ
+  - next_task()で指定されたタスクのみ実行
+- `goto_called?` → **No**: 通常フロー
+
+**第5: 通常フロー**
+- 全Successorをキューへ追加
+
+#### **4. ループ継続**
+- 次タスク取得 → 実行可能タスクチェックへ戻る
+
+### **終了条件**
+
+| 終了タイプ | 条件 | タスク完了 | 例外 |
+|-----------|------|-----------|------|
+| **正常終了** | キュー空 or ステップ上限 | ✅ Yes | ❌ No |
+| **ワークフロー終了** | terminate_called | ✅ Yes | ❌ No |
+| **ワークフローキャンセル** | cancel_called | ❌ No | ✅ Yes (GraflowWorkflowCanceledError) |
+| **HITL一時停止** | FeedbackTimeout | ⚠️ Partial | ❌ No |
+| **エラー** | その他例外 | ⚠️ Partial | ✅ Yes |
+
+### **制御フロー優先順位**
+
+```
+優先度1: cancel_workflow    → 異常終了（タスク未完了、例外発生）
+優先度2: terminate_workflow → 正常終了（タスク完了、ループ終了）
+優先度3: goto_called        → Successorスキップ（タスク完了）
+優先度4: 通常フロー          → Successor実行（タスク完了）
+```
 
 ## ExecutionContext: ステートマシン管理
 
@@ -396,6 +484,82 @@ class ExecutionContext:
     def reset_goto_flag(self) -> None:
         """次タスク実行のためgotoフラグをリセット"""
         self._goto_called_in_current_task = False
+
+    # ========================================
+    # ワークフロー制御（終了・キャンセル）
+    # ========================================
+
+    @property
+    def terminate_called(self) -> bool:
+        """現在のタスク実行中にワークフロー終了が要求されたか"""
+        return self._terminate_called_in_current_task
+
+    @property
+    def cancel_called(self) -> bool:
+        """現在のタスク実行中にワークフローキャンセルが要求されたか"""
+        return self._cancel_called_in_current_task
+
+    def terminate_workflow(self, message: str) -> None:
+        """ワークフローを正常終了（Normal Exit）
+
+        現在のタスクを完了としてマークし、後続タスクを実行せずにワークフローを終了します。
+        これは成功した早期終了を表します。
+
+        使用例:
+        - キャッシュヒットにより以降の処理が不要
+        - 条件を満たしたため残りのステップをスキップ
+        - データが既に最新のため更新不要
+
+        Args:
+            message: 終了理由（ログ・デバッグ用）
+
+        Example:
+            @task(inject_context=True)
+            def check_cache(context):
+                if cache_hit:
+                    context.terminate_workflow("データがキャッシュに存在")
+                    return cached_data
+                return fetch_fresh_data()
+        """
+        self._terminate_called_in_current_task = True
+        self.ctrl_message = message
+
+    def cancel_workflow(self, message: str) -> None:
+        """ワークフローをキャンセル（Abnormal Exit）
+
+        ワークフロー全体を異常終了させます。現在のタスクは完了としてマークされず、
+        GraflowWorkflowCanceledError 例外が発生します。
+
+        使用例:
+        - 不正なデータが検出された
+        - 重大なエラーが発生してワークフローの続行が不可能
+        - ユーザーが明示的にキャンセルを要求
+
+        Args:
+            message: キャンセル理由（ログ・デバッグ用）
+
+        Raises:
+            GraflowWorkflowCanceledError: ワークフローがキャンセルされた
+
+        Example:
+            @task(inject_context=True)
+            def validate_data(context, data):
+                if not data.is_valid():
+                    context.cancel_workflow("データ検証失敗: 無効な形式")
+                return process(data)
+        """
+        self._cancel_called_in_current_task = True
+        self.ctrl_message = message
+
+    def reset_control_flags(self) -> None:
+        """全制御フローフラグをリセット
+
+        次タスク実行前に goto, terminate, cancel フラグをリセットします。
+        """
+        self._goto_called_in_current_task = False
+        self._terminate_called_in_current_task = False
+        self._cancel_called_in_current_task = False
+        self.ctrl_message = None
 ```
 
 ## ParallelGroupのBSP実行モデル
@@ -616,6 +780,141 @@ Gotoフロー（goto=True）:
        └─→ mark_task_completed("A")
 
 task_queue: [jump_target]  ← gotoで指定したタスクのみ
+```
+
+### パターン5: ワークフロー正常終了（terminate_workflow）
+
+```python
+@task(inject_context=True)
+def check_cache(ctx: TaskExecutionContext):
+    """キャッシュヒット時に早期終了"""
+    cache_result = check_cache_db()
+
+    if cache_result is not None:
+        # データがキャッシュに存在するため、以降の処理を実行せずに終了
+        ctx.terminate_workflow("キャッシュヒット - 処理スキップ")
+        return cache_result
+    else:
+        # キャッシュミス: 通常フローで後続タスクを実行
+        return None
+
+# グラフ構造:
+# check_cache → fetch_data → transform → load
+#
+# キャッシュヒット: check_cache のみ実行（正常終了）
+# キャッシュミス: 全タスク実行
+
+【ステートマシンの動作】
+キャッシュヒット時:
+┌─────────────────┐
+│  check_cache    │
+│   EXECUTING     │
+└────────┬────────┘
+         │ terminate_workflow("...")
+         │ ↓
+         │ terminate_called = True
+         │ mark_task_completed("check_cache")  ← 完了としてマーク
+         │ break  ← ループ終了
+         ▼
+   ワークフロー正常終了（task_queue: [] ）
+   completed_tasks: {check_cache}
+```
+
+### パターン6: ワークフローキャンセル（cancel_workflow）
+
+```python
+@task(inject_context=True)
+def validate_input(ctx: TaskExecutionContext, data):
+    """データ検証失敗時にワークフローをキャンセル"""
+    validation_result = validate(data)
+
+    if not validation_result.is_valid:
+        # 不正なデータ検出 - ワークフロー全体をキャンセル
+        ctx.cancel_workflow(f"データ検証失敗: {validation_result.error}")
+        # ここには到達しない（GraflowWorkflowCanceledError が発生）
+
+    return validation_result.cleaned_data
+
+# グラフ構造:
+# validate_input → process → store
+#
+# 検証成功: 全タスク実行
+# 検証失敗: validate_input で異常終了（GraflowWorkflowCanceledError）
+
+【ステートマシンの動作】
+検証失敗時:
+┌─────────────────┐
+│ validate_input  │
+│   EXECUTING     │
+└────────┬────────┘
+         │ cancel_workflow("...")
+         │ ↓
+         │ cancel_called = True
+         │ raise GraflowWorkflowCanceledError  ← タスク完了マークせず例外発生
+         ▼
+   ワークフロー異常終了（例外）
+   completed_tasks: {}  ← validate_input は完了していない
+```
+
+### パターン7: 制御フロー優先順位
+
+```python
+@task(inject_context=True)
+def complex_control(ctx: TaskExecutionContext):
+    """複数の制御フローが可能な例"""
+    result = perform_operation()
+
+    if result.fatal_error:
+        # 最優先: キャンセル（異常終了）
+        ctx.cancel_workflow("致命的エラー発生")
+        # ここには到達しない
+
+    if result.early_exit:
+        # 優先度2: 正常終了
+        ctx.terminate_workflow("早期完了")
+        return result
+
+    if result.skip_successors:
+        # 優先度3: goto制御
+        ctx.next_task(alternative_task, goto=True)
+        return result
+
+    # 優先度4: 通常フロー（successorを実行）
+    return result
+
+# 制御フロー優先順位:
+# 1. cancel_workflow  ← タスク完了前に例外発生
+# 2. terminate_workflow ← タスク完了、ループ終了
+# 3. goto_called  ← タスク完了、successorスキップ
+# 4. 通常フロー  ← タスク完了、successor実行
+```
+
+### パターン8: 条件分岐とワークフロー制御の組み合わせ
+
+```python
+@task(inject_context=True)
+def conditional_workflow(ctx: TaskExecutionContext):
+    """条件に応じた複雑なフロー制御"""
+    state = ctx.get_channel().get("workflow_state")
+
+    if state == "COMPLETED":
+        # 既に完了している場合は早期終了
+        ctx.terminate_workflow("ワークフロー既に完了")
+        return
+
+    if state == "ERROR":
+        # エラー状態の場合はキャンセル
+        ctx.cancel_workflow("前段でエラー発生")
+        return
+
+    if state == "SKIP_REMAINING":
+        # 特定の後続タスクのみ実行
+        cleanup_task = ctx.execution_context.graph.get_node("cleanup")
+        ctx.next_task(cleanup_task, goto=True)
+        return
+
+    # 通常処理
+    return process_data()
 ```
 
 ## 実行シナリオ例

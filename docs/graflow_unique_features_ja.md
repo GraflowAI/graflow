@@ -1,11 +1,13 @@
 # Graflow独自機能とオリジナリティ
 ## LangGraph、LangChain、Celery、Airflowとの包括的比較
 
-**ドキュメントバージョン**: 1.1
-**最終更新**: 2025-10-23
+**ドキュメントバージョン**: 1.3
+**最終更新**: 2025-12-05
 **著者**: Graflowチーム
 
 **更新履歴**:
+- v1.3 (2025-12-05): コア機能 #3「ステートマシン実行」にワークフロー制御（terminate_workflow/cancel_workflow）を追加
+- v1.2 (2025-12-05): コア機能 #10 に「Human-in-the-Loop (HITL)」を追加し、比較分析とユースケースを更新
 - v1.1 (2025-10-23): コア機能 #9 に「チェックポイント／リジューム」を追加し、関連セクションを全面刷新
 - v1.0 (2025-10-22): 初版
 
@@ -33,7 +35,7 @@ Graflowは、**汎用ワークフロー実行エンジン**であり、タスク
 |------|------|-----------|
 | **ワーカーフリート管理** | TaskWorkerによるグループ化タスクの分散並列実行 | Celery、Airflow（部分的） |
 | **ランタイム動的タスク** | 実行中にワークフローグラフを変更可能 | なし（LangGraphはコンパイル時のみ） |
-| **ステートマシン実行** | next_iteration() による第一級のサイクルサポート | なし |
+| **ステートマシン実行** | next_iteration()によるサイクル、terminate_workflow/cancel_workflowによる早期終了制御 | なし |
 | **Pythonic演算子DSL** | ワークフローグラフ（DAG＋ループ）を数学的構文（`>>`、`\|`）で表現 | なし |
 | **プラグ可能タスクハンドラー** | GPU、SSH、クラウド、Dockerなどのカスタム実行戦略 | Celery / Airflow で限定的 |
 | **Docker実行** | コンテナ化タスク実行を標準装備 | 外部ツールが必要 |
@@ -41,6 +43,7 @@ Graflowは、**汎用ワークフロー実行エンジン**であり、タスク
 | **シームレスなローカル/分散切替** | 1行でバックエンドを切り替え | なし（多くは追加インフラ必須） |
 | **チャンネルベース通信** | ワークフロー全体で共有する名前空間付きKVS | XCom（Airflow）、State（LangGraph） |
 | **チェックポイント／リジューム** | タスク内からのユーザー制御チェックポイント保存 | LangGraph（自動のみ）、Airflow（限定的） |
+| **Human-in-the-Loop (HITL)** | 実行中の人間介入とフィードバック待機、汎用Webhook通知 | LangGraph（限定的）、他なし |
 
 ---
 
@@ -48,17 +51,18 @@ Graflowは、**汎用ワークフロー実行エンジン**であり、タスク
 
 ### 概要
 
-Graflowの独自機能は**9つのカテゴリー**で構成されています。
+Graflowの独自機能は**10つのカテゴリー**で構成されています。
 
 1. **ワーカーフリート管理** — タスクグループを分散並列実行
 2. **ランタイム動的タスク** — 実行中にグラフ構造を変更
-3. **ステートマシン実行** — next_iterationによる第一級サイクル制御
+3. **ステートマシン実行** — next_iterationによるサイクル制御、terminate/cancel_workflowによる早期終了
 4. **プラグ可能タスクハンドラー** — Dockerを含む柔軟な実行戦略
 5. **細粒度エラーポリシー** — 並列グループ単位で柔軟に制御
 6. **Pythonic演算子DSL** — DAGとループを直感的に記述
 7. **シームレスなローカル/分散切替** — バックエンドのワンライン切替
 8. **チャンネル通信** — 名前空間付きKVSによるステート共有
 9. **チェックポイント／リジューム** — ワークフロー状態の永続化と復旧
+10. **Human-in-the-Loop (HITL)** — 実行中の人間介入とフィードバック取得
 
 ---
 
@@ -143,6 +147,12 @@ def adaptive_processor(context: TaskExecutionContext):
 
 ### 3. ステートマシン実行 ⏩
 
+**実装ファイル**: `graflow/core/context.py`, `graflow/core/engine.py`
+
+Graflowは高度なワークフロー制御機能を提供し、イテレーション、早期終了、キャンセルを統一的に扱います。
+
+#### イテレーション制御
+
 `next_iteration()` を用いることで、収束処理や状態遷移を明示的に表現できます。チャンネルに状態を保存しながらループするパターンを推奨します。
 
 ```python
@@ -161,8 +171,64 @@ def iterative_task(context: TaskExecutionContext):
         return "DONE"
 ```
 
+#### ワークフロー正常終了（terminate_workflow）
+
+タスクから `context.terminate_workflow(message)` を呼び出すことで、現在のタスクを完了としてマークしつつ、後続タスクを実行せずにワークフローを正常終了できます。
+
+```python
+@task(inject_context=True)
+def check_cache(context):
+    cache_result = get_from_cache()
+
+    if cache_result is not None:
+        # キャッシュヒット - 以降の処理をスキップ
+        context.terminate_workflow("データがキャッシュに存在")
+        return cache_result
+
+    # キャッシュミス - 通常フローで後続タスクを実行
+    return None
+```
+
+**使用例**:
+- キャッシュヒット時の早期完了
+- 条件を満たしたため残りのステップが不要
+- データが既に最新のため更新不要
+
+#### ワークフローキャンセル（cancel_workflow）
+
+タスクから `context.cancel_workflow(message)` を呼び出すことで、ワークフロー全体を異常終了させます。現在のタスクは完了としてマークされず、`GraflowWorkflowCanceledError` 例外が発生します。
+
+```python
+@task(inject_context=True)
+def validate_data(context, data):
+    if not data.is_valid():
+        # データ検証失敗 - ワークフロー全体をキャンセル
+        context.cancel_workflow("データ検証失敗: 無効な形式")
+
+    return process(data)
+```
+
+**使用例**:
+- 不正なデータが検出された
+- 重大なエラーが発生して続行不可能
+- ユーザーが明示的にキャンセルを要求
+
+#### 制御フロー優先順位
+
+```python
+# 制御フロー優先順位（エンジン内での処理順）:
+# 1. cancel_workflow  ← タスク完了前に例外発生（異常終了）
+# 2. terminate_workflow ← タスク完了、ループ終了（正常終了）
+# 3. goto_called  ← タスク完了、successorスキップ
+# 4. 通常フロー  ← タスク完了、successor実行
+```
+
+#### 特徴まとめ
+
 - サイクル数は CycleController が制限し、無限ループを防止
 - チェックポイントと組み合わせることで途中経過の復旧が可能
+- `terminate_workflow`: タスク完了済み、後続スキップ、正常終了
+- `cancel_workflow`: タスク未完了、例外発生、異常終了
 
 ---
 
@@ -449,6 +515,290 @@ def order_state_machine(context):
 
 ---
 
+### 10. Human-in-the-Loop (HITL) 👤
+
+**実装ファイル**: `graflow/hitl/manager.py`, `graflow/hitl/types.py`, `docs/hitl/hitl_design_ja.md`
+
+Graflowは実行中のワークフローで人間のフィードバックを待機し、承認、テキスト入力、選択などの応答を受け取れます。即座の応答と遅延応答の両方をインテリジェントに処理します。
+
+#### コアAPI
+
+##### タスク内でフィードバックをリクエスト
+
+```python
+@task(inject_context=True)
+def approval_task(context):
+    # 承認を要求（3分待機）
+    response = context.request_approval(
+        prompt="本番環境へのデプロイを承認しますか？",
+        timeout=180
+    )
+
+    if response:
+        deploy_to_production()
+    else:
+        cancel_deployment()
+```
+
+##### 複数のフィードバックタイプ
+
+```python
+# テキスト入力
+comments = context.request_text_input(
+    prompt="このレポートについてのコメントを入力してください",
+    timeout=300
+)
+
+# 選択肢から選択
+action = context.request_selection(
+    prompt="次のアクションを選択してください",
+    options=["retry", "skip", "abort"],
+    timeout=180
+)
+
+# カスタムフィードバック
+response = context.request_feedback(
+    feedback_type=FeedbackType.CUSTOM,
+    prompt="パラメータを調整してください",
+    metadata={"current_params": {...}},
+    timeout=300
+)
+```
+
+##### チャネル統合
+
+```python
+@task(inject_context=True)
+def approval_with_channel(context):
+    # フィードバック応答を自動的にチャネルに書き込む
+    response = context.request_approval(
+        prompt="デプロイを承認しますか？",
+        channel_key="deployment_approved",
+        write_to_channel=True,
+        timeout=180
+    )
+
+@task(inject_context=True)
+def execute_deployment(context):
+    # 他のタスクがチャネルから承認ステータスを読み取る
+    approved = context.get_channel().get("deployment_approved")
+    if approved:
+        deploy()
+```
+
+#### ユーザー通知システム
+
+##### コンソール通知（デフォルト）
+
+```python
+@task(inject_context=True)
+def approval_task(context):
+    # デフォルト: コンソールにAPIエンドポイントを表示
+    response = context.request_approval(
+        prompt="デプロイを承認しますか？",
+        timeout=180
+    )
+```
+
+出力例：
+```
+================================================================================
+🔔 フィードバックリクエスト: deploy_task_a1b2c3d4
+タイプ: approval
+プロンプト: デプロイを承認しますか？
+タイムアウト: 180秒
+
+📋 フィードバックAPIエンドポイント:
+   http://localhost:8000/api/feedback/deploy_task_a1b2c3d4/respond
+
+例:
+  curl -X POST http://localhost:8000/api/feedback/deploy_task_a1b2c3d4/respond \
+    -H "Content-Type: application/json" \
+    -d '{"approved": true, "reason": "承認"}'
+================================================================================
+```
+
+##### Slack Webhook通知
+
+```python
+from graflow.hitl.types import NotificationConfig, NotificationType
+
+@task(inject_context=True)
+def approval_with_slack(context):
+    notification_config = NotificationConfig(
+        notification_type=NotificationType.WEBHOOK,
+        api_base_url="https://api.example.com",
+        webhook_url="https://hooks.slack.com/services/YOUR/WEBHOOK/URL",
+        webhook_payload_template="""
+        {
+            "text": "🔔 *フィードバックリクエスト*",
+            "blocks": [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "*プロンプト:*\\n{{ prompt }}"
+                    }
+                },
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "*APIエンドポイント:*\\n<{{ api_url }}|フィードバック送信>"
+                    }
+                }
+            ]
+        }
+        """
+    )
+
+    response = context.request_feedback(
+        feedback_type=FeedbackType.APPROVAL,
+        prompt="本番環境へのデプロイを承認しますか？",
+        timeout=300,
+        notification_config=notification_config
+    )
+```
+
+##### 汎用Webhook（Discord、Teams、カスタムエンドポイント）
+
+```python
+@task(inject_context=True)
+def approval_with_custom_endpoint(context):
+    notification_config = NotificationConfig(
+        notification_type=NotificationType.WEBHOOK,
+        api_base_url="https://api.example.com",
+        webhook_url="https://your-system.com/api/notifications",
+        webhook_method="POST",
+        webhook_headers={"Authorization": "Bearer YOUR_TOKEN"},
+        webhook_secret="your-hmac-secret",  # HMAC署名用
+        webhook_retry_count=3,
+        webhook_timeout=10
+    )
+
+    response = context.request_feedback(
+        feedback_type=FeedbackType.APPROVAL,
+        prompt="承認が必要です",
+        timeout=180,
+        notification_config=notification_config
+    )
+```
+
+##### カスタム通知ハンドラー
+
+```python
+def my_custom_notifier(feedback_request, api_url):
+    """カスタム通知ロジック"""
+    send_email(
+        to="admin@example.com",
+        subject=f"フィードバックリクエスト: {feedback_request.task_id}",
+        body=f"API URL: {api_url}"
+    )
+
+@task(inject_context=True)
+def approval_with_custom(context):
+    notification_config = NotificationConfig(
+        notification_type=NotificationType.CUSTOM,
+        api_base_url="https://api.example.com",
+        custom_handler=my_custom_notifier
+    )
+
+    response = context.request_feedback(
+        feedback_type=FeedbackType.APPROVAL,
+        prompt="カスタム通知テスト",
+        timeout=180,
+        notification_config=notification_config
+    )
+```
+
+#### インテリジェントなタイムアウト処理
+
+**シナリオ1: 即座の承認（3分以内）**
+```
+タスクが承認を要求 → ポーリング（3分） → 人間が承認 → タスク継続
+```
+
+**シナリオ2: 遅延承認（数時間/数日）**
+```
+タスクが承認を要求 → ポーリング（3分） → タイムアウト
+→ チェックポイント作成 → ワークフロー終了
+→ （後で）人間がAPIで承認 → ワークフローがチェックポイントから再開
+→ 承認を受けてタスク継続
+```
+
+**シナリオ3: 分散実行**
+```
+ワーカー1: タスクがフィードバック要求 → タイムアウト → チェックポイント → ワーカー終了
+→ 人間がAPIでフィードバック提供（Redisに保存）
+→ ワーカー2: チェックポイントから再開 → フィードバック取得 → 継続
+```
+
+#### 外部API経由でフィードバック提供
+
+```bash
+# 保留中フィードバック一覧
+GET /api/feedback?session_id={session_id}
+
+# 承認を提供
+POST /api/feedback/{feedback_id}/respond
+{
+  "approved": true,
+  "reason": "マネージャーにより承認",
+  "responded_by": "alice@example.com"
+}
+
+# テキストフィードバック提供
+POST /api/feedback/{feedback_id}/respond
+{
+  "text": "セクション3のタイポを修正してください",
+  "responded_by": "bob@example.com"
+}
+```
+
+#### バックエンドサポート
+
+| 機能 | Filesystem | Redis |
+|------|------------|-------|
+| **永続性** | ✅ ファイルベース | ✅ メモリ + 永続化 |
+| **クロスプロセス** | ⚠️ 同一マシンのみ | ✅ 可能（ネットワーク） |
+| **クロスノード** | ❌ 不可 | ✅ 可能 |
+| **Pub/Sub通知** | ❌ なし | ✅ あり |
+| **ユースケース** | 開発/シングルノード | 本番/分散 |
+
+#### 通知メカニズム（ハイブリッドアプローチ）
+
+- **Redis Pub/Sub**: 低レイテンシ通知（アクティブポーリング最適化）
+- **ポーリングフォールバック**: Pub/Sub失敗時の信頼性確保
+- **ストレージが信頼できる情報源**: 再開時に応答を確実に取得
+
+#### 代表的なユースケース
+
+1. **承認ワークフロー**: デプロイ、支払い処理などの承認
+2. **データ検証**: ML予測や品質チェックの人間検証
+3. **パラメータチューニング**: 実行中のパラメータ調整
+4. **エラーリカバリ**: エラー時の人間判断（リトライ、スキップ、中止）
+5. **バッチ処理レビュー**: 定期的な人間レビューが必要な処理
+
+#### 特徴まとめ
+
+- **複数のフィードバックタイプ**: 承認、テキスト入力、選択、マルチ選択、カスタム
+- **インテリジェントなタイムアウト**: 短期ポーリング → チェックポイント → 再開
+- **永続的なフィードバック状態**: プロセス再起動後も保持
+- **チャネル統合**: フィードバック応答の自動チャネル書き込み
+- **汎用ユーザー通知**: コンソール、Slack、Discord、Teams、カスタムエンドポイント、カスタムハンドラー
+- **HMAC署名**: Webhookセキュリティ
+- **分散実行対応**: Redis経由でクロスプロセス・クロスノードフィードバック
+
+#### ベストプラクティス
+
+1. タイムアウトを適切に設定（即座: 3-5分、遅延: 数時間以上を想定）
+2. メタデータにコンテキスト情報を含める
+3. 本番環境ではRedisバックエンドを使用
+4. Webhook通知でHMAC署名を有効化
+5. チャネル統合でフィードバックを他タスクと共有
+
+---
+
 ## 比較分析
 
 ### 機能マトリックス
@@ -457,7 +807,7 @@ def order_state_machine(context):
 |------|---------|-----------|--------|---------|
 | **Pythonic DSL** | ✅ `>>`, `\|`（DAG＋サイクル） | ❌ | ⚠️ 部分的 | ⚠️ 部分的 |
 | **ランタイム動的タスク** | ✅ `next_task()` | ❌ | ❌ | ⚠️ Dynamic DAG |
-| **ステートマシン実行** | ✅ `next_iteration()` + チャンネル | ⚠️ グラフサイクル | ❌ | ❌ |
+| **ステートマシン実行** | ✅ `next_iteration()` + `terminate/cancel_workflow()` | ⚠️ グラフサイクル | ❌ | ❌ |
 | **ワーカーフリートCLI** | ✅ 組み込み | ❌ | ✅ | ✅ |
 | **カスタムハンドラー** | ✅ プラグ可能 | ❌ | ⚠️ Taskクラス | ⚠️ Operator |
 | **Docker実行** | ✅ 組み込み | ❌ | ⚠️ Operator経由 | ⚠️ DockerOperator |
@@ -470,6 +820,7 @@ def order_state_machine(context):
 | **コンテキストマネージャー** | ✅ `with workflow()` | ❌ | ❌ | ❌ |
 | **型安全性** | ✅ TypedChannel | ✅ Pydantic | ❌ | ❌ |
 | **チェックポイント／リジューム** | ✅ 本番対応 | ⚠️ メモリのみ | ❌ | ⚠️ タスクリトライ |
+| **Human-in-the-Loop (HITL)** | ✅ 完全実装 | ⚠️ 限定的 | ❌ | ❌ |
 
 ### パフォーマンス比較
 
@@ -491,9 +842,11 @@ def order_state_machine(context):
 3. **分散実行**: ワーカーフリート管理、地理分散、リソース特化
 4. **カスタム実行戦略**: リモートAPI呼び出し、GPU/TPU、レート制限制御
 5. **開発スピード重視**: ローカルで即実行しつつ本番へ段階移行
-6. **ステートマシン/ループ処理**: 注文処理、状態遷移、ゲームループ
+6. **ステートマシン/ループ処理**: 注文処理、状態遷移、ゲームループ、早期終了/キャンセル制御
 7. **コンテナ化実行**: 隔離環境、依存関係衝突回避、信頼できないコード
 8. **長時間ワークフローの信頼性確保**: 定期的なチェックポイントと再開が必要な処理
+9. **承認ワークフロー**: デプロイ、支払い、重要操作の人間承認が必要
+10. **インタラクティブパイプライン**: 人間のフィードバックや調整が必要な処理
 
 ### LangGraphを選ぶべきケース ✅
 
@@ -568,6 +921,7 @@ def order_state_machine(context):
 3. **ワークフロー合成**: ネスト構成、テンプレート、ライブラリ化
 4. **統合強化**: Kubernetesネイティブ、AWS Lambda、Apache Beam
 5. **チェックポイント拡張**: Redis/S3バックエンド、圧縮、ライフサイクル管理
+6. **HITL機能拡張**: Web UI、SSE通知、OAuth 2.0認証、フィードバック履歴管理
 
 ---
 
@@ -579,12 +933,13 @@ Graflowは次世代のワークフローオーケストレーションを体現�
 - **本番運用の堅牢性** — ワーカーフリート、並列エラーポリシー、チェックポイント
 - **開発の俊敏性** — ローカルと分散のシームレスな切替
 - **拡張性** — カスタムハンドラー／実行戦略で容易に拡張
-- **動的対応力** — 実行時タスク生成とステートマシン制御
+- **動的対応力** — 実行時タスク生成、ステートマシン制御、ワークフロー早期終了/キャンセル
+- **人間統合** — HITL機能による実行中の承認・フィードバック取得
 
 LangGraphの軽量性とAirflowの重量級インフラの間を埋め、**現代のデータ／MLワークフローに最適な選択肢**を提供します。
 
 ---
 
-**ドキュメント管理者**: Graflowチーム  
-**最終レビュー**: 2025-10-23（チェックポイント機能アップデート反映）  
+**ドキュメント管理者**: Graflowチーム
+**最終レビュー**: 2025-12-05（ワークフロー制御機能追加）
 **次回レビュー**: 四半期ごと

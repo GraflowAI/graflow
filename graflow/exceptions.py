@@ -91,6 +91,27 @@ class ParallelGroupError(GraflowRuntimeError):
         self.successful_tasks = successful_tasks
 
 
+class GraflowWorkflowCanceledError(GraflowRuntimeError):
+    """Exception raised when a workflow is explicitly canceled by a task.
+
+    This allows tasks to cancel the entire workflow execution, skipping
+    all remaining tasks and propagating the cancellation error.
+
+    Attributes:
+        message: Cancellation reason/message
+        task_id: ID of the task that requested cancellation
+    """
+
+    def __init__(self, message: str, task_id: Optional[str] = None):
+        super().__init__(message)
+        self.task_id = task_id
+
+    def __str__(self) -> str:
+        if self.task_id:
+            return f"Workflow canceled by task '{self.task_id}': {self.args[0]}"
+        return f"Workflow canceled: {self.args[0]}"
+
+
 def as_runtime_error(ex: Exception) -> GraflowRuntimeError:
     """Wrap a generic exception into a GraflowRuntimeError."""
     if isinstance(ex, GraflowRuntimeError):

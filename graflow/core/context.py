@@ -89,6 +89,22 @@ class TaskExecutionContext:
         """Create new dynamic task or jump to existing task."""
         return self.execution_context.next_task(executable, goto=goto)
 
+    def terminate_workflow(self, message: str) -> None:
+        """Request workflow termination (normal exit).
+
+        Args:
+            message: Termination reason/message
+        """
+        self.execution_context.terminate_workflow(message)
+
+    def cancel_workflow(self, message: str) -> None:
+        """Request workflow cancellation (abnormal exit).
+
+        Args:
+            message: Cancellation reason/message
+        """
+        self.execution_context.cancel_workflow(message)
+
     def get_channel(self) -> Channel:
         """Get communication channel."""
         return self.execution_context.get_channel()
@@ -482,6 +498,11 @@ class ExecutionContext:
 
         # Track if goto (jump to existing task) was called in current task execution
         self._goto_called_in_current_task: bool = False
+
+        # Track workflow termination/cancellation requests
+        self._terminate_called_in_current_task: bool = False
+        self._cancel_called_in_current_task: bool = False
+        self.ctrl_message: Optional[str] = None
 
         # Save backend configuration for serialization
         self._channel_backend_type = channel_backend
@@ -894,6 +915,93 @@ class ExecutionContext:
     def reset_goto_flag(self) -> None:
         """Reset goto flag for next task execution."""
         self._goto_called_in_current_task = False
+
+    @property
+    def terminate_called(self) -> bool:
+        """Check if workflow termination was requested in current task execution."""
+        return self._terminate_called_in_current_task
+
+    @property
+    def cancel_called(self) -> bool:
+        """Check if workflow cancellation was requested in current task execution."""
+        return self._cancel_called_in_current_task
+
+    def reset_terminate_flag(self) -> None:
+        """Reset terminate flag for next task execution."""
+        self._terminate_called_in_current_task = False
+        self.ctrl_message = None
+
+    def reset_cancel_flag(self) -> None:
+        """Reset cancel flag for next task execution."""
+        self._cancel_called_in_current_task = False
+        self.ctrl_message = None
+
+    def reset_control_flags(self) -> None:
+        """Reset all control flow flags for next task execution."""
+        self._goto_called_in_current_task = False
+        self._terminate_called_in_current_task = False
+        self._cancel_called_in_current_task = False
+        self.ctrl_message = None
+
+    def terminate_workflow(self, message: str) -> None:
+        """Request workflow termination (normal exit).
+
+        This method allows a task to request graceful workflow termination.
+        When called, the current task completes normally but no subsequent
+        tasks are executed. The workflow exits with a successful status.
+
+        Use this when:
+        - A condition is met that makes further processing unnecessary
+        - Early exit is desired without indicating an error
+
+        Args:
+            message: Reason for termination (for logging/debugging)
+
+        Example:
+            @task(inject_context=True)
+            def check_cache(context):
+                if cache_hit:
+                    context.terminate_workflow("Data found in cache")
+                return result
+        """
+        self._terminate_called_in_current_task = True
+        self.ctrl_message = message
+        logger.info(
+            "Workflow termination requested: %s",
+            message,
+            extra={"session_id": self.session_id, "ctrl_msg": message}
+        )
+
+    def cancel_workflow(self, message: str) -> None:
+        """Request workflow cancellation (abnormal exit).
+
+        This method allows a task to cancel the entire workflow execution
+        due to an error or invalid state. When called, the workflow immediately
+        raises a GraflowWorkflowCanceledError, and the current task is NOT
+        marked as completed.
+
+        Use this when:
+        - Invalid data is detected that prevents continuation
+        - A critical error occurs that invalidates the workflow
+        - User explicitly requests cancellation
+
+        Args:
+            message: Reason for cancellation (for logging/debugging)
+
+        Example:
+            @task(inject_context=True)
+            def validate_data(context, data):
+                if not data.is_valid():
+                    context.cancel_workflow("Invalid data format")
+                return processed_data
+        """
+        self._cancel_called_in_current_task = True
+        self.ctrl_message = message
+        logger.warning(
+            "Workflow cancellation requested: %s",
+            message,
+            extra={"session_id": self.session_id, "ctrl_msg": message}
+        )
 
     def next_task(
         self,

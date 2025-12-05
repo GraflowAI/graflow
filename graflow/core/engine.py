@@ -202,19 +202,15 @@ class WorkflowEngine:
         # Note: Don't check is_completed() here as it would return True immediately
         # after dequeuing the first task (queue becomes empty)
         while task_id is not None and context.steps < context.max_steps:
-            # Reset goto flag for each task
-            context.reset_goto_flag()
+            # Reset control flow flags for each task
+            context.reset_control_flags()
 
             # Check if task exists in graph
             graph = context.graph
             if task_id not in graph.nodes:
                 logger.error(
-                    "Node not found in graph: %s",
-                    task_id,
-                    extra={
-                        "session_id": context.session_id,
-                        "available_nodes": list(graph.nodes.keys())[:10]
-                    }
+                    "Node not found in graph: %s", task_id,
+                    extra={ "session_id": context.session_id, "available_nodes": list(graph.nodes.keys())[:10] }
                 )
                 raise exceptions.GraflowRuntimeError(
                     f"Node '{task_id}' not found in graph. "
@@ -244,27 +240,55 @@ class WorkflowEngine:
                 # Exception already stored by handler, just re-raise
                 raise exceptions.as_runtime_error(e)
 
-            # Handle successor scheduling
-            if context.goto_called:
+            # Handle control flow and successor scheduling
+            if context.cancel_called:
+                # Workflow cancellation requested (abnormal exit)
+                # Do NOT mark task as completed - this is a failure
+                logger.warning(
+                    "Workflow cancellation requested by task '%s': %s",
+                    task_id, context.ctrl_message,
+                    extra={ "task_id": task_id, "session_id": context.session_id, "ctrl_message": context.ctrl_message }
+                )
+                # Raise cancellation error immediately
+                from graflow.exceptions import GraflowWorkflowCanceledError
+                raise GraflowWorkflowCanceledError(
+                    context.ctrl_message or "Workflow canceled",
+                    task_id=task_id
+                )
+
+            # Common post-task processing (for successful tasks)
+            context.mark_task_completed(task_id)
+            context.increment_step()
+
+            # Handle deferred checkpoint requests
+            if context.checkpoint_requested:
+                self._handle_deferred_checkpoint(context)
+
+            if context.terminate_called:
+                # Workflow termination requested (normal exit)
+                logger.info(
+                    "Workflow termination requested by task '%s': %s",
+                    task_id, context.ctrl_message,
+                    extra={ "task_id": task_id, "session_id": context.session_id, "ctrl_message": context.ctrl_message}
+                )
+                # Exit workflow execution loop
+                break
+
+            elif context.goto_called:
+                # Goto called: skip normal successors
                 logger.debug(
                     "Goto called in task, skipping normal successors",
                     extra={"task_id": task_id, "session_id": context.session_id}
                 )
+
             else:
-                # Add successor nodes to queue
+                # Normal successor processing: add successor nodes to queue
                 successors = list(graph.successors(task_id))
                 for succ in successors:
                     succ_task = graph.get_node(succ)
                     context.add_to_queue(succ_task)
 
-            # Track completion and step count after scheduling
-            context.mark_task_completed(task_id)
-            context.increment_step()
-
-            # Handle deferred checkpoint requests after queue updates
-            if context.checkpoint_requested:
-                self._handle_deferred_checkpoint(context)
-
+            # Get next task from queue
             task_id = context.get_next_task()
 
         logger.info(
