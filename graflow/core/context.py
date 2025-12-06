@@ -481,6 +481,10 @@ class ExecutionContext:
         # Preserve original config (without runtime additions)
         base_config: Dict[str, Any] = dict(config) if config else {}
 
+        # Ensure redis_client has connection parameters for serialization
+        from graflow.utils.redis_utils import ensure_redis_connection_params
+        ensure_redis_connection_params(base_config)
+
         self.task_queue: LocalTaskQueue = LocalTaskQueue(self, start_node)
 
         self.cycle_controller = CycleController(default_max_cycles)
@@ -1252,27 +1256,14 @@ class ExecutionContext:
         if '_original_config' not in state:
             state['_original_config'] = {}
 
-        # Extract Redis connection parameters if redis_client exists in config
-        # (redis_client itself is not picklable)
-        if 'redis_client' in state.get('_original_config', {}):
-            redis_client = state['_original_config']['redis_client']
-            try:
-                # Extract connection parameters from redis_client
-                redis_config = {
-                    'host': redis_client.connection_pool.connection_kwargs.get('host', 'localhost'),
-                    'port': redis_client.connection_pool.connection_kwargs.get('port', 6379),
-                    'db': redis_client.connection_pool.connection_kwargs.get('db', 0),
-                }
-                # Replace redis_client with connection parameters
-                config_copy = state['_original_config'].copy()
-                config_copy.pop('redis_client')
-                config_copy.update(redis_config)
-                state['_original_config'] = config_copy
-            except Exception:
-                # If extraction fails, just remove redis_client
-                config_copy = state['_original_config'].copy()
-                config_copy.pop('redis_client', None)
-                state['_original_config'] = config_copy
+        # Remove redis_client from _original_config (connection params were already extracted in __init__)
+        # The redis_client object contains unpicklable thread locks (RLock)
+        original_config = state.get('_original_config', None)
+        if original_config:
+            cleaned_config = original_config.copy()
+            if 'redis_client' in cleaned_config:
+                del cleaned_config['redis_client']
+            state['_original_config'] = cleaned_config
 
         return state
 
