@@ -573,6 +573,53 @@ class ParallelGroup(Executable):
         task_ids = [task.task_id for task in self.tasks]
         return f"ParallelGroup({task_ids})"
 
+    def __getstate__(self) -> dict:
+        """Prepare ParallelGroup for pickling by replacing unpicklable objects.
+
+        Replaces redis_client with connection configuration (host, port, db)
+        that can be used to reconstruct the client during execution.
+        """
+        state = self.__dict__.copy()
+
+        # Replace redis_client with connection configuration
+        if "_execution_config" in state and "backend_config" in state["_execution_config"]:
+            backend_config = state["_execution_config"]["backend_config"].copy()
+
+            # Extract Redis connection info from redis_client
+            if "redis_client" in backend_config:
+                redis_client = backend_config["redis_client"]
+                try:
+                    # Extract connection parameters from redis_client
+                    redis_config = {
+                        'host': redis_client.connection_pool.connection_kwargs.get('host', 'localhost'),
+                        'port': redis_client.connection_pool.connection_kwargs.get('port', 6379),
+                        'db': redis_client.connection_pool.connection_kwargs.get('db', 0),
+                    }
+                    # Replace redis_client with connection parameters
+                    backend_config.pop("redis_client")
+                    backend_config.update(redis_config)
+                except Exception:
+                    # If extraction fails, just remove redis_client
+                    # GroupExecutor will use defaults (localhost:6379)
+                    backend_config.pop("redis_client", None)
+
+            # Create a new execution_config with cleaned backend_config
+            state["_execution_config"] = {
+                **state["_execution_config"],
+                "backend_config": backend_config
+            }
+
+        return state
+
+    def __setstate__(self, state: dict) -> None:
+        """Restore ParallelGroup from pickled state.
+
+        The redis_client has been replaced with connection configuration (host, port, db).
+        GroupExecutor._create_coordinator() will use these parameters to create a new
+        Redis client when the group is executed.
+        """
+        self.__dict__.update(state)
+
     def _has_successors(self) -> bool:
         """Check if this parallel group has any successor tasks in the graph.
 
