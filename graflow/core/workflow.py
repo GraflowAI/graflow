@@ -74,8 +74,6 @@ class WorkflowContext:
         """
         self.graph.rename_node(old_task_id, new_task_id)
 
-
-
     def set_redis_client(self, redis_client: Any) -> None:
         """Set the Redis client for this workflow context.
 
@@ -103,7 +101,7 @@ class WorkflowContext:
         """
         self._llm_agent_providers[name] = agent_or_factory
 
-    def execute(self, start_node: Optional[str] = None, max_steps: int = 10000) -> Any:
+    def execute(self, start_node: Optional[str] = None, max_steps: int = 10000, ret_context: bool = False) -> Any | tuple[Any, ExecutionContext]:
         """Execute the workflow starting from the specified node.
 
         Returns:
@@ -128,7 +126,9 @@ class WorkflowContext:
         self._attach_llm_agents(exec_context)
 
         engine = WorkflowEngine()
-        return engine.execute(exec_context)
+        result = engine.execute(exec_context)
+
+        return (result, exec_context) if ret_context else result
 
     def show_info(self) -> None:
         """Display information about this workflow's graph."""
