@@ -358,7 +358,7 @@ class ParallelGroup(Executable):
 
     _group_counter = 0
 
-    def __init__(self, tasks: list[Executable]) -> None:
+    def __init__(self, tasks: list[Executable], name: Optional[str] = None) -> None:
         """Initialize a parallel group with a list of tasks."""
         super().__init__()
         # Get name from current context or use global counter
@@ -374,6 +374,10 @@ class ParallelGroup(Executable):
 
         # Register this parallel group to current workflow context
         self._register_to_context()
+
+        # If a name was provided, set it
+        if name is not None:
+            self.set_group_name(name)
 
     @property
     def task_id(self) -> str:
