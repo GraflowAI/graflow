@@ -85,178 +85,12 @@ class TestParallelGroupError:
 
 
 class TestDirectTaskHandler:
-    """Test DirectTaskHandler with on_group_finished."""
+    """Test DirectTaskHandler."""
 
     def test_get_name(self):
         """Test DirectTaskHandler.get_name()."""
         handler = DirectTaskHandler()
         assert handler.get_name() == "direct"
-
-    def test_on_group_finished_all_success(self):
-        """Test on_group_finished with all tasks successful."""
-        handler = DirectTaskHandler()
-
-        with workflow("test") as wf:
-            @task
-            def task_a():
-                return "a"
-
-            @task
-            def task_b():
-                return "b"
-
-            tasks = [task_a, task_b]
-            results = {
-                "task_a": TaskResult(task_id="task_a", success=True),
-                "task_b": TaskResult(task_id="task_b", success=True)
-            }
-
-            exec_context = ExecutionContext.create(wf.graph, "test")
-
-            # Should not raise exception
-            handler.on_group_finished("group_1", tasks, results, exec_context)
-
-    def test_on_group_finished_one_failure(self):
-        """Test on_group_finished with one task failure."""
-        handler = DirectTaskHandler()
-
-        with workflow("test") as wf:
-            @task
-            def task_a():
-                return "a"
-
-            @task
-            def task_b():
-                raise Exception("Task B failed!")
-
-            tasks = [task_a, task_b]
-            results = {
-                "task_a": TaskResult(task_id="task_a", success=True),
-                "task_b": TaskResult(task_id="task_b", success=False, error_message="Task B failed!")
-            }
-
-            # Should raise ParallelGroupError
-            with pytest.raises(ParallelGroupError) as exc_info:
-                handler.on_group_finished("group_1", tasks, results, ExecutionContext.create(wf.graph, "test"))
-
-            error = exc_info.value
-            assert error.group_id == "group_1"
-            assert len(error.failed_tasks) == 1
-            assert error.failed_tasks[0] == ("task_b", "Task B failed!")
-            assert error.successful_tasks == ["task_a"]
-
-    def test_on_group_finished_all_failures(self):
-        """Test on_group_finished with all tasks failing."""
-        handler = DirectTaskHandler()
-
-        with workflow("test") as wf:
-            @task
-            def task_a():
-                raise Exception("Task A failed!")
-
-            @task
-            def task_b():
-                raise Exception("Task B failed!")
-
-            tasks = [task_a, task_b]
-            results = {
-                "task_a": TaskResult(task_id="task_a", success=False, error_message="Task A failed!"),
-                "task_b": TaskResult(task_id="task_b", success=False, error_message="Task B failed!")
-            }
-
-            # Should raise ParallelGroupError
-            with pytest.raises(ParallelGroupError) as exc_info:
-                handler.on_group_finished("group_1", tasks, results, ExecutionContext.create(wf.graph, "test"))
-
-            error = exc_info.value
-            assert error.group_id == "group_1"
-            assert len(error.failed_tasks) == 2
-            assert error.successful_tasks == []
-
-    def test_on_group_finished_missing_results(self):
-        """Test on_group_finished with missing task results."""
-        handler = DirectTaskHandler()
-
-        with workflow("test") as wf:
-            @task
-            def task_a():
-                return "a"
-
-            @task
-            def task_b():
-                return "b"
-
-            tasks = [task_a, task_b]
-            # Missing task_b result
-            results = {
-                "task_a": TaskResult(task_id="task_a", success=True),
-            }
-
-            # Should raise ParallelGroupError for missing results
-            with pytest.raises(ParallelGroupError) as exc_info:
-                handler.on_group_finished("group_1", tasks, results, ExecutionContext.create(wf.graph, "test"))
-
-            error = exc_info.value
-            assert "missing results" in str(error).lower()
-
-    def test_set_group_policy_changes_behavior(self):
-        """Setting a custom group policy should change outcome."""
-        handler = DirectTaskHandler()
-        handler.set_group_policy(AtLeastNGroupPolicy(min_success=2))
-
-        with workflow("test") as wf:
-            @task
-            def task_a():
-                return "a"
-
-            @task
-            def task_b():
-                return "b"
-
-            @task
-            def task_c():
-                raise Exception("Task C failed!")
-
-            tasks = [task_a, task_b, task_c]
-            results = {
-                "task_a": TaskResult(task_id="task_a", success=True),
-                "task_b": TaskResult(task_id="task_b", success=True),
-                "task_c": TaskResult(task_id="task_c", success=False, error_message="Task C failed!"),
-            }
-
-            # With min_success=2 and two successes, this should NOT raise
-            handler.on_group_finished("group_success", tasks, results, ExecutionContext.create(wf.graph, "test"))
-
-        # Now require three successes -> should fail
-        handler.set_group_policy(AtLeastNGroupPolicy(min_success=3))
-
-        with workflow("test_fail") as wf_fail:
-            @task
-            def task_d():
-                return "d"
-
-            @task
-            def task_e():
-                return "e"
-
-            @task
-            def task_f():
-                raise Exception("Task F failed!")
-
-            tasks_fail = [task_d, task_e, task_f]
-            results_fail = {
-                "task_d": TaskResult(task_id="task_d", success=True),
-                "task_e": TaskResult(task_id="task_e", success=True),
-                "task_f": TaskResult(task_id="task_f", success=False, error_message="Task F failed!"),
-            }
-
-            with pytest.raises(ParallelGroupError):
-                handler.on_group_finished(
-                    "group_failure",
-                    tasks_fail,
-                    results_fail,
-                    ExecutionContext.create(wf_fail.graph, "test_fail"),
-                )
 
 
 class TestPolicyHandlers:
@@ -282,7 +116,7 @@ class TestPolicyHandlers:
             }
 
             with pytest.raises(ParallelGroupError):
-                handler.on_group_finished("group_1", tasks, results, ExecutionContext.create(wf.graph, "test"))
+                handler.on_group_finished("group_1", tasks, results, ExecutionContext.create(wf.graph, start_node="task_a"))
 
     def test_best_effort_handler(self):
         """Best-effort handler should not raise when tasks fail."""
@@ -303,7 +137,7 @@ class TestPolicyHandlers:
                 "task_b": TaskResult(task_id="task_b", success=False, error_message="Task B failed!")
             }
 
-            handler.on_group_finished("group_1", tasks, results, ExecutionContext.create(wf.graph, "test"))
+            handler.on_group_finished("group_1", tasks, results, ExecutionContext.create(wf.graph, start_node="task_a"))
 
     def test_at_least_n_success_handler(self):
         """At-least-N handler should enforce minimum success count."""
@@ -335,7 +169,7 @@ class TestPolicyHandlers:
                 "task_d": TaskResult(task_id="task_d", success=False, error_message="Task D failed!")
             }
 
-            handler.on_group_finished("group_1", tasks, results, ExecutionContext.create(wf.graph, "test"))
+            handler.on_group_finished("group_1", tasks, results, ExecutionContext.create(wf.graph, start_node="task_a"))
 
         handler2 = AtLeastNGroupPolicy(min_success=2)
 
@@ -365,7 +199,7 @@ class TestPolicyHandlers:
             }
 
             with pytest.raises(ParallelGroupError) as exc_info:
-                handler2.on_group_finished("group_2", tasks2, results2, ExecutionContext.create(wf2.graph, "test2"))
+                handler2.on_group_finished("group_2", tasks2, results2, ExecutionContext.create(wf2.graph, start_node="task_e"))
 
             error = exc_info.value
             assert "1/2" in str(error)
@@ -391,7 +225,7 @@ class TestPolicyHandlers:
                 "optional_task": TaskResult(task_id="optional_task", success=False, error_message="Optional task failed!")
             }
 
-            handler.on_group_finished("group_1", tasks, results, ExecutionContext.create(wf.graph, "test"))
+            handler.on_group_finished("group_1", tasks, results, ExecutionContext.create(wf.graph, start_node="critical_task"))
 
         handler_failure = CriticalGroupPolicy(critical_task_ids=["critical_task_fail"])
 
@@ -415,7 +249,7 @@ class TestPolicyHandlers:
                     "group_critical",
                     tasks_failure,
                     results_failure,
-                    ExecutionContext.create(wf_failure.graph, "test_failure"),
+                    ExecutionContext.create(wf_failure.graph, start_node="critical_task_fail"),
                 )
 
             assert "critical_task_fail" in str(exc_info.value)
