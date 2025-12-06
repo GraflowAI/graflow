@@ -40,6 +40,8 @@ dev = [
     "pytest-mock>=3.14.1",
     "ruff>=0.12.2",
     "redis>=6.2.0",
+    "grandalf>=0.8",
+    "matplotlib>=3.10.3",
 ]
 
 [project.optional-dependencies]

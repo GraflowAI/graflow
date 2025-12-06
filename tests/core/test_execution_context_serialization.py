@@ -448,7 +448,7 @@ class TestExecutionContextSerialization:
 
         graph = TaskGraph()
 
-        
+
         # Create lambda task (cloudpickle allows this)
         lambda_task = TaskWrapper("test_task", lambda: 42)
         graph.add_node(lambda_task, "test_task")

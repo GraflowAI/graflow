@@ -536,7 +536,7 @@ class TestSequentialTaskEngineExecution:
             task_a >> task_b >> task_c  # type: ignore
 
             # Create execution context
-            exec_context = ExecutionContext.create(ctx.graph, "task_a", max_steps=10)
+            exec_context = ExecutionContext.create(ctx.graph, max_steps=10)
 
             # Execute with WorkflowEngine
             engine = WorkflowEngine()
@@ -576,7 +576,7 @@ class TestSequentialTaskEngineExecution:
             task_a >> task_b >> task_c  # type: ignore
 
             # Create execution context
-            exec_context = ExecutionContext.create(ctx.graph, "task_a", max_steps=10)
+            exec_context = ExecutionContext.create(ctx.graph, max_steps=10)
 
             # Execute with WorkflowEngine
             engine = WorkflowEngine()
@@ -619,7 +619,7 @@ class TestSequentialTaskEngineExecution:
             start >> (branch_a | branch_b) >> merge  # type: ignore
 
             # Create execution context
-            exec_context = ExecutionContext.create(ctx.graph, "start", max_steps=10)
+            exec_context = ExecutionContext.create(ctx.graph, start_node="start", max_steps=10)
 
             # Execute with WorkflowEngine
             engine = WorkflowEngine()
@@ -667,9 +667,7 @@ class TestSequentialTaskEngineExecution:
             # Build nested parallel workflow
             fetch >> ((transform_a >> subtask_a) | transform_b) >> store  # type: ignore
 
-            print(f"Graph: \n{ctx.graph}")
-
-            exec_context = ExecutionContext.create(ctx.graph, "fetch", max_steps=20)
+            exec_context = ExecutionContext.create(ctx.graph, start_node="fetch", max_steps=20)
 
             engine = WorkflowEngine()
             engine.execute(exec_context)
@@ -721,7 +719,7 @@ class TestSequentialTaskEngineExecution:
             (task_a >> task_b) >> (task_c >> task_d)  # type: ignore
 
             # Create execution context
-            exec_context = ExecutionContext.create(ctx.graph, "task_a", max_steps=10)
+            exec_context = ExecutionContext.create(ctx.graph, max_steps=10)
 
             # Execute with WorkflowEngine
             engine = WorkflowEngine()
@@ -755,7 +753,7 @@ class TestSequentialTaskEngineExecution:
                 result = result >> t  # type: ignore
 
             # Create execution context
-            exec_context = ExecutionContext.create(ctx.graph, "task_0", max_steps=20)
+            exec_context = ExecutionContext.create(ctx.graph, max_steps=20)
 
             # Execute with WorkflowEngine
             engine = WorkflowEngine()

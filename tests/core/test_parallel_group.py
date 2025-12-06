@@ -14,7 +14,7 @@ from graflow.core.workflow import WorkflowContext
 def execution_context():
     """Create execution context for tests."""
     graph = TaskGraph()
-    return ExecutionContext.create(graph, start_node=None, max_steps=10)
+    return ExecutionContext.create(graph, max_steps=10)
 
 
 class TestParallelGroup:
@@ -140,7 +140,6 @@ class TestParallelGroup:
             parallel_group >> successor # type: ignore
 
             graph = ctx.graph._graph
-            print(f"Graph: {ctx.graph}")
 
             # Verify: Group has edge to successor
             group_successors = list(graph.successors(parallel_group.task_id))
@@ -171,7 +170,6 @@ class TestParallelGroup:
             parallel_group << predecessor # type: ignore
 
             graph = ctx.graph._graph
-            print(f"Graph: {ctx.graph}")
 
             # Verify: Predecessor has edge to group
             predecessor_successors = list(graph.successors("predecessor"))
@@ -203,7 +201,6 @@ class TestParallelGroup:
             fetch >> (task_a | task_b) >> store # type: ignore
 
             graph = ctx.graph._graph
-            print(f"Graph: {ctx.graph}")
 
             # Get the parallel group (created by |)
             parallel_groups = [n for n in graph.nodes() if n.startswith("ParallelGroup_")]
@@ -472,13 +469,13 @@ class TestParallelGroupIntegration:
             parallel_group = ParallelGroup([task1, task2]).with_execution(backend=CoordinationBackend.DIRECT)
 
             # Use the workflow context's graph instead of creating a new one
-            context = ExecutionContext.create(wf_ctx.graph)
+            context = ExecutionContext.create(wf_ctx.graph, start_node="task1")
 
             parallel_group.set_execution_context(context)
 
             parallel_group.run()
 
-            # Verify both tasks were executed
-            assert results == ["task1_executed", "task2_executed"]
+            # Verify both tasks were executed (order may vary)
+            assert set(results) == {"task1_executed", "task2_executed"}
             assert context.get_result("task1") == "result1"
             assert context.get_result("task2") == "result2"
