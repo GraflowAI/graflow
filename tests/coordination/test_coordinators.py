@@ -189,7 +189,8 @@ class TestRedisCoordinator:
         mock_redis.get.return_value = b"1"  # Only 1 worker done, need 2
 
         mock_pubsub = mocker.MagicMock()
-        mock_pubsub.listen.return_value = iter([{ "type": "message", "data": b"complete" }])
+        # Mock get_message to return completion message
+        mock_pubsub.get_message.return_value = { "type": "message", "data": b"complete" }
         mock_redis.pubsub.return_value = mock_pubsub
 
         result = coordinator.wait_barrier("test_barrier", timeout=1)
