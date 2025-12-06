@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, List, Optional
 
 import networkx as nx
 from networkx.classes.reportviews import NodeView, OutEdgeView
 
-from graflow.exceptions import DuplicateTaskError
-
 if TYPE_CHECKING:
     from .task import Executable
+
+logger = logging.getLogger(__name__)
 
 
 class TaskGraph:
@@ -25,11 +26,15 @@ class TaskGraph:
         return self._graph
 
     def add_node(self, task: Executable, task_id: Optional[str] = None) -> None:
-        """Add a task node to the graph."""
+        """Add a task node to the graph.
+
+        If a node with the same task_id already exists, logs a warning and skips adding.
+        """
         if task_id is None:
             task_id = task.task_id
         if task_id in self._graph.nodes:
-            raise DuplicateTaskError(task_id)
+            logger.warning("Node '%s' already exists in graph, skipping duplicate add_node", task_id)
+            return
         self._graph.add_node(task_id, task=task)
 
     def add_edge(self, from_node: str, to_node: str) -> None:
