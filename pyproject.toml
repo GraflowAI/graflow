@@ -42,6 +42,7 @@ dev = [
     "redis>=6.2.0",
     "grandalf>=0.8",
     "matplotlib>=3.10.3",
+    "docker>=7.1.0",
 ]
 
 [project.optional-dependencies]
