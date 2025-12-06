@@ -154,6 +154,9 @@ class RedisCoordinator(TaskCoordinator):
         Producer only subscribes and waits - workers increment the barrier counter.
         This implements the BSP (Bulk Synchronous Parallel) model where the producer
         dispatches all tasks and waits, while workers execute and signal completion.
+
+        Uses exponential backoff (1s, 2s, 4s, 8s, 16s, 32s, 60s) to avoid busy polling
+        and reduce Redis load.
         """
         if barrier_id not in self.active_barriers:
             logger.warning("Barrier '%s' not found in active barriers", barrier_id)
@@ -170,32 +173,51 @@ class RedisCoordinator(TaskCoordinator):
         logger.debug("Subscribed to completion channel: %s", barrier_info["channel"])
 
         try:
-            # After subscribing, check if barrier already complete
-            # This handles the case where all workers finished before we subscribed
-            current_count_bytes = self.redis.get(barrier_info["key"])
-            if current_count_bytes:
-                current_count = int(current_count_bytes)  # type: ignore[arg-type]
-                logger.debug("Current barrier count: %d/%d", current_count, barrier_info["expected"])
-                if current_count >= barrier_info["expected"]:
-                    logger.info("Barrier '%s' already complete (fast workers case)", barrier_id)
-                    return True
-
-            # Wait for completion notification
+            # Wait for completion notification with exponential backoff
             logger.debug("Listening for completion messages on barrier '%s'", barrier_id)
-            start_time = time.time()
-            for message in pubsub.listen():
-                # Handle both string and bytes (depending on Redis client configuration)
-                if message["type"] == "message" and message["data"] in ("complete", b"complete"):
-                    elapsed = time.time() - start_time
-                    logger.info("Barrier '%s' completed after %.2fs", barrier_id, elapsed)
-                    return True
 
-                # Check timeout
+            # Exponential backoff parameters (1s, 2s, 4s, 8s, 16s, 32s, 60s)
+            min_backoff = 1.0  # 1s minimum
+            max_backoff = 60.0  # 60s maximum
+            current_backoff = min_backoff
+
+            start_time = time.time()
+            while True:
                 elapsed = time.time() - start_time
                 if elapsed > timeout:
-                    logger.error("Barrier '%s' timeout after %.2fs (expected %d tasks)",
-                               barrier_id, elapsed, barrier_info["expected"])
+                    logger.error(
+                        "Barrier '%s' timeout after %.2fs (expected %d tasks)",
+                        barrier_id,
+                        elapsed,
+                        barrier_info["expected"],
+                    )
                     return False
+
+                # Non-blocking polling with exponential backoff
+                message = pubsub.get_message(timeout=current_backoff)
+                if message and message.get("type") == "message":
+                    data = message.get("data")
+                    if data in ("complete", b"complete"):
+                        logger.info("Barrier '%s' completed after %.2fs", barrier_id, elapsed)
+                        return True
+
+                # Fallback: check counter in case the publish was missed
+                current_count_bytes = self.redis.get(barrier_info["key"])
+                if current_count_bytes:
+                    current_count = int(current_count_bytes)  # type: ignore[arg-type]
+                    if current_count >= barrier_info["expected"]:
+                        logger.info(
+                            "Barrier '%s' completed via counter check after %.2fs "
+                            "(%d/%d tasks)",
+                            barrier_id,
+                            elapsed,
+                            current_count,
+                            barrier_info["expected"],
+                        )
+                        return True
+
+                # Increase backoff exponentially with upper bound
+                current_backoff = min(current_backoff * 2, max_backoff)
 
         except Exception as e:
             logger.error("Exception in wait_barrier for '%s': %s", barrier_id, e, exc_info=True)
