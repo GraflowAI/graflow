@@ -72,23 +72,44 @@ def extract_redis_config(redis_client: "Redis") -> Dict[str, Any]:
 def create_redis_client(config: Dict[str, Any]) -> "Redis":
     """Create Redis client from connection parameters.
 
+    If config already contains a 'redis_client' key, validates and returns it
+    instead of creating a new client. This avoids unnecessary client recreation.
+
     Args:
         config: Dictionary with connection parameters (host, port, db, password, etc.)
+            or an existing 'redis_client' instance
 
     Returns:
-        Redis client instance
+        Redis client instance (existing or newly created)
 
     Raises:
         ImportError: If redis package is not available
+        AssertionError: If redis_client exists but is not a valid Redis instance
 
     Example:
         >>> config = {'host': 'localhost', 'port': 6379, 'db': 0, 'password': 'secret'}
         >>> client = create_redis_client(config)
         >>> client.ping()
         True
+
+        >>> # Reuse existing client
+        >>> config_with_client = {'redis_client': existing_client}
+        >>> client = create_redis_client(config_with_client)
+        >>> client is existing_client
+        True
     """
     if not REDIS_AVAILABLE or _Redis is None:
-        raise ImportError("Redis package is not available. Install with: pip install redis")
+        raise ImportError("Redis package is not available")
+
+    # If redis_client already exists, validate and return it
+    if 'redis_client' in config:
+        redis_client = config['redis_client']
+
+        assert isinstance(redis_client, _Redis), (
+            f"Expected Redis instance, got {type(redis_client).__name__}"
+        )
+
+        return redis_client
 
     # Build Redis constructor kwargs from config
     redis_kwargs = {}

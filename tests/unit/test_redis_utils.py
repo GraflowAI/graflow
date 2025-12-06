@@ -242,6 +242,33 @@ class TestCreateRedisClient:
                 decode_responses=False,
             )
 
+    def test_reuses_existing_redis_client(self) -> None:
+        """Test that existing redis_client is returned directly."""
+        if not REDIS_AVAILABLE:
+            pytest.skip("Redis not available")
+
+        from redis import Redis
+
+        mock_client = Mock()
+        mock_client.__class__ = Redis  # type: ignore # Make isinstance check pass
+
+        config = {'redis_client': mock_client}
+
+        result = create_redis_client(config)
+
+        # Should return the same instance
+        assert result is mock_client
+
+    def test_validates_existing_redis_client_type(self) -> None:
+        """Test that invalid redis_client type raises AssertionError."""
+        if not REDIS_AVAILABLE:
+            pytest.skip("Redis not available")
+
+        config = {'redis_client': "not_a_redis_client"}
+
+        with pytest.raises(AssertionError, match="Expected Redis instance"):
+            create_redis_client(config)
+
     def test_redis_not_available(self) -> None:
         """Test error when Redis is not installed."""
         if REDIS_AVAILABLE:
