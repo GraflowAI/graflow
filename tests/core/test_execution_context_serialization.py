@@ -381,7 +381,7 @@ class TestExecutionContextSerialization:
         lambda_task = TaskWrapper("lambda_task", lambda x: x * 2)
         graph.add_node(lambda_task, "lambda_task")
 
-        context = ExecutionContext.create(graph, "start")
+        context = ExecutionContext.create(graph)
 
         # Serialize using cloudpickle
         pickled = dumps(context)
@@ -420,7 +420,7 @@ class TestExecutionContextSerialization:
         closure_task = TaskWrapper("closure_task", create_task())
         graph.add_node(closure_task, "closure_task")
 
-        context = ExecutionContext.create(graph, "start")
+        context = ExecutionContext.create(graph)
 
         # Serialize using cloudpickle
         pickled = dumps(context)
@@ -447,10 +447,13 @@ class TestExecutionContextSerialization:
         from graflow.queue.base import TaskSpec
 
         graph = TaskGraph()
-        context = ExecutionContext.create(graph, "start")
 
+        
         # Create lambda task (cloudpickle allows this)
         lambda_task = TaskWrapper("test_task", lambda: 42)
+        graph.add_node(lambda_task, "test_task")
+
+        context = ExecutionContext.create(graph, "test_task")
         lambda_task.set_execution_context(context)
 
         # Create TaskSpec
@@ -485,6 +488,14 @@ class TestExecutionContextLLMSerialization:
     - Seamless state recovery in distributed workflows
     """
 
+    @pytest.fixture(autouse=True)
+    def mock_llm_env(self, monkeypatch):
+        """Mock environment variables for LLMClient."""
+        monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-dummy")
+        monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-dummy")
+        monkeypatch.setenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-dummy")
+
     def test_llm_client_explicit_serialization(self):
         """Test that explicitly set LLMClient is preserved during serialization.
 
@@ -505,7 +516,6 @@ class TestExecutionContextLLMSerialization:
 
         context = ExecutionContext.create(
             graph=graph,
-            start_node="test_task",
             max_steps=10,
             llm_client=llm_client
         )
@@ -541,7 +551,6 @@ class TestExecutionContextLLMSerialization:
         # Create context WITHOUT explicit LLMClient
         context = ExecutionContext.create(
             graph=graph,
-            start_node="test_task",
             max_steps=10
         )
 
@@ -585,7 +594,6 @@ class TestExecutionContextLLMSerialization:
 
         context = ExecutionContext.create(
             graph=graph,
-            start_node="test_task",
             max_steps=10
         )
 
@@ -640,7 +648,6 @@ class TestExecutionContextLLMSerialization:
 
         context = ExecutionContext.create(
             graph=graph,
-            start_node="test_task",
             max_steps=10
         )
 
@@ -675,7 +682,6 @@ class TestExecutionContextLLMSerialization:
 
         context = ExecutionContext.create(
             graph=graph,
-            start_node="test_task",
             max_steps=10
         )
 
@@ -742,7 +748,6 @@ class TestExecutionContextLLMSerialization:
 
         context = ExecutionContext.create(
             graph=graph,
-            start_node="test_task",
             max_steps=10,
             llm_client=llm_client
         )
@@ -783,7 +788,6 @@ class TestExecutionContextLLMSerialization:
 
         context = ExecutionContext.create(
             graph=graph,
-            start_node="test_task",
             max_steps=10
         )
 
