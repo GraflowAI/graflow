@@ -5,7 +5,10 @@ for better support of lambdas, closures, and dynamically generated functions.
 Falls back to standard pickle if cloudpickle is not available.
 """
 
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 try:
     import cloudpickle
@@ -24,11 +27,35 @@ def dumps(obj: Any) -> bytes:
     Returns:
         Serialized bytes
 
+    Raises:
+        TypeError: If object contains unpicklable objects (e.g., locks)
+
     Note:
         Uses cloudpickle for better support of lambdas and closures.
         Falls back to standard pickle if cloudpickle is not available.
+
+        If serialization fails with TypeError, this function will attempt
+        to analyze the object for common unpicklable objects (thread locks)
+        and provide detailed debug information before re-raising the error.
     """
-    return cloudpickle.dumps(obj)
+    try:
+        return cloudpickle.dumps(obj)
+    except TypeError as e:
+        # Serialization failed - analyze object for unpicklable components
+        logger.error(f"Serialization failed with TypeError: {e}")
+
+        # Try to detect TaskGraph objects for lock analysis
+        from graflow.core.graph import TaskGraph
+        if isinstance(obj, TaskGraph):
+            logger.info("Analyzing TaskGraph for thread locks...")
+            try:
+                from graflow.debug.find_locks import debug_taskgraph_for_locks
+                debug_taskgraph_for_locks(obj)
+            except Exception as debug_err:
+                logger.warning(f"Failed to analyze object for locks: {debug_err}")
+
+        # Re-raise original exception
+        raise
 
 
 def loads(data: bytes) -> Any:
