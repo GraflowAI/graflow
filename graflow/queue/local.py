@@ -23,20 +23,28 @@ class LocalTaskQueue(TaskQueue):
         if start_node:
             # Get task from graph instead of creating a new Task object
             # This ensures single source of truth and preserves task metadata
-            start_task = execution_context.graph.get_node(start_node)
+            try:
+                start_task = execution_context.graph.get_node(start_node)
 
-            if start_task:
-                task_spec = TaskSpec(
-                    executable=start_task,
-                    execution_context=execution_context
-                )
-                self._queue.append(task_spec)
-                self._task_specs[start_node] = task_spec
-            else:
-                available_nodes = list(execution_context.graph.nodes.keys())
-                logger.warning(
-                    f"Start node '{start_node}' not found in graph. "
-                    f"Available nodes: {available_nodes}"
+                if start_task:
+                    task_spec = TaskSpec(
+                        executable=start_task,
+                        execution_context=execution_context
+                    )
+                    self._queue.append(task_spec)
+                    self._task_specs[start_node] = task_spec
+                else:
+                    available_nodes = list(execution_context.graph.nodes.keys())
+                    logger.warning(
+                        f"Start node '{start_node}' not found in graph. "
+                        f"Available nodes: {available_nodes}"
+                    )
+            except (AttributeError, KeyError) as e:
+                # Graph might not be fully deserialized yet during unpickling
+                # This is okay - the queue will be populated later when tasks are added
+                logger.debug(
+                    f"Could not access graph during LocalTaskQueue initialization: {e}. "
+                    f"This is expected during deserialization."
                 )
 
     def enqueue(self, task_spec: TaskSpec) -> bool:
