@@ -16,7 +16,7 @@ from graflow.channels.typed import TypedChannel
 from graflow.core.cycle import CycleController
 from graflow.core.engine import WorkflowEngine
 from graflow.core.graph import TaskGraph
-from graflow.exceptions import CycleLimitExceededError, GraphCompilationError
+from graflow.exceptions import CycleLimitExceededError
 from graflow.queue.base import TaskSpec
 from graflow.queue.local import LocalTaskQueue
 from graflow.trace.noop import NoopTracer
@@ -642,6 +642,12 @@ class ExecutionContext:
             )
             ```
         """
+        if start_node is None:
+            # Find start nodes (nodes with no predecessors)
+            candidate_nodes = graph.get_start_nodes()
+            if candidate_nodes:
+                start_node = candidate_nodes[0] # REVIEWME: Choose first start node if multiple exist
+
         return cls(
             graph=graph,
             start_node=start_node,
