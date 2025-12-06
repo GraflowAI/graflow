@@ -140,6 +140,7 @@ class TestParallelGroup:
             parallel_group >> successor # type: ignore
 
             graph = ctx.graph._graph
+            print(f"Graph: {ctx.graph}")
 
             # Verify: Group has edge to successor
             group_successors = list(graph.successors(parallel_group.task_id))
@@ -170,6 +171,7 @@ class TestParallelGroup:
             parallel_group << predecessor # type: ignore
 
             graph = ctx.graph._graph
+            print(f"Graph: {ctx.graph}")
 
             # Verify: Predecessor has edge to group
             predecessor_successors = list(graph.successors("predecessor"))
@@ -201,6 +203,7 @@ class TestParallelGroup:
             fetch >> (task_a | task_b) >> store # type: ignore
 
             graph = ctx.graph._graph
+            print(f"Graph: {ctx.graph}")
 
             # Get the parallel group (created by |)
             parallel_groups = [n for n in graph.nodes() if n.startswith("ParallelGroup_")]

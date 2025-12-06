@@ -34,7 +34,7 @@ def test_workflow_termination():
         # Create execution context manually to inspect completed_tasks
         from graflow.core.context import ExecutionContext
         from graflow.core.engine import WorkflowEngine
-        exec_context = ExecutionContext.create(wf.graph, "task_a")
+        exec_context = ExecutionContext.create(wf.graph)
         engine = WorkflowEngine()
         engine.execute(exec_context)
 
@@ -79,7 +79,7 @@ def test_workflow_cancellation():
             # Create execution context manually to inspect completed_tasks
             from graflow.core.context import ExecutionContext
             from graflow.core.engine import WorkflowEngine
-            exec_context = ExecutionContext.create(wf.graph, "task_a")
+            exec_context = ExecutionContext.create(wf.graph)
             engine = WorkflowEngine()
             engine.execute(exec_context)
 

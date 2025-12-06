@@ -4,6 +4,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from graflow import exceptions
 from graflow.core.context import ExecutionContext
 from graflow.core.decorators import task
 from graflow.core.engine import WorkflowEngine
@@ -74,7 +75,7 @@ class TestWorkflowEngine:
         graph.add_node(simple_task, 'simple_task')
 
         # Create context
-        context = ExecutionContext.create(graph, 'simple_task')
+        context = ExecutionContext.create(graph)
         simple_task.set_execution_context(context)
 
         # Add task to queue
@@ -109,7 +110,7 @@ class TestWorkflowEngine:
         graph.add_node(custom_task, 'custom_task')
 
         # Create context
-        context = ExecutionContext.create(graph, 'custom_task')
+        context = ExecutionContext.create(graph)
         custom_task.set_execution_context(context)
 
         # Add task to queue
@@ -141,7 +142,7 @@ class TestWorkflowEngine:
         graph.add_edge('task_a', 'task_b')
 
         # Create context
-        context = ExecutionContext.create(graph, 'task_a')
+        context = ExecutionContext.create(graph)
         task_a.set_execution_context(context)
         task_b.set_execution_context(context)
 
@@ -169,7 +170,7 @@ class TestWorkflowEngine:
         graph.add_node(failing_task, 'failing_task')
 
         # Create context
-        context = ExecutionContext.create(graph, 'failing_task')
+        context = ExecutionContext.create(graph)
         failing_task.set_execution_context(context)
 
         # Add task to queue
@@ -177,8 +178,13 @@ class TestWorkflowEngine:
 
         # Execute and expect exception
         engine = WorkflowEngine()
-        with pytest.raises(Exception):
+        with pytest.raises(exceptions.GraflowRuntimeError) as exc_info:
             engine.execute(context)
+
+        # Verify the wrapped exception contains the original ValueError
+        assert exc_info.value.cause is not None
+        assert isinstance(exc_info.value.cause, ValueError)
+        assert str(exc_info.value.cause) == "Task failed"
 
         # Verify exception was stored
         result = context.get_result('failing_task')

@@ -15,7 +15,6 @@ def test_task_execution_context_basic():
 
     # Create execution context
     graph = TaskGraph()
-    exec_context = ExecutionContext.create(graph, "test_start", max_steps=10, default_max_cycles=3)
 
     @task(inject_context=True)
     def test_task(task_ctx):
@@ -23,7 +22,7 @@ def test_task_execution_context_basic():
         print(f"Session ID: {task_ctx.session_id}")
         print(f"Max cycles: {task_ctx.max_cycles}")
         print(f"Current cycle: {task_ctx.cycle_count}")
-        print(f"Elapsed time: {task_ctx.elapsed_time:.4f}s")
+        print(f"Elapsed time: {task_ctx.elapsed_time():.4f}s")
 
         # Test local data
         task_ctx.set_local_data("test_key", "test_value")
@@ -34,6 +33,7 @@ def test_task_execution_context_basic():
 
     # Set up task
     graph.add_node(test_task, "test_task")
+    exec_context = ExecutionContext.create(graph, max_steps=10, default_max_cycles=3)
     test_task.set_execution_context(exec_context)
 
     print("\n1. Testing direct task execution:")
@@ -48,7 +48,7 @@ def test_context_manager():
     print("\n=== Testing Context Manager ===")
 
     graph = TaskGraph()
-    exec_context = ExecutionContext.create(graph, "test_start", max_steps=10, default_max_cycles=5)
+    exec_context = ExecutionContext.create(graph, max_steps=10, default_max_cycles=5)
 
     print("\n1. Testing context manager:")
     with exec_context.executing_task(Task("manual_task")) as task_ctx:
@@ -71,7 +71,6 @@ def test_cycle_management():
     print("\n=== Testing Cycle Management ===")
 
     graph = TaskGraph()
-    exec_context = ExecutionContext.create(graph, "test_start", max_steps=20, default_max_cycles=3)
 
     @task(inject_context=True)
     def cycle_task(task_ctx, data=None):
@@ -95,6 +94,7 @@ def test_cycle_management():
 
     # Set up task
     graph.add_node(cycle_task, "cycle_task")
+    exec_context = ExecutionContext.create(graph, max_steps=20, default_max_cycles=3)
     cycle_task.set_execution_context(exec_context)
 
     print("\n1. Testing cycle management:")
@@ -110,7 +110,6 @@ def test_parallel_context_simulation():
     print("\n=== Testing Parallel Context Simulation ===")
 
     graph = TaskGraph()
-    exec_context = ExecutionContext.create(graph, "test_start", max_steps=20, default_max_cycles=5)
 
     @task(inject_context=True)
     def parallel_task_a(task_ctx: TaskExecutionContext):
@@ -134,6 +133,7 @@ def test_parallel_context_simulation():
         results = []
 
         # Execute task A in its own context
+        # Note: exec_context is captured from outer scope, but it will be defined by the time this runs
         with exec_context.executing_task(parallel_task_a) as ctx_a:
             result_a = parallel_task_a.func(ctx_a)
             results.append(result_a)
@@ -148,6 +148,7 @@ def test_parallel_context_simulation():
 
     # Set up tasks
     # graph.add_node(parallel_group_task, "parallel_group_task")
+    exec_context = ExecutionContext.create(graph, max_steps=20, default_max_cycles=5)
     parallel_group_task.set_execution_context(exec_context)
 
     print("\n1. Testing simulated parallel execution:")
@@ -160,7 +161,6 @@ def test_task_communication():
     print("\n=== Testing Task Communication ===")
 
     graph = TaskGraph()
-    exec_context = ExecutionContext.create(graph, "test_start", max_steps=10)
 
     @task(inject_context=True)
     def sender_task(task_ctx):
@@ -181,6 +181,7 @@ def test_task_communication():
     # Set up tasks
     graph.add_node(sender_task, "sender_task")
     graph.add_node(receiver_task, "receiver_task")
+    exec_context = ExecutionContext.create(graph, start_node="sender_task", max_steps=10)
     sender_task.set_execution_context(exec_context)
     receiver_task.set_execution_context(exec_context)
 

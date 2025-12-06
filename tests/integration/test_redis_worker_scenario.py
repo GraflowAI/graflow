@@ -93,9 +93,9 @@ def _create_producer_task(task_id: str, data: list[int]) -> RedisWorkflowTask:
         }
         channel.set(f"data:{task_id}", data_msg)
 
-        counter_raw = channel.get("producer_count", 0)
-        counter = counter_raw if isinstance(counter_raw, int) else 0
-        channel.set("producer_count", counter + 1)
+        # Atomic increment
+        redis_key = f"{channel.key_prefix}producer_count"
+        channel.redis_client.incr(redis_key)
         return f"produced: {data}"
 
     return RedisWorkflowTask(task_id, run)
