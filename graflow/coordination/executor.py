@@ -49,17 +49,21 @@ class GroupExecutor:
     ) -> TaskCoordinator:
         """Create appropriate coordinator based on backend."""
         if backend == CoordinationBackend.REDIS:
-            redis_kwargs: Dict[str, Any] = {}
-            if "redis_client" in config:
-                redis_kwargs["redis_client"] = config["redis_client"]
-            else:
-                redis_kwargs["host"] = config.get("host", "localhost")
-                redis_kwargs["port"] = config.get("port", 6379)
-                redis_kwargs["db"] = config.get("db", 0)
-            redis_kwargs["key_prefix"] = config.get("key_prefix", "graflow")
+            # Create Redis client from connection parameters
+            from graflow.utils.redis_utils import create_redis_client
+
+            # Ensure decode_responses=True for DistributedTaskQueue
+            # (only set if not already specified)
+            if 'decode_responses' not in config:
+                config = {**config, 'decode_responses': True}
 
             try:
-                task_queue = DistributedTaskQueue(**redis_kwargs)
+                redis_client = create_redis_client(config)
+                key_prefix = config.get("key_prefix", "graflow")
+                task_queue = DistributedTaskQueue(
+                    redis_client=redis_client,
+                    key_prefix=key_prefix
+                )
             except ImportError as e:
                 raise ImportError("Redis backend requires 'redis' package") from e
 
