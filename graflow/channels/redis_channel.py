@@ -51,7 +51,15 @@ class RedisChannel(Channel):
         if redis_client is not None:
             self.redis_client = redis_client
         else:
-            self.redis_client: Redis = redis.Redis(host=host, port=port, db=db, decode_responses=True, **self._kwargs)
+            # Prefer caller-provided decode_responses, defaulting to True otherwise.
+            decode_responses = self._kwargs.pop('decode_responses', True)
+            self.redis_client: Redis = redis.Redis(
+                host=host,
+                port=port,
+                db=db,
+                decode_responses=decode_responses,
+                **self._kwargs
+            )
 
         self.key_prefix = f"graflow:channel:{name}:"
 
