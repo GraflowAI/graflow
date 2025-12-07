@@ -10,7 +10,7 @@ from graflow.exceptions import ConfigError
 
 def _is_typed_dict(cls: type) -> bool:
     """Check if a class is a TypedDict."""
-    return hasattr(cls, '__annotations__') and hasattr(cls, '__total__')
+    return hasattr(cls, "__annotations__") and hasattr(cls, "__total__")
 
 
 def _validate_typed_dict(data: Any, typed_dict_class: Type) -> bool:
@@ -25,9 +25,9 @@ def _validate_typed_dict(data: Any, typed_dict_class: Type) -> bool:
     required_keys = set(annotations.keys())
 
     # Check if all required keys are present
-    if hasattr(typed_dict_class, '__required_keys__'):
+    if hasattr(typed_dict_class, "__required_keys__"):
         required_keys = typed_dict_class.__required_keys__
-    elif hasattr(typed_dict_class, '__total__') and not typed_dict_class.__total__:
+    elif hasattr(typed_dict_class, "__total__") and not typed_dict_class.__total__:
         # If __total__ is False, no keys are required
         required_keys = set()
 
@@ -54,7 +54,7 @@ def _validate_typed_dict(data: Any, typed_dict_class: Type) -> bool:
     return True
 
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class TypedChannel(Channel, Generic[T]):
@@ -117,6 +117,36 @@ class TypedChannel(Channel, Generic[T]):
     def clear(self) -> None:
         """Clear all data."""
         self._channel.clear()
+
+    def append(self, key: str, value: Any, ttl: int | None = None) -> int:
+        """Append value to a list stored at key.
+
+        Note: For list operations, type validation is skipped.
+
+        Args:
+            key: The key identifying the list
+            value: Value to append to the list
+            ttl: Optional time-to-live in seconds for the key
+
+        Returns:
+            Length of the list after append
+        """
+        return self._channel.append(key, value, ttl)
+
+    def prepend(self, key: str, value: Any, ttl: int | None = None) -> int:
+        """Prepend value to the head of a list stored at key.
+
+        Note: For list operations, type validation is skipped.
+
+        Args:
+            key: The key identifying the list
+            value: Value to prepend to the list
+            ttl: Optional time-to-live in seconds for the key
+
+        Returns:
+            Length of the list after prepend
+        """
+        return self._channel.prepend(key, value, ttl)
 
     def send(self, key: str, message: T, ttl: int | None = None) -> None:
         """Send a typed message.

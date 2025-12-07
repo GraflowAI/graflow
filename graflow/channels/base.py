@@ -41,3 +41,31 @@ class Channel(ABC):
     def clear(self) -> None:
         """Clear all data from the channel."""
         pass
+
+    @abstractmethod
+    def append(self, key: str, value: Any, ttl: Optional[int] = None) -> int:
+        """Append value to a list stored at key.
+
+        Args:
+            key: The key identifying the list
+            value: Value to append to the list
+            ttl: Optional time-to-live in seconds for the key
+
+        Returns:
+            Length of the list after append
+        """
+        pass
+
+    @abstractmethod
+    def prepend(self, key: str, value: Any, ttl: Optional[int] = None) -> int:
+        """Prepend value to the head of a list stored at key.
+
+        Args:
+            key: The key identifying the list
+            value: Value to prepend to the list
+            ttl: Optional time-to-live in seconds for the key
+
+        Returns:
+            Length of the list after prepend
+        """
+        pass

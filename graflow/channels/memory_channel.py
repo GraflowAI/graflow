@@ -66,3 +66,59 @@ class MemoryChannel(Channel):
         if key in self.ttl_data:
             if time.time() > self.ttl_data[key]:
                 self.delete(key)
+
+    def append(self, key: str, value: Any, ttl: Optional[int] = None) -> int:
+        """Append value to a list stored at key.
+
+        Args:
+            key: The key identifying the list
+            value: Value to append to the list
+            ttl: Optional time-to-live in seconds for the key
+
+        Returns:
+            Length of the list after append
+        """
+        self._cleanup_expired(key)
+
+        # Initialize list if key doesn't exist
+        if key not in self.data:
+            self.data[key] = []
+        elif not isinstance(self.data[key], list):
+            raise TypeError(f"Key '{key}' exists but is not a list")
+
+        # Append to the list
+        self.data[key].append(value)
+
+        # Set TTL if specified
+        if ttl is not None:
+            self.ttl_data[key] = time.time() + ttl
+
+        return len(self.data[key])
+
+    def prepend(self, key: str, value: Any, ttl: Optional[int] = None) -> int:
+        """Prepend value to the head of a list stored at key.
+
+        Args:
+            key: The key identifying the list
+            value: Value to prepend to the list
+            ttl: Optional time-to-live in seconds for the key
+
+        Returns:
+            Length of the list after prepend
+        """
+        self._cleanup_expired(key)
+
+        # Initialize list if key doesn't exist
+        if key not in self.data:
+            self.data[key] = []
+        elif not isinstance(self.data[key], list):
+            raise TypeError(f"Key '{key}' exists but is not a list")
+
+        # Prepend to the head of the list
+        self.data[key].insert(0, value)
+
+        # Set TTL if specified
+        if ttl is not None:
+            self.ttl_data[key] = time.time() + ttl
+
+        return len(self.data[key])

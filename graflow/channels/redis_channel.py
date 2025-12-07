@@ -17,7 +17,15 @@ except ImportError:
 class RedisChannel(Channel):
     """Redis-based channel implementation for inter-task communication."""
 
-    def __init__(self, name: str, redis_client: Optional[Redis] = None, host: str = "localhost", port: int = 6379, db: int = 0, **kwargs):
+    def __init__(
+        self,
+        name: str,
+        redis_client: Optional[Redis] = None,
+        host: str = "localhost",
+        port: int = 6379,
+        db: int = 0,
+        **kwargs,
+    ):
         """Initialize Redis channel.
 
         Args:
@@ -37,14 +45,32 @@ class RedisChannel(Channel):
         self._port = port
         self._db = db
         self._kwargs = {
-            k: v for k, v in kwargs.items()
-            if k in {
-                'password', 'socket_timeout', 'socket_connect_timeout',
-                'socket_keepalive', 'socket_keepalive_options', 'connection_pool',
-                'unix_socket_path', 'encoding', 'encoding_errors', 'charset',
-                'errors', 'decode_responses', 'retry_on_timeout', 'ssl',
-                'ssl_keyfile', 'ssl_certfile', 'ssl_cert_reqs', 'ssl_ca_certs',
-                'ssl_check_hostname', 'max_connections', 'retry', 'health_check_interval'
+            k: v
+            for k, v in kwargs.items()
+            if k
+            in {
+                "password",
+                "socket_timeout",
+                "socket_connect_timeout",
+                "socket_keepalive",
+                "socket_keepalive_options",
+                "connection_pool",
+                "unix_socket_path",
+                "encoding",
+                "encoding_errors",
+                "charset",
+                "errors",
+                "decode_responses",
+                "retry_on_timeout",
+                "ssl",
+                "ssl_keyfile",
+                "ssl_certfile",
+                "ssl_cert_reqs",
+                "ssl_ca_certs",
+                "ssl_check_hostname",
+                "max_connections",
+                "retry",
+                "health_check_interval",
             }
         }
 
@@ -52,13 +78,9 @@ class RedisChannel(Channel):
             self.redis_client = redis_client
         else:
             # Prefer caller-provided decode_responses, defaulting to True otherwise.
-            decode_responses = self._kwargs.pop('decode_responses', True)
+            decode_responses = self._kwargs.pop("decode_responses", True)
             self.redis_client: Redis = redis.Redis(
-                host=host,
-                port=port,
-                db=db,
-                decode_responses=decode_responses,
-                **self._kwargs
+                host=host, port=port, db=db, decode_responses=decode_responses, **self._kwargs
             )
 
         self.key_prefix = f"graflow:channel:{name}:"
@@ -143,14 +165,60 @@ class RedisChannel(Channel):
 
     def close(self) -> None:
         """Close the Redis connection."""
-        if hasattr(self.redis_client, 'close'):
+        if hasattr(self.redis_client, "close"):
             self.redis_client.close()
+
+    def append(self, key: str, value: Any, ttl: Optional[int] = None) -> int:
+        """Append value to a list stored at key using Redis RPUSH.
+
+        Args:
+            key: The key identifying the list
+            value: Value to append to the list
+            ttl: Optional time-to-live in seconds for the key
+
+        Returns:
+            Length of the list after append
+        """
+        redis_key = self._get_key(key)
+        serialized_value = json.dumps(value, default=str)
+
+        # Use RPUSH to append to the end of the list
+        length = self.redis_client.rpush(redis_key, serialized_value)
+
+        # Set TTL if specified
+        if ttl is not None:
+            self.redis_client.expire(redis_key, ttl)
+
+        return cast(int, length)
+
+    def prepend(self, key: str, value: Any, ttl: Optional[int] = None) -> int:
+        """Prepend value to the head of a list stored at key using Redis LPUSH.
+
+        Args:
+            key: The key identifying the list
+            value: Value to prepend to the list
+            ttl: Optional time-to-live in seconds for the key
+
+        Returns:
+            Length of the list after prepend
+        """
+        redis_key = self._get_key(key)
+        serialized_value = json.dumps(value, default=str)
+
+        # Use LPUSH to prepend to the head of the list
+        length = self.redis_client.lpush(redis_key, serialized_value)
+
+        # Set TTL if specified
+        if ttl is not None:
+            self.redis_client.expire(redis_key, ttl)
+
+        return cast(int, length)
 
     def __getstate__(self):
         """Support for pickle serialization."""
         state = self.__dict__.copy()
         # Remove the unpicklable Redis client
-        del state['redis_client']
+        del state["redis_client"]
         return state
 
     def __setstate__(self, state):
@@ -159,9 +227,5 @@ class RedisChannel(Channel):
         # Recreate the Redis client
         assert redis is not None, "redis package is required for RedisChannel"
         self.redis_client = redis.Redis(
-            host=self._host,
-            port=self._port,
-            db=self._db,
-            decode_responses=True,
-            **self._kwargs
+            host=self._host, port=self._port, db=self._db, decode_responses=True, **self._kwargs
         )
