@@ -53,7 +53,7 @@ def _iter_children(obj: Any) -> Iterator[Tuple[str, Any]]:
         if hasattr(obj, '__globals__'):
             for key, value in obj.__globals__.items():
                 # Only check non-builtin globals to avoid infinite loops
-                if not key.startswith('__') and key not in ('annotations', 'functools', 'uuid'):
+                if not key.startswith('__') and key not in ('annotations', 'functools', 'uuid', 'overload'):
                     yield f".__globals__[{key!r}]", value
 
     # Check for __wrapped__ attribute (common in decorators)
