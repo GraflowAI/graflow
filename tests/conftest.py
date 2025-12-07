@@ -17,14 +17,40 @@ except ImportError:
 
 @pytest.fixture(scope="session")
 def redis_server():
-    """Real Redis server using Docker container for integration tests."""
+    """Real Redis server - uses local Redis if available, otherwise auto-starts Docker container."""
+    # First try to connect to existing local Redis
+    try:
+        redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+        redis_client.ping()
+        # Local Redis is available, use it
+        yield redis_client
+        return
+    except redis.ConnectionError:
+        # Local Redis not available, will try Docker
+        pass
+
+    # Try to auto-start Docker container
     container = None
     try:
         if not DOCKER_AVAILABLE:
-            raise ImportError("Docker not available")
-        assert docker is not None, "Docker client must be available for Redis integration tests"
-        # Try to use Docker first
-        client = docker.from_env()
+            pytest.skip(
+                "Docker package not installed. Install with: pip install docker"
+            )
+
+        assert docker is not None
+
+        # Create Docker client
+        try:
+            client = docker.from_env()
+            client.ping()
+        except Exception as docker_err:
+            # Docker daemon not running
+            pytest.skip(
+                f"Docker daemon not running. Please start Docker Desktop.\n"
+                f"Error: {docker_err}"
+            )
+
+        # Start Redis container
         container = client.containers.run(
             "redis:7.2",
             ports={'6379/tcp': 6379},
@@ -34,7 +60,7 @@ def redis_server():
         time.sleep(2)  # Wait for Redis to be ready
 
         # Create Redis client and verify connection
-        redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
+        redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
         try:
             redis_client.ping()
         except redis.ConnectionError:
@@ -43,24 +69,23 @@ def redis_server():
 
         yield redis_client
 
-        # Cleanup
-        container.stop()
+        # Cleanup container
+        if container:
+            container.stop()
 
     except Exception as e:
-        # Fallback to local Redis if Docker is not available
+        # Cleanup container if it exists
         if container:
             try:
                 container.stop()
             except Exception:
                 pass
 
-        # Try to connect to local Redis
-        try:
-            redis_client = redis.Redis(host='localhost', port=6379, db=15, decode_responses=True)
-            redis_client.ping()
-            pytest.skip(f"Docker not available ({e}), skipping integration tests that require isolated Redis")
-        except redis.ConnectionError:
-            pytest.skip(f"Neither Docker nor local Redis available for integration tests: {e}")
+        # Final fallback - can't set up Redis
+        if "Failed:" in str(e):
+            # Already a pytest.fail, re-raise
+            raise
+        pytest.skip(f"Failed to start Redis container: {e}")
 
 
 @pytest.fixture
