@@ -81,10 +81,10 @@ def test_a_a_b():
 
 def test_a_b_a():
     """Test graph construction for flow: A >> B >> A."""
-    task_a1 = Task("A")
+    task_a = Task("A")
     task_b = Task("B")
 
-    flow = task_a1 >> task_b >> task_a1
+    flow = task_a >> task_b >> task_a
     graph = build_graph(flow)
 
     # draw_task_graph(graph, title="A_B_A Graph")

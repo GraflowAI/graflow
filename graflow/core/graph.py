@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, List, Optional
 import networkx as nx
 from networkx.classes.reportviews import NodeView, OutEdgeView
 
+from graflow.exceptions import DuplicateTaskError
+
 if TYPE_CHECKING:
     from .task import Executable
 
@@ -25,7 +27,7 @@ class TaskGraph:
         """Get the underlying NetworkX graph."""
         return self._graph
 
-    def add_node(self, task: Executable, task_id: Optional[str] = None) -> None:
+    def add_node(self, task: Executable, task_id: Optional[str] = None, allow_duplicate: bool = False) -> None:
         """Add a task node to the graph.
 
         If a node with the same task_id already exists, logs a warning and skips adding.
@@ -33,7 +35,10 @@ class TaskGraph:
         if task_id is None:
             task_id = task.task_id
         if task_id in self._graph.nodes:
-            logger.warning("Node '%s' already exists in graph, skipping duplicate add_node", task_id)
+            if allow_duplicate:
+                logger.warning("Node '%s' already exists in graph, skipping duplicate add_node", task_id)
+            else:
+                raise DuplicateTaskError(f"Node '{task_id}' already exists in graph")
             return
         self._graph.add_node(task_id, task=task)
 
