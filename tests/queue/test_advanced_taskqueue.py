@@ -198,12 +198,22 @@ class TestInMemoryTaskQueueAdvancedFeatures:
 
     def test_dequeue_with_metrics(self, execution_context: ExecutionContext):
         """Test dequeue with metrics enabled."""
-        queue = LocalTaskQueue(execution_context, start_node="start")
+        queue = LocalTaskQueue(execution_context)
         queue.configure(enable_metrics=True)
 
-        task_spec = queue.dequeue()
+        # Enqueue a task first
+        task_spec = TaskSpec(
+            executable=Task("test_task", register_to_context=False),
+            execution_context=execution_context
+        )
+        queue.enqueue(task_spec)
 
-        assert task_spec is not None
+        assert queue.get_metrics()['dequeued'] == 0
+
+        # Now dequeue it
+        dequeued_spec = queue.dequeue()
+
+        assert dequeued_spec is not None
         assert queue.get_metrics()['dequeued'] == 1
 
     def test_retry_failed_task(self, execution_context: ExecutionContext):
