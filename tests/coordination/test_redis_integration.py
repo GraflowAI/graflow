@@ -111,7 +111,7 @@ class TestRedisCoordinatorIntegration:
 
         assert task_data["task_id"] == "test_task"
         assert task_data["group_id"] == "test_group"
-        assert "timestamp" in task_data
+        assert "created_at" in task_data
         assert task_data["graph_hash"] == context.graph_hash
 
     def test_multiple_task_dispatch(self, clean_redis):
