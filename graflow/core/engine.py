@@ -201,12 +201,12 @@ class WorkflowEngine:
         # Execute tasks while we have tasks and haven't exceeded max steps
         # Note: Don't check is_completed() here as it would return True immediately
         # after dequeuing the first task (queue becomes empty)
+        graph = context.graph
         while task_id is not None and context.steps < context.max_steps:
             # Reset control flow flags for each task
             context.reset_control_flags()
 
             # Check if task exists in graph
-            graph = context.graph
             if task_id not in graph.nodes:
                 logger.error(
                     "Node not found in graph: %s", task_id,
