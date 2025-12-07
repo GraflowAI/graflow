@@ -168,7 +168,7 @@ class CheckpointManager:
         metadata = CheckpointMetadata.from_dict(cls._load_json(meta_path))
 
         # 4. Restore bookkeeping (completed tasks, cycle counts, metadata).
-        context.completed_tasks = set(state.get("completed_tasks", []))
+        context.completed_tasks = list(state.get("completed_tasks", []))
         context.cycle_controller.cycle_counts.update(state.get("cycle_counts", {}))
         context.checkpoint_metadata = metadata.to_dict()
         context.last_checkpoint_path = pickle_path
