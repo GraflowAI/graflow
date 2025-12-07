@@ -92,6 +92,9 @@ def task(
         def wrapper(*args, **kwargs):
             return f(*args, **kwargs)
 
+        # Drop typing.overload from decorator globals to avoid leaking typing module locks via __globals__
+        wrapper.__globals__.pop("overload", None) # type: ignore
+
         # Create TaskWrapper instance
         from .task import TaskWrapper  # Import here to avoid circular imports
         task_obj = TaskWrapper(
