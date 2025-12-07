@@ -113,23 +113,30 @@ class TestRedisExecution(unittest.TestCase):
         # Mock Redis lpop to return the record
         self.redis_mock.lpop.return_value = record.to_json()
 
-        # Mock GraphStore load
+        # Mock GraphStore
         self.queue.graph_store = MagicMock()
         self.queue.graph_store.load.return_value = self.graph
         self.coordinator.graph_store = self.queue.graph_store
 
-        # Dequeue
-        task_spec = self.queue.dequeue()
-        assert task_spec is not None
+        # Mock ExecutionContextFactory to return proper context and task
+        mock_context = ExecutionContext(self.graph, session_id="sess1", trace_id="trace1")
+        mock_context.graph_hash = "hash1"
 
-        # Verify
-        self.assertIsNotNone(task_spec)
-        self.assertEqual(task_spec.task_id, "task1")
-        self.assertEqual(task_spec.execution_context.graph_hash, "hash1")
-        self.assertEqual(task_spec.execution_context.session_id, "sess1")
+        with patch('graflow.worker.context_factory.ExecutionContextFactory') as factory_mock:
+            factory_mock.create_from_record.return_value = (mock_context, self.task1)
 
-        # Verify Graph Loaded
-        self.coordinator.graph_store.load.assert_called_with("hash1")
+            # Dequeue
+            task_spec = self.queue.dequeue()
+            assert task_spec is not None
+
+            # Verify
+            self.assertIsNotNone(task_spec)
+            self.assertEqual(task_spec.task_id, "task1")
+            self.assertEqual(task_spec.execution_context.graph_hash, "hash1")
+            self.assertEqual(task_spec.execution_context.session_id, "sess1")
+
+            # Verify factory was called with the record
+            factory_mock.create_from_record.assert_called_once()
 
 if __name__ == '__main__':
     unittest.main()
