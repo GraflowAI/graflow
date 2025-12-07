@@ -89,7 +89,6 @@ class TestNestedParallelExecution:
                         backend_config={**redis_config, "key_prefix": "test_local"},
                     )
                 )
-                wf.graph.add_node(parallel_group, parallel_group.task_id)
 
                 wf.execute(start_node=parallel_group.task_id)
 
