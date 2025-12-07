@@ -16,10 +16,9 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-logger = logging.getLogger(__name__)
 
 
-def create_redis_queue(redis_config: Dict[str, Any]) -> DistributedTaskQueue:
+def create_redis_queue(redis_config: Dict[str, Any], logger: logging.Logger) -> DistributedTaskQueue:
     """RedisTaskQueue factory from configuration."""
     try:
         import redis
@@ -112,7 +111,7 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def setup_signal_handlers(worker: Any) -> None:
+def setup_signal_handlers(worker: Any, logger: logging.Logger) -> None:
     """Setup signal handlers for graceful shutdown."""
     def signal_handler(signum: int, frame: Any) -> None:
         logger.info(f"Received signal {signum}, initiating graceful shutdown...")
@@ -133,6 +132,7 @@ def main():
         # Setup logging
         logging.getLogger().setLevel(getattr(logging, args.log_level))
 
+        logger = logging.getLogger(__name__)
         logger.info(f"Starting TaskWorker: {args.worker_id}")
         logger.info(
             "Configuration: redis=%s:%s db=%s prefix=%s",
@@ -148,7 +148,7 @@ def main():
             'db': args.redis_db,
             'key_prefix': args.redis_key_prefix,
         }
-        queue = create_redis_queue(redis_config)
+        queue = create_redis_queue(redis_config, logger)
 
         # Create TaskWorker
         from graflow.worker.worker import TaskWorker
@@ -161,7 +161,7 @@ def main():
         )
 
         # Setup signal handlers
-        setup_signal_handlers(worker)
+        setup_signal_handlers(worker, logger)
 
         # Start worker
         logger.info(f"TaskWorker {args.worker_id} starting...")
