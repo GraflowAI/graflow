@@ -111,7 +111,6 @@ class Executable(ABC):
 
         return state
 
-
     def __setstate__(self, state):
         """Restore state from pickled state.
 
@@ -784,7 +783,9 @@ class TaskWrapper(Executable):
         overload, functools, uuid, etc. We only need the original user function
         which will be used to recreate the wrapper in __reduce__.
         """
-        state = self.__dict__.copy()
+        # Get base state
+        state = super().__getstate__()
+
         # Remove wrapper function - it will be recreated from _original_func
         if 'func' in state:
             del state['func']
@@ -796,11 +797,10 @@ class TaskWrapper(Executable):
         Note: The 'func' attribute is not in the state dict (it was excluded in __reduce__).
         The wrapper function was already created in _reconstruct_task_wrapper, so we keep it.
         """
+        super().__setstate__(state)
+
         # Preserve the wrapper function that was already created
         existing_func = getattr(self, 'func', None)
-
-        # Update state
-        self.__dict__.update(state)
 
         # Restore the wrapper function (don't overwrite with None)
         if existing_func is not None:
