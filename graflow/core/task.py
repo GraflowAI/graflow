@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Optional, Union
 
 from graflow.coordination.coordinator import CoordinationBackend
@@ -12,6 +13,53 @@ from graflow.exceptions import GraflowRuntimeError
 
 if TYPE_CHECKING:
     from graflow.core.handlers.group_policy import GroupExecutionPolicy
+
+
+def _reconstruct_task_wrapper(
+    task_id: str,
+    original_func: Callable,
+    inject_context: bool,
+    inject_llm_client: bool,
+    inject_llm_agent: Optional[str],
+    handler_type: Optional[str]
+) -> TaskWrapper:
+    """Reconstruct TaskWrapper from serialized components.
+
+    Called during unpickling to recreate TaskWrapper with fresh wrapper function.
+    This avoids serializing the decorator module's __globals__.
+
+    Note: Additional state will be restored via __setstate__ after this function returns.
+
+    Args:
+        task_id: Task identifier
+        original_func: The unwrapped user function
+        inject_context: Whether to inject ExecutionContext
+        inject_llm_client: Whether to inject LLMClient
+        inject_llm_agent: Agent name to inject
+        handler_type: Handler type string
+
+    Returns:
+        Fresh TaskWrapper instance (state will be restored by pickle)
+    """
+    import functools
+
+    # Recreate wrapper in current environment (worker's environment)
+    @functools.wraps(original_func)
+    def wrapper(*args, **kwargs):
+        return original_func(*args, **kwargs)
+
+    # Create TaskWrapper - pickle will call __setstate__ to restore additional state
+    task_wrapper = TaskWrapper(
+        task_id=task_id,
+        func=wrapper,
+        inject_context=inject_context,
+        inject_llm_client=inject_llm_client,
+        inject_llm_agent=inject_llm_agent,
+        register_to_context=False,  # Don't re-register during deserialization
+        handler_type=handler_type
+    )
+
+    return task_wrapper
 
 
 class Executable(ABC):
@@ -677,6 +725,10 @@ class TaskWrapper(Executable):
         self.inject_llm_client = inject_llm_client
         self.inject_llm_agent = inject_llm_agent
 
+        # Store reference to original unwrapped function for serialization
+        # functools.wraps preserves this in __wrapped__ attribute
+        self._original_func = getattr(func, '__wrapped__', func)
+
         # Add serialization attributes required for checkpoint/resume
         # These may be overwritten by @task decorator if used
         self.__name__ = getattr(func, '__name__', task_id)
@@ -695,6 +747,64 @@ class TaskWrapper(Executable):
     def task_id(self) -> str:
         """Return the task_id of this task wrapper."""
         return self._task_id
+
+    def __reduce__(self):
+        """Custom serialization to avoid decorator __globals__ pollution.
+
+        Instead of serializing the wrapper function (which has decorators.py
+        in its __globals__), we serialize only what's needed to reconstruct.
+
+        Returns:
+            Tuple of (callable, args, state, listitems, dictitems) for pickle
+        """
+        # Prepare state dict excluding wrapper function
+        state = self.__dict__.copy()
+        if 'func' in state:
+            del state['func']  # Remove wrapper with decorator __globals__
+
+        return (
+            _reconstruct_task_wrapper,
+            (
+                self._task_id,
+                self._original_func,  # Original user function, not wrapper
+                self.inject_context,
+                self.inject_llm_client,
+                self.inject_llm_agent,
+                self.handler_type
+            ),
+            state,  # Additional state to restore
+            None,   # listitems
+            None    # dictitems
+        )
+
+    def __getstate__(self):
+        """Exclude wrapper function from serialization.
+
+        The wrapper function contains decorators.py __globals__ which includes
+        overload, functools, uuid, etc. We only need the original user function
+        which will be used to recreate the wrapper in __reduce__.
+        """
+        state = self.__dict__.copy()
+        # Remove wrapper function - it will be recreated from _original_func
+        if 'func' in state:
+            del state['func']
+        return state
+
+    def __setstate__(self, state):
+        """Restore state (wrapper was already recreated by _reconstruct_task_wrapper).
+
+        Note: The 'func' attribute is not in the state dict (it was excluded in __reduce__).
+        The wrapper function was already created in _reconstruct_task_wrapper, so we keep it.
+        """
+        # Preserve the wrapper function that was already created
+        existing_func = getattr(self, 'func', None)
+
+        # Update state
+        self.__dict__.update(state)
+
+        # Restore the wrapper function (don't overwrite with None)
+        if existing_func is not None:
+            self.func = existing_func
 
     def _prepare_injection_kwargs(self, exec_context: ExecutionContext) -> dict[str, Any]:
         """Prepare keyword arguments for injection."""
