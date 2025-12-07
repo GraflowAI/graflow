@@ -78,7 +78,16 @@ Graflow uses a **task graph execution engine** where tasks are nodes and depende
 
 - **`decorators.py`** - Function-to-task conversion
   - `@task`: Decorator to convert functions to Task objects
-  - Integrates with `TaskFunctionManager` for serialization
+  - Integrates with serialization module for distributed execution
+
+- **`checkpoint.py`** - Checkpoint/Resume functionality
+  - `CheckpointManager`: Create and resume from checkpoints
+  - `CheckpointState`: Execution state persistence
+  - `CheckpointMetadata`: Checkpoint metadata management
+
+- **`handler.py`** - Task handler interface
+  - `TaskHandler`: Base class for custom execution strategies
+  - Handler registration and dispatch system
 
 - **`graph.py`** - Task graph (DAG) management
   - Uses networkx for graph operations
@@ -106,6 +115,29 @@ Graflow uses a **task graph execution engine** where tasks are nodes and depende
 - **`executor.py`**: `GroupExecutor` - Parallel group execution
 - **`redis.py`**: `RedisCoordinator` - Distributed coordination
 - **`multiprocessing.py`**: Multiprocessing coordination
+
+#### HITL - Human-in-the-Loop (`graflow/hitl/`)
+- **`manager.py`**: `FeedbackManager` - Manages human feedback requests
+- **`types.py`**: Feedback types and configuration
+- **`notification.py`**: User notification system (Slack, webhooks, console)
+
+#### LLM Integration (`graflow/llm/`)
+- **`client.py`**: LLM client integration
+- **`agents.py`**: LLM agent management and registration
+
+#### Tracing (`graflow/trace/`)
+- **`tracer.py`**: Tracing hooks for observability
+- **`langfuse.py`**: Langfuse integration for workflow tracing
+
+#### API (`graflow/api/`)
+- **REST API**: Workflow management and HITL feedback endpoints
+- **Feedback API**: HTTP endpoints for human feedback submission
+
+#### Serialization (`graflow/serialization/`)
+- **Cloudpickle-based**: Task and function serialization for distributed execution
+
+#### Debug (`graflow/debug/`)
+- **Visualization tools**: Workflow graph visualization and debugging utilities
 
 ### Key Design Patterns
 
@@ -289,8 +321,32 @@ The `examples/` directory contains **production-ready examples** organized by co
 
 ### Serialization
 - Uses `cloudpickle` for function/task serialization
-- `TaskFunctionManager` handles function registry
-- Critical for distributed execution
+- Serialization module handles task and function serialization
+- Critical for distributed execution across workers
+
+### Checkpoint/Resume System
+- **User-controlled checkpointing**: Tasks call `context.checkpoint()` to schedule checkpoints
+- **Automatic state persistence**: Engine saves checkpoint after task completion
+- **Three-file structure**: `.pkl` (context), `.state.json` (execution state), `.meta.json` (metadata)
+- **Resume capability**: `CheckpointManager.resume_from_checkpoint(path)` restores full workflow state
+- **Production-ready**: Supports local filesystem, Redis backend planned
+- **Use cases**: Long-running ML training, multi-hour pipelines, fault tolerance
+
+### Human-in-the-Loop (HITL)
+- **Feedback requests**: Tasks can request human input during execution
+- **Multiple feedback types**: Approval, text input, selection, multi-selection, custom
+- **Intelligent timeout handling**: Short polling → checkpoint → resume on feedback
+- **Universal notifications**: Console, Slack webhooks, Discord, Teams, custom endpoints
+- **Distributed support**: Redis-based feedback persistence for cross-worker scenarios
+- **Channel integration**: Automatic writing of feedback responses to channels
+- **Use cases**: Deployment approvals, data validation, parameter tuning, error recovery
+
+### Tracing and Observability
+- **Tracer hooks**: `on_workflow_start()`, `on_workflow_end()`, `on_task_start()`, `on_task_end()`
+- **Langfuse integration**: Automatic tracing to Langfuse platform
+- **Trace ID propagation**: Distributed trace tracking across workers
+- **LLM integration**: Track LLM calls and agent interactions
+- **Use cases**: Debugging, performance monitoring, workflow analytics
 
 ## Common Development Tasks
 
@@ -348,9 +404,14 @@ The `examples/` directory contains **production-ready examples** organized by co
 - **TaskExecutionContext**: Per-task execution state
 - **Channel**: Inter-task communication primitive
 - **TaskQueue**: Queue for distributed task execution
-- **Handler**: Executor for specific task types
+- **Handler**: Executor for specific task types (DirectTaskHandler, DockerTaskHandler)
 - **next_task()**: Runtime task addition to graph
 - **next_iteration()**: Runtime task re-execution
+- **terminate_workflow()**: Early normal termination of workflow
+- **cancel_workflow()**: Abnormal workflow cancellation with error
+- **Checkpoint**: Snapshot of workflow execution state
+- **FeedbackManager**: Manages HITL feedback requests and responses
+- **Tracer**: Observability hooks for workflow/task execution tracking
 
 ## Git Workflow
 

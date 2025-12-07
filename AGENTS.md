@@ -2,11 +2,17 @@
 
 ## Project Structure & Module Organization
 - `graflow/`: Source code.
-  - `core/`: Workflow engine, tasks, graph, decorators.
+  - `core/`: Workflow engine, tasks, graph, decorators, handlers, checkpoints.
   - `channels/`: In‑memory/Redis channels and typing helpers.
   - `queue/`: In‑memory/Redis task queues.
   - `coordination/`: Coordinators, executors, multiprocessing/Redis integration.
   - `worker/`: Worker entrypoints and handlers.
+  - `hitl/`: Human-in-the-Loop (HITL) feedback management.
+  - `llm/`: LLM integration and agent management.
+  - `trace/`: Tracing and observability (Langfuse integration).
+  - `api/`: REST API for workflow management and HITL feedback.
+  - `serialization/`: Task serialization utilities.
+  - `debug/`: Debugging and visualization tools.
   - `utils/`, `exceptions.py`, `__init__.py`.
 - `tests/`: Pytest suite by domain (e.g., `core/`, `queue/`, `scenario/`, `integration/`).
 - `examples/`: Runnable examples (e.g., `examples/simple_workflow_example.py`).
