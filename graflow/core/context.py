@@ -1166,6 +1166,9 @@ class ExecutionContext:
 
         # Create iteration function with data
         def iteration_func():
+            # Set execution context on current_task before calling it
+            current_task.set_execution_context(task_ctx.execution_context)
+
             # Check if current_task has inject_context
             inject_context = bool(getattr(current_task, 'inject_context', False))
             if inject_context:
