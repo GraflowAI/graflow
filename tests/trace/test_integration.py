@@ -411,11 +411,11 @@ class TestTracerWithErrorHandling:
         assert ("error" in captured.out.lower() or "failed" in captured.out.lower() or "✗" in captured.out)
 
 
-@patch("graflow.trace.langfuse.LANGFUSE_AVAILABLE", True)
-@patch("graflow.trace.langfuse.Langfuse")
 class TestLangFuseTracerIntegration:
     """Test LangFuseTracer with actual workflow execution."""
 
+    @patch("graflow.trace.langfuse.LANGFUSE_AVAILABLE", True)
+    @patch("graflow.trace.langfuse.Langfuse", create=True)
     def test_langfuse_tracer_with_simple_workflow(self, mock_langfuse_class):
         """Test LangFuseTracer with simple workflow execution."""
         from graflow.trace.langfuse import LangFuseTracer
@@ -448,6 +448,8 @@ class TestLangFuseTracerIntegration:
         mock_task_span.update.assert_called()  # Task end
         mock_task_span.end.assert_called()  # Task end
 
+    @patch("graflow.trace.langfuse.LANGFUSE_AVAILABLE", True)
+    @patch("graflow.trace.langfuse.Langfuse", create=True)
     def test_langfuse_tracer_flush_after_workflow(self, mock_langfuse_class):
         """Test LangFuseTracer flush after workflow execution."""
         from graflow.trace.langfuse import LangFuseTracer
@@ -577,7 +579,7 @@ class TestDistributedExecutionTracing:
         assert "parallel_workers_workflow" in main_graph.nodes
 
     @patch("graflow.trace.langfuse.LANGFUSE_AVAILABLE", True)
-    @patch("graflow.trace.langfuse.Langfuse")
+    @patch("graflow.trace.langfuse.Langfuse", create=True)
     def test_langfuse_tracer_with_distributed_execution(self, mock_langfuse_class):
         """Test LangFuseTracer with distributed execution simulation."""
         from graflow.trace.langfuse import LangFuseTracer

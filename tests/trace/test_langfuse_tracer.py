@@ -7,7 +7,7 @@ class TestLangFuseTracerBasics:
     """Test basic LangFuseTracer functionality."""
 
     @patch("graflow.trace.langfuse.LANGFUSE_AVAILABLE", True)
-    @patch("graflow.trace.langfuse.Langfuse")
+    @patch("graflow.trace.langfuse.Langfuse", create=True)
     def test_initialization_enabled(self, mock_langfuse_class):
         """Test LangFuseTracer initialization when enabled."""
         from graflow.trace.langfuse import LangFuseTracer
@@ -35,7 +35,7 @@ class TestLangFuseTracerBasics:
         assert tracer.client is None
 
     @patch("graflow.trace.langfuse.LANGFUSE_AVAILABLE", True)
-    @patch("graflow.trace.langfuse.Langfuse")
+    @patch("graflow.trace.langfuse.Langfuse", create=True)
     @patch("graflow.trace.langfuse.load_env")
     def test_initialization_from_env(self, mock_load_env, mock_langfuse_class):
         """Test LangFuseTracer loads config from .env."""
@@ -59,7 +59,7 @@ class TestLangFuseTracerTraceLifecycle:
     """Test LangFuseTracer trace lifecycle."""
 
     @patch("graflow.trace.langfuse.LANGFUSE_AVAILABLE", True)
-    @patch("graflow.trace.langfuse.Langfuse")
+    @patch("graflow.trace.langfuse.Langfuse", create=True)
     def test_trace_start_creates_root_span(self, mock_langfuse_class):
         """Test trace_start creates a root span."""
         from graflow.trace.langfuse import LangFuseTracer
@@ -79,7 +79,7 @@ class TestLangFuseTracerTraceLifecycle:
         assert call_kwargs["name"] == "test_workflow"
 
     @patch("graflow.trace.langfuse.LANGFUSE_AVAILABLE", True)
-    @patch("graflow.trace.langfuse.Langfuse")
+    @patch("graflow.trace.langfuse.Langfuse", create=True)
     def test_trace_end_ends_root_span(self, mock_langfuse_class):
         """Test trace_end ends the root span."""
         from graflow.trace.langfuse import LangFuseTracer
@@ -102,7 +102,7 @@ class TestLangFuseTracerSpanLifecycle:
     """Test LangFuseTracer span lifecycle."""
 
     @patch("graflow.trace.langfuse.LANGFUSE_AVAILABLE", True)
-    @patch("graflow.trace.langfuse.Langfuse")
+    @patch("graflow.trace.langfuse.Langfuse", create=True)
     def test_span_start_creates_child_span(self, mock_langfuse_class):
         """Test span_start creates a child span."""
         from graflow.trace.langfuse import LangFuseTracer
@@ -125,7 +125,7 @@ class TestLangFuseTracerSpanLifecycle:
         assert call_kwargs["metadata"] == {"task_type": "Task"}
 
     @patch("graflow.trace.langfuse.LANGFUSE_AVAILABLE", True)
-    @patch("graflow.trace.langfuse.Langfuse")
+    @patch("graflow.trace.langfuse.Langfuse", create=True)
     def test_span_end_updates_and_closes_span(self, mock_langfuse_class):
         """Test span_end updates and closes the span."""
         from graflow.trace.langfuse import LangFuseTracer
@@ -149,7 +149,7 @@ class TestLangFuseTracerSpanLifecycle:
         mock_task_span.end.assert_called_once()
 
     @patch("graflow.trace.langfuse.LANGFUSE_AVAILABLE", True)
-    @patch("graflow.trace.langfuse.Langfuse")
+    @patch("graflow.trace.langfuse.Langfuse", create=True)
     def test_nested_spans(self, mock_langfuse_class):
         """Test nested span creation."""
         from graflow.trace.langfuse import LangFuseTracer
@@ -179,7 +179,7 @@ class TestLangFuseTracerEvents:
     """Test LangFuseTracer event recording."""
 
     @patch("graflow.trace.langfuse.LANGFUSE_AVAILABLE", True)
-    @patch("graflow.trace.langfuse.Langfuse")
+    @patch("graflow.trace.langfuse.Langfuse", create=True)
     def test_event_creates_event_on_current_span(self, mock_langfuse_class):
         """Test event creates an event on the current span."""
         from graflow.trace.langfuse import LangFuseTracer
@@ -207,7 +207,7 @@ class TestLangFuseTracerCloning:
     """Test LangFuseTracer cloning for parallel execution."""
 
     @patch("graflow.trace.langfuse.LANGFUSE_AVAILABLE", True)
-    @patch("graflow.trace.langfuse.Langfuse")
+    @patch("graflow.trace.langfuse.Langfuse", create=True)
     def test_clone_creates_new_instance(self, mock_langfuse_class):
         """Test clone creates a new tracer instance."""
         from graflow.trace.langfuse import LangFuseTracer
@@ -223,7 +223,7 @@ class TestLangFuseTracerCloning:
         assert cloned.enabled is True
 
     @patch("graflow.trace.langfuse.LANGFUSE_AVAILABLE", True)
-    @patch("graflow.trace.langfuse.Langfuse")
+    @patch("graflow.trace.langfuse.Langfuse", create=True)
     def test_clone_shares_client(self, mock_langfuse_class):
         """Test clone shares the Langfuse client."""
         from graflow.trace.langfuse import LangFuseTracer
@@ -238,7 +238,7 @@ class TestLangFuseTracerCloning:
         assert cloned.client is tracer.client
 
     @patch("graflow.trace.langfuse.LANGFUSE_AVAILABLE", True)
-    @patch("graflow.trace.langfuse.Langfuse")
+    @patch("graflow.trace.langfuse.Langfuse", create=True)
     @patch("graflow.trace.langfuse.copy")
     def test_clone_copies_parent_span(self, mock_copy_module, mock_langfuse_class):
         """Test clone shallow copies parent's current span."""
@@ -265,7 +265,7 @@ class TestLangFuseTracerCloning:
         assert cloned._root_span == mock_copied_span
 
     @patch("graflow.trace.langfuse.LANGFUSE_AVAILABLE", True)
-    @patch("graflow.trace.langfuse.Langfuse")
+    @patch("graflow.trace.langfuse.Langfuse", create=True)
     def test_clone_has_independent_span_stack(self, mock_langfuse_class):
         """Test cloned tracer has independent span stack."""
         from graflow.trace.langfuse import LangFuseTracer
@@ -310,7 +310,7 @@ class TestLangFuseTracerAttachToTrace:
     """Test LangFuseTracer attach_to_trace for distributed tracing."""
 
     @patch("graflow.trace.langfuse.LANGFUSE_AVAILABLE", True)
-    @patch("graflow.trace.langfuse.Langfuse")
+    @patch("graflow.trace.langfuse.Langfuse", create=True)
     def test_attach_to_trace_connects_to_existing_trace(self, mock_langfuse_class):
         """Test attach_to_trace connects to existing trace."""
         from graflow.trace.langfuse import LangFuseTracer
@@ -336,7 +336,7 @@ class TestLangFuseTracerFlush:
     """Test LangFuseTracer flush functionality."""
 
     @patch("graflow.trace.langfuse.LANGFUSE_AVAILABLE", True)
-    @patch("graflow.trace.langfuse.Langfuse")
+    @patch("graflow.trace.langfuse.Langfuse", create=True)
     def test_flush_calls_client_flush(self, mock_langfuse_class):
         """Test flush calls client.flush()."""
         from graflow.trace.langfuse import LangFuseTracer
@@ -350,7 +350,7 @@ class TestLangFuseTracerFlush:
         mock_client.flush.assert_called_once()
 
     @patch("graflow.trace.langfuse.LANGFUSE_AVAILABLE", True)
-    @patch("graflow.trace.langfuse.Langfuse")
+    @patch("graflow.trace.langfuse.Langfuse", create=True)
     def test_shutdown_calls_client_flush(self, mock_langfuse_class):
         """Test shutdown calls client.flush()."""
         from graflow.trace.langfuse import LangFuseTracer
@@ -368,7 +368,7 @@ class TestLangFuseTracerRuntimeGraph:
     """Test LangFuseTracer runtime graph tracking."""
 
     @patch("graflow.trace.langfuse.LANGFUSE_AVAILABLE", True)
-    @patch("graflow.trace.langfuse.Langfuse")
+    @patch("graflow.trace.langfuse.Langfuse", create=True)
     def test_runtime_graph_tracks_execution(self, mock_langfuse_class):
         """Test runtime graph tracks execution alongside LangFuse."""
         from graflow.trace.langfuse import LangFuseTracer
@@ -398,7 +398,7 @@ class TestLangFuseTracerRuntimeGraph:
         assert graph.nodes["task_1"]["status"] == "completed"
 
     @patch("graflow.trace.langfuse.LANGFUSE_AVAILABLE", True)
-    @patch("graflow.trace.langfuse.Langfuse")
+    @patch("graflow.trace.langfuse.Langfuse", create=True)
     def test_runtime_graph_disabled(self, mock_langfuse_class):
         """Test runtime graph can be disabled."""
         from graflow.trace.langfuse import LangFuseTracer
