@@ -73,13 +73,13 @@ engine.execute(context)  # start_task_id=None → context.start_node使用
 
 ### **パターン2: TaskWorker特定タスク実行**
 ```python
-# DirectTaskExecutor経由で統一Engine実行
+# DirectTaskHandler経由で統一Engine実行
 def _process_task_wrapper(self, task_spec: TaskSpec):
-    # TaskWrapper作成 → DirectTaskExecutor → WorkflowEngine
+    # TaskWrapper作成 → DirectTaskHandler → WorkflowEngine
     task_wrapper = TaskWrapper(task_spec.task_id, task_spec.get_task())
     task_wrapper.set_execution_context(task_spec.execution_context)
     success = self.handler.process_task(task_wrapper)
-    # → DirectTaskExecutor._process_task() → engine.execute(context, start_task_id)
+    # → DirectTaskHandler.execute_task() → engine.execute(context, start_task_id)
 ```
 
 ### **パターン3: GroupExecutor並列グループ実行**
@@ -185,27 +185,26 @@ engine.execute(context, start_task_id="task_D")
 
 ## 薄いラッパー実装
 
-### **TaskWorker: DirectTaskExecutor経由Engine委譲**
+### **TaskWorker: DirectTaskHandler経由Engine委譲**
 ```python
 class TaskWorker:
     def _process_task_wrapper(self, task_spec: TaskSpec) -> Dict[str, Any]:
-        """DirectTaskExecutor経由で統一Engine実行への委譲"""
+        """DirectTaskHandler経由で統一Engine実行への委譲"""
         # TaskWrapper作成
         task_wrapper = TaskWrapper(task_spec.task_id, task_spec.get_task())
         task_wrapper.set_execution_context(task_spec.execution_context)
 
-        # DirectTaskExecutor経由でEngine実行
-        success = self.handler.process_task(task_wrapper)
-        # → handler._process_task() → engine.execute(context, start_task_id)
+        # DirectTaskHandler経由でEngine実行
+        success = self.handler.execute_task(task_wrapper)
+        # → handler.execute_task() → engine.execute(context, start_task_id)
 
         return {"success": success, "task_id": task_spec.task_id}
 
-class DirectTaskExecutor(TaskHandler):
-    def _process_task(self, task: Executable) -> bool:
+class DirectTaskHandler(TaskHandler):
+    def execute_task(self, task: Executable, context: ExecutionContext) -> Any:
         """WorkflowEngine統一実行"""
-        execution_context = task.get_execution_context()
-        self.engine.execute(execution_context, start_task_id=task.task_id)
-        return True
+        self.engine.execute(context, start_task_id=task.task_id)
+        return context.get_result(task.task_id)
 ```
 
 ### **GroupExecutor: Engine委譲**

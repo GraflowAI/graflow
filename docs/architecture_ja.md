@@ -22,7 +22,7 @@ graph TB
         TQ[TaskQueue]
         TS[TaskSpec]
         TH[TaskHandler]
-        DTE[DirectTaskExecutor]
+        DTH[DirectTaskHandler]
     end
 
     subgraph "Communication Layer"
@@ -57,7 +57,7 @@ graph TB
     EC --> GE
 
     TG --> TS
-    TH --> DTE
+    TH --> DTH
     TW --> TQ
     TW --> TH
 
@@ -96,7 +96,10 @@ graph TB
   - TaskExecutionContextによる実行コンテキスト管理
   - サイクル制御とgoto機能
   - 動的タスク生成と結果保存
-  - FunctionRegistryとの連携
+  - Checkpoint機能による実行状態の保存・復元
+  - HITL (Human-in-the-Loop) 対応のフィードバック管理
+  - LLM統合とエージェント管理
+  - トレーシング機能による実行追跡
 
 ### TaskExecutionContext
 個別タスク実行時のコンテキスト管理
@@ -129,7 +132,7 @@ graph TB
   - TTL対応
   - タスク結果の保存・取得
 
-### DirectTaskExecutor
+### DirectTaskHandler
 タスクの直接実行を担当するハンドラー
 
 - **役割**: TaskHandlerの具体実装
@@ -137,6 +140,7 @@ graph TB
   - インプロセスでのタスク実行
   - エラーハンドリング
   - 実行結果の管理
+  - トレーシングフックの呼び出し
 
 ### GroupExecutor
 並列グループタスクの実行制御
@@ -629,7 +633,7 @@ volumes:
 import os
 import redis
 from graflow.worker.worker import TaskWorker
-from graflow.worker.handler import InProcessTaskExecutor
+from graflow.core.handlers.direct import DirectTaskHandler
 from graflow.queue.redis import RedisTaskQueue
 from graflow.core.context import ExecutionContext
 
@@ -639,14 +643,14 @@ def create_worker_from_env():
     redis_port = int(os.getenv('REDIS_PORT', '6379'))
     worker_id = os.getenv('WORKER_ID', 'worker-1')
     max_concurrent = int(os.getenv('MAX_CONCURRENT_TASKS', '4'))
-    
+
     # Redis接続
     redis_client = redis.Redis(
-        host=redis_host, 
-        port=redis_port, 
+        host=redis_host,
+        port=redis_port,
         decode_responses=True
     )
-    
+
     # ダミーExecutionContext（ワーカー専用）
     from graflow.core.graph import TaskGraph
     dummy_graph = TaskGraph()
@@ -657,13 +661,13 @@ def create_worker_from_env():
         channel_backend="redis",
         config={"redis_client": redis_client}
     )
-    
+
     # TaskQueue作成
     task_queue = RedisTaskQueue(context, redis_client=redis_client)
-    
+
     # TaskHandler作成
-    handler = InProcessTaskExecutor()
-    
+    handler = DirectTaskHandler()
+
     # ワーカー作成
     worker = TaskWorker(
         queue=task_queue,
@@ -671,7 +675,7 @@ def create_worker_from_env():
         worker_id=worker_id,
         max_concurrent_tasks=max_concurrent
     )
-    
+
     return worker
 
 if __name__ == "__main__":
