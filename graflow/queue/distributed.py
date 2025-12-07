@@ -1,7 +1,6 @@
 """Redis distributed task queue implementation."""
 
 import json
-import logging
 from typing import Optional, cast
 
 try:
@@ -12,8 +11,6 @@ except ImportError:
 
 from graflow.coordination.graph_store import GraphStore
 from graflow.queue.base import TaskQueue, TaskSpec, TaskStatus
-
-logger = logging.getLogger(__name__)
 
 
 class DistributedTaskQueue(TaskQueue):
@@ -98,10 +95,10 @@ class DistributedTaskQueue(TaskQueue):
                 # It's a SerializedTaskRecord
                 return self._dequeue_record(data)
         except (json.JSONDecodeError, TypeError):
-            logger.warning(f"Could not decode queue item as SerializedTaskRecord: {item!r}")
+            self._logger.warning(f"Could not decode queue item as SerializedTaskRecord: {item!r}")
 
         # Unrecognized item
-        logger.error(f"Dropping unrecognized queue item: {item!r}")
+        self._logger.error(f"Dropping unrecognized queue item: {item!r}")
         return None
 
     def _dequeue_record(self, data: dict) -> Optional[TaskSpec]:
@@ -110,7 +107,7 @@ class DistributedTaskQueue(TaskQueue):
             # If graph_store is missing, we can't process this record
             # Should we re-enqueue? Or log error?
             # For now, log error and return None (task lost)
-            logger.error(
+            self._logger.error(
                 "GraphStore not configured in DistributedTaskQueue, cannot process SerializedTaskRecord",
                 extra={"queue_key": self.queue_key, "task_data_keys": list(data.keys())}
             )
@@ -143,7 +140,7 @@ class DistributedTaskQueue(TaskQueue):
             return task_spec
 
         except Exception as e:
-            logger.error(
+            self._logger.error(
                 "Error processing SerializedTaskRecord: %s",
                 str(e),
                 exc_info=True,

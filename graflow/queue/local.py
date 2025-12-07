@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from collections import deque
 from typing import TYPE_CHECKING, Optional
 
@@ -11,8 +10,6 @@ from graflow.queue.base import TaskQueue, TaskSpec, TaskStatus
 if TYPE_CHECKING:
     from graflow.core.context import ExecutionContext
 
-
-logger = logging.getLogger(__name__)
 
 class LocalTaskQueue(TaskQueue):
     """In-memory task queue with TaskSpec support."""
@@ -35,14 +32,14 @@ class LocalTaskQueue(TaskQueue):
                     self._task_specs[start_node] = task_spec
                 else:
                     available_nodes = list(execution_context.graph.nodes.keys())
-                    logger.warning(
+                    self._logger.warning(
                         f"Start node '{start_node}' not found in graph. "
                         f"Available nodes: {available_nodes}"
                     )
             except (AttributeError, KeyError) as e:
                 # Graph might not be fully deserialized yet during unpickling
                 # This is okay - the queue will be populated later when tasks are added
-                logger.debug(
+                self._logger.debug(
                     f"Could not access graph during LocalTaskQueue initialization: {e}. "
                     f"This is expected during deserialization."
                 )

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -12,8 +11,6 @@ from typing import TYPE_CHECKING, Dict, Optional
 if TYPE_CHECKING:
     from graflow.core.context import ExecutionContext
     from graflow.core.task import Executable
-
-logger = logging.getLogger(__name__)
 
 
 class TaskStatus(Enum):
@@ -91,6 +88,14 @@ class TaskQueue(ABC):
             'retries': 0,
             'failures': 0
         }
+
+    @property
+    def _logger(self):
+        """Get logger instance (lazy initialization to avoid module-level import)."""
+        if not hasattr(self, '_logger_instance'):
+            import logging
+            self._logger_instance = logging.getLogger(__name__)
+        return self._logger_instance
 
     # === Core interface ===
     @abstractmethod
@@ -183,7 +188,7 @@ class TaskQueue(ABC):
         """
         # Default implementation does nothing
         if success:
-            logger.debug(f"Task {task_id} completed successfully in group {group_id}")
+            self._logger.debug(f"Task {task_id} completed successfully in group {group_id}")
         else:
-            logger.debug(f"Task {task_id} failed in group {group_id}: {error_message}")
+            self._logger.debug(f"Task {task_id} failed in group {group_id}: {error_message}")
 
