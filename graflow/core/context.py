@@ -485,21 +485,25 @@ class ExecutionContext:
         from graflow.utils.redis_utils import ensure_redis_connection_params
         ensure_redis_connection_params(base_config)
 
-        self.task_queue: LocalTaskQueue = LocalTaskQueue(self, start_node)
-
-        self.cycle_controller = CycleController(default_max_cycles)
-
-        # Create channel using factory with same config
+        # Create channel using factory with same config (before removing redis_client)
+        # ChannelFactory.create_channel() may use redis_client if present
         self.channel = ChannelFactory.create_channel(
             backend=channel_backend,
             name=self.session_id,
             **base_config
         )
 
+        # Remove redis_client from base_config after channel creation
+        # (contains unpicklable locks and is no longer needed after extraction)
+        base_config.pop('redis_client', None)
+
         if parent_context is not None:
             # Prefill branch context channel with parent state
             for key in parent_context.channel.keys():
                 self.channel.set(key, parent_context.channel.get(key))
+
+        self.task_queue: LocalTaskQueue = LocalTaskQueue(self, start_node)
+        self.cycle_controller = CycleController(default_max_cycles)
 
         # Task execution context management
         self._task_execution_stack: list[TaskExecutionContext] = []
