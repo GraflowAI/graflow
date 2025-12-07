@@ -933,7 +933,7 @@ class ExecutionContext:
             "trace_id": self.trace_id,
             "start_node": self.start_node,
             "steps": self.steps,
-            "completed_tasks": list(self.completed_tasks),
+            "completed_tasks": self.completed_tasks,
             "cycle_counts": dict(self.cycle_controller.cycle_counts),
             "backend": {
                 "channel": self._channel_backend_type,
@@ -1329,9 +1329,6 @@ class ExecutionContext:
         # Ensure checkpoint attributes exist for older checkpoints
         if not hasattr(self, 'completed_tasks') or self.completed_tasks is None:
             self.completed_tasks = []
-        # Convert old set-based completed_tasks to list for backward compatibility
-        elif isinstance(self.completed_tasks, set):
-            self.completed_tasks = list(self.completed_tasks)
         if not hasattr(self, 'checkpoint_metadata') or self.checkpoint_metadata is None:
             self.checkpoint_metadata = {}
         if not hasattr(self, 'last_checkpoint_path'):
