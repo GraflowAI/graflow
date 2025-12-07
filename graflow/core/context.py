@@ -527,7 +527,7 @@ class ExecutionContext:
         self._original_config = base_config
 
         # Checkpoint-related state
-        self.completed_tasks: set[str] = set()
+        self.completed_tasks: list[str] = []  # Preserves execution order
         self.checkpoint_metadata: dict[str, Any] = {}
         self.last_checkpoint_path: Optional[str] = None
         self.checkpoint_requested: bool = False
@@ -904,7 +904,8 @@ class ExecutionContext:
 
     def mark_task_completed(self, task_id: str) -> None:
         """Track task completion for checkpoint state."""
-        self.completed_tasks.add(task_id)
+        if task_id not in self.completed_tasks:
+            self.completed_tasks.append(task_id)
 
     def request_checkpoint(
         self,
@@ -1327,7 +1328,10 @@ class ExecutionContext:
 
         # Ensure checkpoint attributes exist for older checkpoints
         if not hasattr(self, 'completed_tasks') or self.completed_tasks is None:
-            self.completed_tasks = set()
+            self.completed_tasks = []
+        # Convert old set-based completed_tasks to list for backward compatibility
+        elif isinstance(self.completed_tasks, set):
+            self.completed_tasks = list(self.completed_tasks)
         if not hasattr(self, 'checkpoint_metadata') or self.checkpoint_metadata is None:
             self.checkpoint_metadata = {}
         if not hasattr(self, 'last_checkpoint_path'):
