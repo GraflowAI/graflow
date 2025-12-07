@@ -37,16 +37,42 @@ def _iter_children(obj: Any) -> Iterator[Tuple[str, Any]]:
         for i, v in enumerate(obj):
             yield f"[{i}]", v
 
-    # General objects with __dict__
-    else:
-        try:
-            attrs = vars(obj)
-        except TypeError:
-            # Object doesn't have __dict__ (e.g., built-in types)
-            return
+    # Check for function closures (this is where locks often hide!)
+    if callable(obj):
+        # Check closure variables
+        if hasattr(obj, '__closure__') and obj.__closure__:
+            for i, cell in enumerate(obj.__closure__):
+                try:
+                    yield f".__closure__[{i}]", cell.cell_contents
+                except ValueError:
+                    # Empty cell
+                    pass
 
-        for name, v in attrs.items():
-            yield f".{name}", v
+        # Check __globals__ (functions carry their module globals)
+        # This is critical because cloudpickle serializes referenced globals!
+        if hasattr(obj, '__globals__'):
+            for key, value in obj.__globals__.items():
+                # Only check non-builtin globals to avoid infinite loops
+                if not key.startswith('__') and key not in ('annotations', 'functools', 'uuid'):
+                    yield f".__globals__[{key!r}]", value
+
+    # Check for __wrapped__ attribute (common in decorators)
+    if hasattr(obj, '__wrapped__'):
+        yield ".__wrapped__", obj.__wrapped__ # type: ignore
+
+    # Check for 'func' attribute (common in TaskWrapper and similar)
+    if hasattr(obj, 'func'):
+        yield ".func", obj.func # type: ignore
+
+    # General objects with __dict__
+    try:
+        attrs = vars(obj)
+    except TypeError:
+        # Object doesn't have __dict__ (e.g., built-in types)
+        return
+
+    for name, v in attrs.items():
+        yield f".{name}", v
 
 
 def find_thread_locks(root: Any, max_depth: int = 8) -> List[Tuple[str, Any]]:
@@ -123,23 +149,33 @@ def debug_taskgraph_for_locks(graph: Any) -> None:
     """
     logger.info("Analyzing TaskGraph for thread locks...")
 
-    try:
-        locks = find_thread_locks(graph, max_depth=10)
-    except Exception as e:
-        logger.error(f"Error analyzing TaskGraph: {e}", exc_info=True)
-        return
-
-    if not locks:
-        logger.info("No thread locks found in TaskGraph")
+    # Try progressively deeper searches
+    for depth in [10, 20, 30]:
+        try:
+            locks = find_thread_locks(graph, max_depth=depth)
+            if locks:
+                logger.warning(f"Found {len(locks)} thread lock(s) at depth={depth}")
+                break
+            else:
+                logger.info(f"No locks found at depth={depth}, trying deeper...")
+        except Exception as e:
+            logger.error(f"Error analyzing TaskGraph at depth={depth}: {e}", exc_info=True)
+            return
+    else:
+        logger.info("No thread locks found in TaskGraph (searched up to depth=30)")
         return
 
     # Found locks - log detailed information
     logger.warning(f"Found {len(locks)} thread lock(s) in TaskGraph:")
-    for path, lock in locks:
+    for path, lock in locks[:10]:  # Show first 10
         lock_type = type(lock).__name__
-        logger.warning(f"  Lock at: {path}")
-        logger.warning(f"    Type: {lock_type}")
-        logger.warning(f"    Object: {lock!r}")
+        msg = f"  Lock at: {path}"
+        msg += f"\n    Type: {lock_type}"
+        msg += f"\n    Object: {lock!r}"
+        logger.warning(msg)
+
+    if len(locks) > 10:
+        logger.warning(f"  ... and {len(locks) - 10} more locks")
 
     # Additional guidance
     logger.warning("Serialization will fail due to these locks")
