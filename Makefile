@@ -16,11 +16,11 @@ check:
 
 # Run tests
 test:
-	uvx pytest tests/ -v
+	uv run pytest tests/ -v
 
 # Run tests with coverage
 test-cov:
-	uvx pytest tests/ --cov=flowlet --cov-report=html --cov-report=term
+	uv run pytest tests/ --cov=flowlet --cov-report=html --cov-report=term
 
 # Clean up cache and build artifacts
 clean:
