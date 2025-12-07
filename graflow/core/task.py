@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Optional, Union
 
@@ -13,8 +12,6 @@ from graflow.exceptions import GraflowRuntimeError
 
 if TYPE_CHECKING:
     from graflow.core.handlers.group_policy import GroupExecutionPolicy
-
-logger = logging.getLogger(__name__)
 
 
 class Executable(ABC):
@@ -356,6 +353,14 @@ class Task(Executable):
             self._register_to_context()
 
     @property
+    def _logger(self):
+        """Get logger instance (lazy initialization to avoid module-level import)."""
+        if not hasattr(self, '_logger_instance'):
+            import logging
+            self._logger_instance = logging.getLogger(__name__)
+        return self._logger_instance
+
+    @property
     def task_id(self) -> str:
         """Return the task_id of this root task."""
         return self._task_id
@@ -366,7 +371,7 @@ class Task(Executable):
 
     def run(self) -> Any:
         """Execute this task (typically a no-op)."""
-        logger.debug("Starting workflow from root: %s", self._task_id)
+        self._logger.debug("Starting workflow from root: %s", self._task_id)
         pass
 
     def __repr__(self) -> str:

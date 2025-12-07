@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import os
 import re
 import time
@@ -30,8 +29,6 @@ if TYPE_CHECKING:
 
 T = TypeVar('T')
 
-logger = logging.getLogger(__name__)
-
 # Compiled regex pattern for iteration task detection (performance optimization)
 _ITERATION_PATTERN: re.Pattern[str] = re.compile(r'(_cycle_\d+_[0-9a-f]+)+$')
 
@@ -54,6 +51,14 @@ class TaskExecutionContext:
         self.retries = 0
         self.max_retries = execution_context.default_max_retries
         self.local_data: dict[str, Any] = {}
+
+    @property
+    def _logger(self):
+        """Get logger instance (lazy initialization to avoid module-level import)."""
+        if not hasattr(self, '_logger_instance'):
+            import logging
+            self._logger_instance = logging.getLogger(__name__)
+        return self._logger_instance
 
     @property
     def trace_id(self) -> str:
@@ -283,7 +288,7 @@ class TaskExecutionContext:
             if checkpoint_task_id == self.task_id:
                 existing_feedback_id = user_metadata.get("feedback_id")
                 if existing_feedback_id:
-                    logger.info(
+                    self._logger.info(
                         "Found feedback_id in checkpoint metadata for task %s: %s",
                         self.task_id,
                         existing_feedback_id,
@@ -545,6 +550,14 @@ class ExecutionContext:
             backend_config=base_config,
             channel_manager=self.channel
         )
+
+    @property
+    def _logger(self):
+        """Get logger instance (lazy initialization to avoid module-level import)."""
+        if not hasattr(self, '_logger_instance'):
+            import logging
+            self._logger_instance = logging.getLogger(__name__)
+        return self._logger_instance
 
     def create_branch_context(self, branch_id: str) -> ExecutionContext:
         """Create a child execution context for parallel execution.
@@ -985,7 +998,7 @@ class ExecutionContext:
         """
         self._terminate_called_in_current_task = True
         self.ctrl_message = message
-        logger.info(
+        self._logger.info(
             "Workflow termination requested: %s",
             message,
             extra={"session_id": self.session_id, "ctrl_msg": message}
@@ -1016,7 +1029,7 @@ class ExecutionContext:
         """
         self._cancel_called_in_current_task = True
         self.ctrl_message = message
-        logger.warning(
+        self._logger.warning(
             "Workflow cancellation requested: %s",
             message,
             extra={"session_id": self.session_id, "ctrl_msg": message}
@@ -1047,7 +1060,7 @@ class ExecutionContext:
             # Explicit goto: Skip successors regardless of whether task is new or existing
             if is_new_task:
                 # New task: Create it but still skip successors
-                logger.debug(
+                self._logger.debug(
                     "Goto: Creating new task (skip successors): %s",
                     task_id,
                     extra={"session_id": self.session_id, "goto": True, "is_new": True}
@@ -1055,7 +1068,7 @@ class ExecutionContext:
                 self.graph.add_node(executable, task_id)
             else:
                 # Existing task: Jump to it
-                logger.debug(
+                self._logger.debug(
                     "Goto: Jumping to existing task: %s",
                     task_id,
                     extra={"session_id": self.session_id, "goto": True, "is_new": False}
@@ -1065,7 +1078,7 @@ class ExecutionContext:
         # Auto-detect behavior (no goto specified)
         elif is_new_task:
             # New task: Create dynamic task (normal successor processing)
-            logger.debug(
+            self._logger.debug(
                 "Creating new dynamic task: %s",
                 task_id,
                 extra={"session_id": self.session_id, "is_dynamic": True}
@@ -1075,7 +1088,7 @@ class ExecutionContext:
             # Note: _goto_called_in_current_task remains False for normal processing
         else:
             # Existing task: Jump to it (auto-detected, skip successors)
-            logger.debug(
+            self._logger.debug(
                 "Jumping to existing task: %s",
                 task_id,
                 extra={"session_id": self.session_id, "auto_goto": True}
