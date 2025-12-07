@@ -756,10 +756,8 @@ class TaskWrapper(Executable):
         Returns:
             Tuple of (callable, args, state, listitems, dictitems) for pickle
         """
-        # Prepare state dict excluding wrapper function
-        state = self.__dict__.copy()
-        if 'func' in state:
-            del state['func']  # Remove wrapper with decorator __globals__
+        # Use __getstate__ to get properly cleaned state (removes _execution_context, etc.)
+        state = self.__getstate__()
 
         return (
             _reconstruct_task_wrapper,
