@@ -462,9 +462,14 @@ class ParallelGroup(Executable):
 
         if backend_config is not None:
             from graflow.utils.redis_utils import ensure_redis_connection_params
+
             # Ensure redis_client has connection params for serialization
             ensure_redis_connection_params(backend_config)
-            self._execution_config["backend_config"].update(backend_config)
+
+            # Remove redis_client before storing (contains unpicklable locks)
+            # Connection params have already been extracted by ensure_redis_connection_params()
+            cleaned_config = {k: v for k, v in backend_config.items() if k != 'redis_client'}
+            self._execution_config["backend_config"].update(cleaned_config)
 
         from graflow.core.handlers.group_policy import canonicalize_group_policy
 
