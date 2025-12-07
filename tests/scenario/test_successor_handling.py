@@ -2,15 +2,14 @@
 Test successor handling for dynamic tasks
 """
 
-from graflow.core.context import ExecutionContext
+from graflow.core.context import ExecutionContext, TaskExecutionContext
 from graflow.core.decorators import task
 from graflow.core.graph import TaskGraph
+from graflow.trace.noop import NoopTracer
 
 
 def test_dynamic_task_with_successors():
     """Test that dynamic tasks get their successors processed."""
-    graph = TaskGraph()
-    context = ExecutionContext.create(graph, "main_task", max_steps=10)
 
     @task("main_task", inject_context=True)
     def main_task(task_ctx):
@@ -32,6 +31,8 @@ def test_dynamic_task_with_successors():
         return "final_complete"
 
     # Build graph with edges
+    graph = TaskGraph()
+
     graph.add_node(main_task, "main_task")
     graph.add_node(dynamic_cleanup, "dynamic_cleanup")
     graph.add_node(final_task, "final_task")
@@ -40,7 +41,15 @@ def test_dynamic_task_with_successors():
     graph.add_edge("main_task", "final_task")
 
     # Execute workflow
+    tracer = NoopTracer()
+    context = ExecutionContext.create(graph, "main_task", max_steps=100, tracer=tracer)
     context.execute()
+
+    print(f"Compile time graph:\n{context.graph}")
+    runtime_graph = tracer.get_runtime_graph()
+    assert runtime_graph is not None
+    from graflow.utils.graph import draw_ascii
+    print(f"Runtime graph after execution:\n{draw_ascii(runtime_graph)}")
 
     # Verify execution via stored results in the context channel
     assert context.get_result("main_task") == "main_complete"
@@ -50,21 +59,18 @@ def test_dynamic_task_with_successors():
 
 def test_dynamic_task_with_manual_successors():
     """Test dynamic task with manually added successors."""
-    graph = TaskGraph()
-    context = ExecutionContext.create(graph, "controller", max_steps=15)
 
     @task("controller", inject_context=True)
-    def controller(task_ctx):
+    def controller(task_ctx: TaskExecutionContext):
         # Create dynamic task
-        @task("data_processor")
-        def data_processor():
+        @task("data_processor", inject_context=True)
+        def data_processor(task_ctx: TaskExecutionContext):
+            # Add dynamic successor task
+            task_ctx.next_task(cleanup_task2)
             return "data_processed"
 
-        # Add dynamic task
+        # Add dynamic successor task
         task_ctx.next_task(data_processor)
-
-        # Manually add edge for dynamic task (simulating runtime graph modification)
-        graph.add_edge("data_processor", "cleanup_task2")
 
         return "controller_complete"
 
@@ -77,6 +83,7 @@ def test_dynamic_task_with_manual_successors():
         return "final_complete"
 
     # Build initial graph
+    graph = TaskGraph()
     graph.add_node(controller, "controller")
     graph.add_node(cleanup_task2, "cleanup_task2")
     graph.add_node(final_task2, "final_task2")
@@ -85,7 +92,15 @@ def test_dynamic_task_with_manual_successors():
     graph.add_edge("controller", "final_task2")
 
     # Execute workflow
+    tracer = NoopTracer()
+    context = ExecutionContext.create(graph, "controller", max_steps=150, tracer=tracer)
     context.execute()
+
+    print(f"Compile time graph:\n{context.graph}")
+    runtime_graph = tracer.get_runtime_graph()
+    assert runtime_graph is not None
+    from graflow.utils.graph import draw_ascii
+    print(f"Runtime graph after execution:\n{draw_ascii(runtime_graph)}")
 
     # Verify execution via stored results in the context channel
     assert context.get_result("controller") == "controller_complete"
