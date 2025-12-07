@@ -1,1550 +1,821 @@
-# Graflow 実用的開発計画書 (改訂版)
+# Graflow Development Plan
 
-## 概要
+**Date:** 2025-12-08
+**Current Version:** v0.2.x
+**Target Version:** v0.3.0+
 
-既存の実装とアーキテクチャ設計を基に、実用的で段階的な開発計画を策定しました。現在の基盤コードを活用し、循環グラフ対応ワークフローエンジンの実現を目指します。
+## Executive Summary
 
-## 現状分析
+Graflow has evolved into a mature workflow execution engine with comprehensive features including HITL, checkpointing, tracing, and distributed execution. This development plan outlines the next phase of improvements focusing on production readiness, developer experience, and ecosystem integration.
 
-### 既存実装の強み
-- **基本アーキテクチャ**: Executable抽象化、Task/ParallelGroup実装が完成
-- **グラフ基盤**: NetworkX統合、WorkflowContext、ExecutionContext実装済み
-- **演算子記法**: `>>` (パイプライン)、`|` (並列)演算子実装済み
-- **デコレータシステム**: @task デコレータによる関数のタスク化機能
+---
 
-### 実装が必要な主要機能
-1. **循環制御メカニズム** - 現在未実装
-2. **TaskQueue/スケジューリング** - 現在未実装
-3. **Channel/データ受け渡し** - 現在未実装
-4. **動的タスク生成** - 部分実装
-5. **監視・API機能** - 現在未実装
+## Current State Assessment
 
-## 段階別開発計画
+### Implemented Features ✅
 
-### Phase 1: 基盤強化 (2週間)
+**Core Workflow Engine:**
+- Task graph execution with cycle detection
+- Sequential (`>>`) and parallel (`|`) operators
+- Dynamic task generation (`next_task()`, `next_iteration()`)
+- Distributed execution via Redis
+- Local and Redis-based task queues and channels
 
-#### 1.1 TaskStatus Enum and State Management (from backup plan)
+**Production Features:**
+- **Checkpoint/Resume:** Three-file checkpoint system with metadata
+- **HITL:** Multi-type feedback system with Slack/webhook notifications
+- **Tracing:** Langfuse integration for observability
+- **LLM Integration:** LLM client and agent management
+- **API:** REST API for workflow management and feedback
+- **Handlers:** Direct, Docker, and custom execution strategies
+
+**Development Tools:**
+- Comprehensive test suite
+- Type checking with mypy
+- Linting with ruff
+- Rich example collection
+- Visualization tools (ASCII, Mermaid, PNG)
+
+### Gap Analysis
+
+**Missing or Underdeveloped:**
+1. **Production Monitoring:** No built-in metrics/dashboards
+2. **Resilience:** Limited circuit breaker, retry strategies
+3. **Security:** No task signing, Redis auth optional
+4. **Performance:** No systematic benchmarking
+5. **DX:** Limited IDE integration, debugging tools
+6. **Ecosystem:** No pre-built integrations (Airflow, Prefect, etc.)
+
+---
+
+## Development Roadmap
+
+### Phase 1: Production Hardening (v0.3.0) - 6-8 weeks
+
+**Goal:** Make Graflow production-ready for mission-critical workflows
+
+#### 1.1 Observability & Monitoring (2 weeks)
+
+**Metrics Collection:**
 ```python
-# graflow/core/task_status.py
-from enum import Enum
+# graflow/observability/metrics.py
+
+from typing import Protocol, Dict, Any
 from dataclasses import dataclass, field
-from typing import Optional, Any, Dict
 from datetime import datetime
 
-class TaskStatus(Enum):
-    """Enhanced TaskStatus supporting cyclic workflows and HITL."""
-    BLOCKED = "blocked"           # Waiting for dependencies
-    READY = "ready"              # Ready for execution
-    RUNNING = "running"          # Currently executing
-    PLANNED = "planned"          # Completed, awaiting downstream processing
-    FEEDBACK_REQUIRED = "feedback_required"   # HITL: Feedback needed
-    REJECTED = "rejected"        # HITL: Rejected by human
-    SUCCESS = "success"          # Successfully completed
-    ERROR = "error"              # Execution error
-    RETRY_WAITING = "retry_waiting"  # Waiting for retry
-    SKIPPED = "skipped"          # Skipped execution
-    COMPLETED = "completed"      # Final completion (no re-execution)
+class MetricsCollector(Protocol):
+    """Protocol for metrics collection."""
+    def record_task_execution(self, task_id: str, duration: float, status: str) -> None: ...
+    def record_workflow_execution(self, workflow_id: str, duration: float, tasks_count: int) -> None: ...
+    def record_queue_depth(self, queue_name: str, depth: int) -> None: ...
+    def increment_counter(self, metric_name: str, value: int = 1, tags: Dict[str, str] = None) -> None: ...
 
 @dataclass
-class TaskState:
-    """Channel-based task state management."""
-    task_id: str
-    status: TaskStatus
-    result: Any = None
-    error: Optional[Exception] = None
-    retry_count: int = 0
-    version: int = 1
-    cycle_count: int = 0
-    updated_at: datetime = field(default_factory=datetime.now)
-    
-    def to_channel_value(self) -> Dict[str, Any]:
-        """Convert to dictionary for channel storage."""
-        return {
-            "task_id": self.task_id,
-            "status": self.status.value,
-            "result": self.result,
-            "error": str(self.error) if self.error else None,
-            "retry_count": self.retry_count,
-            "version": self.version,
-            "cycle_count": self.cycle_count,
-            "updated_at": self.updated_at.isoformat()
-        }
-    
-    @classmethod
-    def from_channel_value(cls, data: Dict[str, Any]) -> 'TaskState':
-        """Restore from channel value."""
-        return cls(
-            task_id=data["task_id"],
-            status=TaskStatus(data["status"]),
-            result=data.get("result"),
-            error=Exception(data["error"]) if data.get("error") else None,
-            retry_count=data.get("retry_count", 0),
-            version=data.get("version", 1),
-            cycle_count=data.get("cycle_count", 0)
+class PrometheusMetrics:
+    """Prometheus metrics exporter."""
+    registry: Any  # prometheus_client.CollectorRegistry
+    _task_duration: Any = None
+    _workflow_duration: Any = None
+    _queue_depth: Any = None
+    _task_counter: Any = None
+
+    def __post_init__(self):
+        from prometheus_client import Histogram, Gauge, Counter
+
+        self._task_duration = Histogram(
+            'graflow_task_duration_seconds',
+            'Task execution duration',
+            ['task_type', 'status'],
+            registry=self.registry
         )
-    
-    def transition_to(self, new_status: TaskStatus, **kwargs) -> None:
-        """Transition to new status with metadata update."""
-        old_status = self.status
-        self.status = new_status
-        self.updated_at = datetime.now()
-        
-        # Update specific metadata based on status
-        if new_status == TaskStatus.RUNNING:
-            # Reset error state when starting execution
-            self.error = None
-        elif new_status == TaskStatus.ERROR:
-            self.error = kwargs.get('error')
-            if kwargs.get('increment_retry', True):
-                self.retry_count += 1
-        elif new_status == TaskStatus.PLANNED:
-            # Successful execution, ready for next cycle
-            self.cycle_count += 1
-            self.result = kwargs.get('result')
-        elif new_status in [TaskStatus.SUCCESS, TaskStatus.COMPLETED]:
-            self.result = kwargs.get('result')
+
+        self._workflow_duration = Histogram(
+            'graflow_workflow_duration_seconds',
+            'Workflow execution duration',
+            ['workflow_name'],
+            registry=self.registry
+        )
+
+        self._queue_depth = Gauge(
+            'graflow_queue_depth',
+            'Current queue depth',
+            ['queue_name'],
+            registry=self.registry
+        )
+
+        self._task_counter = Counter(
+            'graflow_tasks_total',
+            'Total number of tasks executed',
+            ['status'],
+            registry=self.registry
+        )
+
+    def record_task_execution(self, task_id: str, duration: float, status: str) -> None:
+        self._task_duration.labels(task_type=task_id.split('_')[0], status=status).observe(duration)
+        self._task_counter.labels(status=status).inc()
 ```
 
-#### 1.3 Enhanced TaskWrapper with Cycle Configuration
+**Health Checks:**
 ```python
-# Enhancement to graflow/core/task.py
-class TaskWrapper(Executable):
-    """Wrapper class for function-based tasks with cycle and retry support."""
+# graflow/observability/health.py
 
-    def __init__(self, task_id: str, func: Callable[..., Any]) -> None:
-        """Initialize a task wrapper with task_id and function."""
-        self._task_id: str = task_id
-        self.func: Callable[..., Any] = func
-        self.max_cycle: Optional[int] = None  # Node-specific max cycle limit
-        self.max_retries: Optional[int] = None  # Node-specific max retry limit
-        # Register to current workflow context
-        self._register_to_context()
-
-    @property
-    def task_id(self) -> str:
-        """Return the task_id of this task wrapper."""
-        return self._task_id
-
-    def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        """Allow direct function call."""
-        return self.func(*args, **kwargs)
-
-    def run(self) -> Any:
-        """Execute the wrapped function."""
-        return self.func()
-    
-    def configure_cycle_control(self, execution_context: ExecutionContext) -> None:
-        """Configure cycle control for this task in the execution context."""
-        if self.max_cycle is not None:
-            execution_context.configure_node_max_cycles(self.task_id, self.max_cycle)
-    
-    def get_max_retries(self, default: int) -> int:
-        """Get max retries for this task (task-specific or default)."""
-        return self.max_retries if self.max_retries is not None else default
-
-    def __repr__(self) -> str:
-        """Return string representation of this task wrapper."""
-        config_info = []
-        if self.max_cycle is not None:
-            config_info.append(f"max_cycle={self.max_cycle}")
-        if self.max_retries is not None:
-            config_info.append(f"max_retries={self.max_retries}")
-        
-        config_str = f", {', '.join(config_info)}" if config_info else ""
-        return f"TaskWrapper({self._task_id}{config_str})"
-```
-
-#### 1.5 Human-in-the-loop Feedback Framework
-
-```python
-# graflow/core/feedback.py
-from typing import Dict, Any, Optional, Callable, Union
 from enum import Enum
-import uuid
+from dataclasses import dataclass
+from typing import Dict, List, Callable
+
+class HealthStatus(Enum):
+    HEALTHY = "healthy"
+    DEGRADED = "degraded"
+    UNHEALTHY = "unhealthy"
+
+@dataclass
+class HealthCheck:
+    name: str
+    check_fn: Callable[[], bool]
+    critical: bool = False
+
+class HealthMonitor:
+    """Monitor system health."""
+
+    def __init__(self):
+        self._checks: List[HealthCheck] = []
+
+    def register_check(self, name: str, check_fn: Callable[[], bool], critical: bool = False):
+        """Register health check."""
+        self._checks.append(HealthCheck(name, check_fn, critical))
+
+    def get_health(self) -> Dict[str, Any]:
+        """Get overall system health."""
+        results = {}
+        status = HealthStatus.HEALTHY
+
+        for check in self._checks:
+            try:
+                is_healthy = check.check_fn()
+                results[check.name] = {"status": "ok" if is_healthy else "fail"}
+
+                if not is_healthy:
+                    if check.critical:
+                        status = HealthStatus.UNHEALTHY
+                    elif status == HealthStatus.HEALTHY:
+                        status = HealthStatus.DEGRADED
+            except Exception as e:
+                results[check.name] = {"status": "error", "error": str(e)}
+                status = HealthStatus.UNHEALTHY
+
+        return {
+            "status": status.value,
+            "checks": results
+        }
+```
+
+**Deliverables:**
+- [ ] Prometheus metrics exporter
+- [ ] Health check endpoint
+- [ ] Grafana dashboard templates
+- [ ] Structured logging improvements
+- [ ] Distributed tracing context propagation
+
+---
+
+#### 1.2 Security Hardening (2 weeks)
+
+**Task Signing:**
+```python
+# graflow/security/signing.py
+
+import hmac
+import hashlib
+from typing import Callable
+from graflow.exceptions import SecurityError
+
+class TaskSigner:
+    """Signs and verifies task signatures."""
+
+    def __init__(self, secret_key: bytes):
+        if len(secret_key) < 32:
+            raise ValueError("Secret key must be at least 32 bytes")
+        self.secret_key = secret_key
+
+    def sign_task(self, task_data: bytes) -> bytes:
+        """Sign task data."""
+        signature = hmac.new(
+            self.secret_key,
+            task_data,
+            hashlib.sha256
+        ).digest()
+        return signature + task_data
+
+    def verify_and_load(self, signed_data: bytes) -> bytes:
+        """Verify signature and return task data."""
+        if len(signed_data) < 32:
+            raise SecurityError("Invalid signed data")
+
+        signature = signed_data[:32]
+        task_data = signed_data[32:]
+
+        expected_sig = hmac.new(
+            self.secret_key,
+            task_data,
+            hashlib.sha256
+        ).digest()
+
+        if not hmac.compare_digest(signature, expected_sig):
+            raise SecurityError("Signature verification failed")
+
+        return task_data
+```
+
+**Redis Authentication:**
+```python
+# Enforce Redis auth in configuration
+REDIS_CONFIG = {
+    "require_auth": True,  # Mandatory in production
+    "password": os.getenv("REDIS_PASSWORD"),
+    "ssl": True,  # Enable SSL/TLS
+    "ssl_cert_reqs": "required",
+}
+```
+
+**Deliverables:**
+- [ ] Task signature verification
+- [ ] Redis authentication enforcement
+- [ ] SSL/TLS for Redis connections
+- [ ] Security audit documentation
+- [ ] Security best practices guide
+
+---
+
+#### 1.3 Resilience Features (2 weeks)
+
+**Circuit Breaker:**
+```python
+# graflow/resilience/circuit_breaker.py
+
+from enum import Enum
+from datetime import datetime, timedelta
+from typing import Callable, Any
+from functools import wraps
+
+class CircuitState(Enum):
+    CLOSED = "closed"  # Normal operation
+    OPEN = "open"  # Failing, reject calls
+    HALF_OPEN = "half_open"  # Testing recovery
+
+class CircuitBreaker:
+    """Circuit breaker pattern implementation."""
+
+    def __init__(
+        self,
+        failure_threshold: int = 5,
+        timeout: float = 60.0,
+        recovery_timeout: float = 30.0
+    ):
+        self.failure_threshold = failure_threshold
+        self.timeout = timeout
+        self.recovery_timeout = recovery_timeout
+
+        self._state = CircuitState.CLOSED
+        self._failures = 0
+        self._last_failure_time = None
+        self._last_success_time = None
+
+    def call(self, func: Callable, *args, **kwargs) -> Any:
+        """Call function with circuit breaker protection."""
+        if self._state == CircuitState.OPEN:
+            if self._should_attempt_reset():
+                self._state = CircuitState.HALF_OPEN
+            else:
+                raise CircuitBreakerError("Circuit breaker is OPEN")
+
+        try:
+            result = func(*args, **kwargs)
+            self._on_success()
+            return result
+        except Exception as e:
+            self._on_failure()
+            raise
+
+    def _on_success(self):
+        """Handle successful call."""
+        self._failures = 0
+        self._last_success_time = datetime.now()
+        if self._state == CircuitState.HALF_OPEN:
+            self._state = CircuitState.CLOSED
+
+    def _on_failure(self):
+        """Handle failed call."""
+        self._failures += 1
+        self._last_failure_time = datetime.now()
+
+        if self._failures >= self.failure_threshold:
+            self._state = CircuitState.OPEN
+
+    def _should_attempt_reset(self) -> bool:
+        """Check if we should try recovery."""
+        if self._last_failure_time is None:
+            return True
+
+        elapsed = (datetime.now() - self._last_failure_time).total_seconds()
+        return elapsed >= self.recovery_timeout
+```
+
+**Retry Strategies:**
+```python
+# graflow/resilience/retry.py
+
+from typing import Callable, Type, Tuple
 import time
+import random
+
+class RetryStrategy:
+    """Configurable retry strategy."""
+
+    def __init__(
+        self,
+        max_attempts: int = 3,
+        base_delay: float = 1.0,
+        max_delay: float = 60.0,
+        exponential_base: float = 2.0,
+        jitter: bool = True,
+        exceptions: Tuple[Type[Exception], ...] = (Exception,)
+    ):
+        self.max_attempts = max_attempts
+        self.base_delay = base_delay
+        self.max_delay = max_delay
+        self.exponential_base = exponential_base
+        self.jitter = jitter
+        self.exceptions = exceptions
+
+    def execute(self, func: Callable, *args, **kwargs):
+        """Execute function with retry."""
+        last_exception = None
+
+        for attempt in range(self.max_attempts):
+            try:
+                return func(*args, **kwargs)
+            except self.exceptions as e:
+                last_exception = e
+
+                if attempt < self.max_attempts - 1:
+                    delay = self._calculate_delay(attempt)
+                    time.sleep(delay)
+
+        raise last_exception
+
+    def _calculate_delay(self, attempt: int) -> float:
+        """Calculate delay for retry attempt."""
+        delay = min(
+            self.base_delay * (self.exponential_base ** attempt),
+            self.max_delay
+        )
+
+        if self.jitter:
+            delay *= (0.5 + random.random())
+
+        return delay
+```
+
+**Deliverables:**
+- [ ] Circuit breaker implementation
+- [ ] Exponential backoff retry strategies
+- [ ] Dead letter queue for failed tasks
+- [ ] Graceful degradation support
+- [ ] Resilience testing suite
+
+---
+
+#### 1.4 Performance Optimization (2 weeks)
+
+**Connection Pooling:**
+```python
+# graflow/utils/redis_pool.py
+
+import redis
+from typing import Dict, Optional
 import threading
 
-class FeedbackType(Enum):
-    """Types of feedback that can be requested."""
-    APPROVAL = "approval"        # Boolean approval (approved/rejected)
-    TEXT = "text"               # Text input feedback
+class RedisConnectionPool:
+    """Singleton Redis connection pool."""
 
-class FeedbackManager:
-    """Event-driven feedback manager supporting multiple feedback types."""
-    
-    def __init__(self):
-        self.pending_feedback: Dict[str, Dict[str, Any]] = {}
-        self.suspended_tasks: Dict[str, Callable] = {}
-        self._lock = threading.Lock()
-    
-    def request_feedback(self, task_id: str, data: Any, 
-                        feedback_type: Union[FeedbackType, str] = FeedbackType.APPROVAL,
-                        prompt: str = None, options: list = None) -> str:
-        """Request feedback and return feedback ID."""
-        feedback_id = str(uuid.uuid4())
-        
-        # Convert string to enum if needed
-        if isinstance(feedback_type, str):
-            feedback_type = FeedbackType(feedback_type)
-        
-        with self._lock:
-            self.pending_feedback[feedback_id] = {
-                "task_id": task_id,
-                "data": data,
-                "feedback_type": feedback_type,
-                "prompt": prompt,
-                "options": options,
-                "timestamp": time.time()
-            }
-        
-        # Notify external system (can be extended)
-        self.notify_feedback_needed(feedback_id, data, feedback_type, prompt, options)
-        return feedback_id
-    
-    def provide_feedback(self, feedback_id: str, response: Any, 
-                        approved: bool = True, reason: str = None) -> bool:
-        """Provide feedback response with flexible response types."""
-        with self._lock:
-            if feedback_id not in self.pending_feedback:
-                return False
-            
-            feedback_data = self.pending_feedback[feedback_id]
-            task_id = feedback_data["task_id"]
-            feedback_type = feedback_data["feedback_type"]
-            
-            # Resume suspended task
-            if task_id in self.suspended_tasks:
-                resume_callback = self.suspended_tasks[task_id]
-                del self.suspended_tasks[task_id]
-                
-                # Prepare response based on feedback type
-                if feedback_type == FeedbackType.APPROVAL:
-                    if approved:
-                        resume_callback(feedback_data["data"])
-                    else:
-                        resume_callback(FeedbackRejectedException(reason))
-                elif feedback_type == FeedbackType.TEXT:
-                    # Return text response directly
-                    resume_callback(response)
-                else:
-                    # Default: return the response directly
-                    resume_callback(response)
-            
-            del self.pending_feedback[feedback_id]
-            return True
-    
-    def suspend_task(self, task_id: str, resume_callback: Callable) -> None:
-        """Suspend a task until feedback is received."""
-        with self._lock:
-            self.suspended_tasks[task_id] = resume_callback
-    
-    def notify_feedback_needed(self, feedback_id: str, data: Any, 
-                              feedback_type: FeedbackType, prompt: str = None, 
-                              options: list = None) -> None:
-        """Notify external system about feedback requirement (extensible)."""
-        # Default implementation - can be overridden
-        print(f"Feedback required: {feedback_type.value} for {feedback_id}")
-        if prompt:
-            print(f"Prompt: {prompt}")
-        if options:
-            print(f"Options: {options}")
+    _pools: Dict[str, redis.ConnectionPool] = {}
+    _lock = threading.Lock()
 
-class FeedbackRejectedException(Exception):
-    """Exception raised when feedback is rejected."""
-    pass
+    @classmethod
+    def get_pool(
+        cls,
+        host: str = "localhost",
+        port: int = 6379,
+        db: int = 0,
+        max_connections: int = 50,
+        **kwargs
+    ) -> redis.ConnectionPool:
+        """Get or create connection pool."""
+        key = f"{host}:{port}:{db}"
 
-# Convenience methods for common feedback types
-
-class FeedbackManager:
-    """Event-driven feedback manager supporting multiple feedback types."""
-    
-    def __init__(self):
-        self.pending_feedback: Dict[str, Dict[str, Any]] = {}
-        self.suspended_tasks: Dict[str, Callable] = {}
-        self._lock = threading.Lock()
-    
-    # ... (existing methods remain the same) ...
-    
-    def request_approval(self, task_id: str, data: Any, prompt: str = None) -> str:
-        """Convenience method to request approval."""
-        return self.request_feedback(
-            task_id=task_id,
-            data=data,
-            feedback_type=FeedbackType.APPROVAL,
-            prompt=prompt or "Please approve this task"
-        )
-    
-    def request_text_input(self, task_id: str, data: Any, prompt: str) -> str:
-        """Convenience method to request text input."""
-        return self.request_feedback(
-            task_id=task_id,
-            data=data,
-            feedback_type=FeedbackType.TEXT,
-            prompt=prompt
-        )
-    
-    def approve(self, feedback_id: str, reason: str = None) -> bool:
-        """Convenience method to approve a request."""
-        return self.provide_feedback(feedback_id, None, approved=True, reason=reason)
-    
-    def reject(self, feedback_id: str, reason: str = None) -> bool:
-        """Convenience method to reject a request."""
-        return self.provide_feedback(feedback_id, None, approved=False, reason=reason)
-    
-    def provide_text(self, feedback_id: str, text: str) -> bool:
-        """Convenience method to provide text response."""
-        return self.provide_feedback(feedback_id, text)
-
-# Integration into ExecutionContext
-@dataclass
-class ExecutionContext:
-    # Existing fields...
-    feedback_manager: FeedbackManager = field(default_factory=FeedbackManager)
-    
-    def get_service(self, service_name: str) -> Any:
-        """Get service by name."""
-        if service_name == "feedback_manager":
-            return self.feedback_manager
-        return None
-    
-    def suspend_until_feedback(self, task_id: str, feedback_id: str) -> None:
-        """Suspend task execution until feedback is received."""
-        def resume_callback(result):
-            if isinstance(result, Exception):
-                self.set_result(task_id, result)
-            else:
-                self.set_result(task_id, result)
-        
-        self.feedback_manager.suspend_task(task_id, resume_callback)
-```
-
-#### 1.6 Task Feedback Integration
-
-```python
-# Enhancement to graflow/core/task.py
-# Note: Using ExecutionContext directly for task execution context
-# The ExecutionContext already provides the necessary functionality
-
-# Usage examples for different feedback types
-
-@task(name="approval_task")
-def require_approval(context: ExecutionContext, data: Any) -> Any:
-    """Task requiring approval before continuing."""
-    feedback_manager = context.get_service("feedback_manager")
-    feedback_id = feedback_manager.request_approval(
-        context.current_task_id, 
-        data, 
-        prompt="Please approve this data processing"
-    )
-    
-    # Task will be suspended here until approval is received
-    context.suspend_until_feedback(feedback_id)
-    
-    # This point will be reached after approval is provided
-    return data
-
-@task(name="text_input_task")
-def require_text_input(context: ExecutionContext, data: Any) -> Any:
-    """Task requiring text input from user."""
-    feedback_manager = context.get_service("feedback_manager")
-    feedback_id = feedback_manager.request_text_input(
-        context.current_task_id,
-        data,
-        prompt="Please provide additional information about this data"
-    )
-    
-    # Task will be suspended here until text input is received
-    context.suspend_until_feedback(feedback_id)
-    
-    # The result will be the text input provided by user
-    return context.get_result()
-```
-
-#### 1.7 Enhanced WorkflowContext with Default Settings and WorkflowEngine Integration
-```python
-# Enhancement to graflow/core/workflow.py
-# Note: Execution logic has been moved to graflow/core/engine.py (WorkflowEngine)
-class WorkflowContext:
-    """Enhanced context manager with default configuration support."""
-
-    def __init__(self, name: str, *, 
-                 default_max_cycle: int = 10,
-                 default_max_retries: int = 3,
-                 execution_mode: str = "sequential"):
-        """Initialize a new workflow context with defaults.
-
-        Args:
-            name: Name for this workflow
-            default_max_cycle: Default max cycles for tasks
-            default_max_retries: Default max retries for tasks
-            execution_mode: "sequential" or "parallel"
-        """
-        self.name = name
-        self.graph: nx.DiGraph = nx.DiGraph()
-        self._task_counter = 0
-        self._group_counter = 0
-        
-        # Default configuration
-        self.default_max_cycle = default_max_cycle
-        self.default_max_retries = default_max_retries
-        self.execution_mode = execution_mode
-
-    def execute(self, start_node: Optional[str] = None, max_steps: int = 100) -> None:
-        """Execute the workflow with configured defaults."""
-        if start_node is None:
-            candidate_nodes = [node for node in self.graph.nodes() if self.graph.in_degree(node) == 0]
-            if not candidate_nodes:
-                raise ValueError("No start node specified and no nodes with no predecessors found.")
-            start_node = candidate_nodes[0]
-
-        # Create ExecutionContext with workflow defaults
-        exec_context = ExecutionContext.create(
-            self.graph, 
-            start_node, 
-            max_steps=max_steps,
-            default_max_cycle=self.default_max_cycle,
-            default_max_retries=self.default_max_retries,
-            execution_mode=self.execution_mode
-        )
-        
-        # Configure task-specific settings
-        for node_id in self.graph.nodes():
-            task_obj = self.graph.nodes[node_id]["task"]
-            if hasattr(task_obj, 'max_cycle') and task_obj.max_cycle is not None:
-                exec_context.configure_node_max_cycles(node_id, task_obj.max_cycle)
-        
-        # Use WorkflowEngine for execution
-        from .engine import WorkflowEngine
-        engine = WorkflowEngine(strategy=self.execution_mode)
-        engine.execute(exec_context)
-
-def workflow(name: str, **kwargs) -> WorkflowContext:
-    """Enhanced workflow factory with configuration support.
-
-    Args:
-        name: Name of the workflow
-        **kwargs: Configuration options (default_max_cycle, default_max_retries, etc.)
-
-    Returns:
-        WorkflowContext instance with specified configuration
-        
-    Examples:
-        # Use system defaults
-        with workflow("my_workflow") as wf:
-            pass
-            
-        # Custom defaults
-        with workflow("reliable_workflow", default_max_retries=5, default_max_cycle=20) as wf:
-            pass
-    """
-    return WorkflowContext(name, **kwargs)
-```
-
-#### 1.8 Usage Examples with max_cycle, max_retries, and Feedback
-```python
-# Example usage of max_cycle and max_retries parameters
-from graflow.core.decorators import task
-from graflow.core.workflow import workflow
-
-@task(name="data_processor", max_cycle=5, max_retries=2)
-def process_data(context: ExecutionContext, data: Dict[str, Any]) -> Dict[str, Any]:
-    """A task that can iterate up to 5 times and retry up to 2 times."""
-    iteration = context.cycle_controller.cycle_counts.get("data_processor", 0)
-    
-    # Simulate potential failure
-    if random.random() < 0.3:  # 30% chance of failure
-        raise Exception("Random processing error")
-    
-    # Process data
-    processed = {"value": data.get("value", 0) + 1, "iteration": iteration}
-    
-    # Continue iterating if condition not met
-    if processed["value"] < 10 and iteration < 4:  # Will respect max_cycle=5
-        context.next_iteration(data=processed)
-    
-    return processed
-
-@task(name="unreliable_task", max_retries=5)
-def unreliable_network_call() -> Dict[str, Any]:
-    """A task that might fail but has high retry limit."""
-    if random.random() < 0.7:  # 70% chance of failure
-        raise Exception("Network timeout")
-    return {"status": "success", "data": "fetched"}
-
-@task(name="simple_task")  # Uses workflow defaults
-def simple_task() -> str:
-    """A simple task with default limits."""
-    return "completed"
-
-@task(name="feedback_required_task")
-def require_human_approval(context: ExecutionContext, data: Dict[str, Any]) -> Dict[str, Any]:
-    """A task that requires human approval before continuing."""
-    # Check if approval is needed
-    if data.get("requires_approval", False):
-        feedback_manager = context.get_service("feedback_manager")
-        feedback_id = feedback_manager.request_feedback(
-            context.current_task_id, 
-            data, 
-            feedback_type="approval"
-        )
-        
-        # Task will suspend here until feedback is received
-        context.suspend_until_feedback(feedback_id)
-    
-    return {"status": "approved", "data": data}
-
-# Usage examples with different configurations
-def example_default_workflow():
-    """Example with system defaults (max_cycle=10, max_retries=3)."""
-    with workflow("default_workflow") as wf:
-        flow = simple_task >> unreliable_network_call
-        wf.execute()
-
-def example_custom_workflow():
-    """Example with custom workflow defaults."""
-    with workflow("custom_workflow", 
-                  default_max_cycle=20, 
-                  default_max_retries=5) as wf:
-        # simple_task will use max_retries=5 (workflow default)
-        # unreliable_network_call will use max_retries=5 (its own setting)
-        # data_processor will use max_retries=2 (its own setting)
-        flow = simple_task >> (unreliable_network_call | data_processor)
-        wf.execute()
-
-def example_parallel_workflow():
-    """Example with parallel execution mode."""
-    with workflow("parallel_workflow", 
-                  execution_mode="parallel",
-                  default_max_retries=3) as wf:
-        flow = simple_task >> (unreliable_network_call | data_processor)
-        wf.execute()
-
-def example_feedback_workflow():
-    """Example with feedback/approval workflow."""
-    with workflow("feedback_workflow") as wf:
-        # Setup workflow with feedback integration
-        flow = simple_task >> require_human_approval >> data_processor
-        
-        # Execute workflow
-        wf.execute()
-        
-        # External system can provide feedback
-        feedback_manager = wf.execution_context.feedback_manager
-        
-        # Simulate external approval (this would be done via API/UI)
-        import time
-        time.sleep(1)  # Simulate human thinking time
-        
-        # Get pending feedback requests
-        pending = feedback_manager.pending_feedback
-        for feedback_id in pending:
-            # Approve the request
-            feedback_manager.provide_feedback(feedback_id, approved=True)
-
-def example_text_feedback_workflow():
-    """Example with text input feedback workflow."""
-    with workflow("text_feedback_workflow") as wf:
-        # Setup workflow with text input
-        flow = simple_task >> require_text_input >> data_processor
-        
-        # Execute workflow
-        wf.execute()
-        
-        # External system provides text feedback
-        feedback_manager = wf.execution_context.feedback_manager
-        
-        # Simulate external text input
-        pending = feedback_manager.pending_feedback
-        for feedback_id in pending:
-            # Provide text input using convenience method
-            feedback_manager.provide_text(feedback_id, "Additional context provided by user")
-
-def example_mixed_feedback_workflow():
-    """Example with multiple feedback types in one workflow."""
-    with workflow("mixed_feedback_workflow") as wf:
-        # Setup workflow with approval and text input
-        flow = (simple_task >> 
-                require_approval >> 
-                require_text_input >> 
-                data_processor)
-        
-        # Execute workflow
-        wf.execute()
-        
-        # External system handles different feedback types
-        feedback_manager = wf.execution_context.feedback_manager
-        
-        # Handle all pending feedback requests
-        pending = feedback_manager.pending_feedback
-        for feedback_id, feedback_data in pending.items():
-            feedback_type = feedback_data["feedback_type"]
-            
-            if feedback_type == FeedbackType.APPROVAL:
-                # Use convenience method for approval
-                feedback_manager.approve(feedback_id, reason="Approved by user")
-            elif feedback_type == FeedbackType.TEXT:
-                # Use convenience method for text input
-                feedback_manager.provide_text(feedback_id, "User provided text input")
-```
-
-#### 1.9 Parallel Group Coordination with Barrier Synchronization
-
-```py
-# graflow/coordinator/parallel_group.py
-class ParallelGroupExecutor:
-    """Unified executor for parallel task groups supporting multiple backends."""
-    
-    def __init__(self, backend: CoordinationBackend = CoordinationBackend.MEMORY, 
-                 backend_config: Dict[str, Any] = None):
-        self.backend = backend
-        self.coordinator = self._create_coordinator(backend, backend_config or {})
-        self.execution_context: Optional[ExecutionContext] = None
-    
-    def _create_coordinator(self, backend: CoordinationBackend, config: Dict[str, Any]) -> TaskCoordinator:
-        """Create appropriate coordinator based on backend."""
-        if backend == CoordinationBackend.REDIS:
-            import redis
-            redis_client = config.get("redis_client") or redis.Redis(
-                host=config.get("host", "localhost"),
-                port=config.get("port", 6379),
-                db=config.get("db", 0)
-            )
-            return RedisCoordinator(redis_client)
-        
-        elif backend == CoordinationBackend.MULTIPROCESSING:
-            process_count = config.get("process_count")
-            return MultiprocessingCoordinator(process_count)
-        
-        elif backend == CoordinationBackend.MEMORY:
-            return MemoryCoordinator()
-        
-        else:
-            raise ValueError(f"Unsupported backend: {backend}")
-    
-    def execute_sequence(self, sequence: List[Union[TaskSpec, List[TaskSpec]]]) -> None:
-        """Execute task sequence with proper parallel group coordination."""
-        try:
-            if self.backend == CoordinationBackend.MULTIPROCESSING:
-                self.coordinator.start_workers()
-            
-            for i, phase in enumerate(sequence):
-                if isinstance(phase, list):
-                    # Parallel group
-                    group_id = f"phase_{i}_{uuid.uuid4().hex[:8]}"
-                    self._execute_parallel_group(group_id, phase)
-                else:
-                    # Single task
-                    self._execute_single_task(phase)
-        
-        finally:
-            if self.backend == CoordinationBackend.MULTIPROCESSING:
-                self.coordinator.stop_workers()
-    
-    def _execute_parallel_group(self, group_id: str, tasks: List[TaskSpec]) -> None:
-        """Execute parallel group with barrier synchronization."""
-        # Create barrier
-        barrier_id = self.coordinator.create_barrier(group_id, len(tasks))
-        
-        try:
-            # Dispatch all tasks
-            for task in tasks:
-                self.coordinator.dispatch_task(task, group_id)
-            
-            # Wait for all tasks to complete
-            if not self.coordinator.wait_barrier(barrier_id):
-                raise TimeoutError(f"Barrier wait timeout for group {group_id}")
-            
-            print(f"Parallel group {group_id} completed successfully")
-        
-        finally:
-            # Clean up barrier
-            self.coordinator.cleanup_barrier(barrier_id)
-```
-
-
-#### 1.11 Redis TaskWorker Core Logic
-
-```python
-# graflow/worker/redis_worker.py
-import redis
-import json
-import time
-from typing import Dict, Any
-
-def redis_worker_main(group_id: str, total_tasks: int, redis_config: Dict[str, Any] = None):
-    """Core Redis worker logic for barrier synchronization."""
-    
-    # Redis connection
-    redis_config = redis_config or {}
-    r = redis.Redis(
-        host=redis_config.get('host', 'localhost'),
-        port=redis_config.get('port', 6379),
-        db=redis_config.get('db', 0)
-    )
-    
-    # Queue and barrier keys
-    queue_key = f"task_queue:{group_id}"
-    barrier_key = f"barrier:{group_id}"
-    phase_done_channel = f"barrier_done:{group_id}"
-    
-    print(f"[Worker] Starting worker for group {group_id}, expecting {total_tasks} tasks")
-    
-    while True:
-        # Block until task is available or timeout
-        task_json = r.brpop(queue_key, timeout=10)
-        if task_json is None:
-            print(f"[Worker] No more tasks for group {group_id}, exiting")
-            break
-        
-        # Parse task data
-        _, task_str = task_json
-        task_data = json.loads(task_str)
-        
-        # Execute the task
-        run_task(task_data)
-        
-        # Increment barrier counter
-        count = r.incr(barrier_key)
-        print(f"[Worker] Task completed. Progress: {count}/{total_tasks}")
-        
-        # Check if all tasks in this group are done
-        if count == total_tasks:
-            print(f"[Worker] Group {group_id} all tasks done, publishing completion...")
-            r.publish(phase_done_channel, str(group_id))
-            break
-    
-    print(f"[Worker] Worker for group {group_id} finished")
-
-def run_task(task_data: Dict[str, Any]) -> Any:
-    """Execute a single task."""
-    task_id = task_data.get("task_id", "unknown")
-    func_name = task_data.get("func_name", "unknown")
-    args = task_data.get("args", [])
-    kwargs = task_data.get("kwargs", {})
-    
-    print(f"[Worker] Executing task: {task_id} ({func_name})")
-    
-    # Task execution logic would go here
-    # For now, simulate work
-    duration = task_data.get("duration", 1)
-    time.sleep(duration)
-    
-    print(f"[Worker] Task {task_id} completed")
-    return f"Task {task_id} result"
-
-# Example usage
-def example_redis_worker():
-    """Example of running Redis worker."""
-    
-    # This would typically be called from command line or process manager
-    group_id = "phase_1_abc123"
-    total_tasks = 2  # For parallel group (task_b | task_c)
-    
-    redis_config = {
-        'host': 'localhost',
-        'port': 6379,
-        'db': 0
-    }
-    
-    redis_worker_main(group_id, total_tasks, redis_config)
-```
-
-### Phase 2: Task Queue Implementation (3 weeks)
-
-#### 2.1 Enhanced TaskQueue with TaskStatus Integration
-```python
-# graflow/queue/task_queue.py
-from queue import PriorityQueue
-from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Optional, List
-import time
-from ..core.task_status import TaskStatus, TaskState
-
-@dataclass
-class TaskSpec:
-    """Enhanced task specification with state management."""
-    task_id: str
-    func: Callable[..., Any]
-    execution_context: 'ExecutionContext'
-    task_obj: Any  # Reference to original Task/TaskWrapper object
-    priority: int = 0
-    dependencies: List[str] = field(default_factory=list)
-    args: tuple = field(default_factory=tuple)
-    kwargs: dict = field(default_factory=dict)
-    enqueue_time: float = field(default_factory=time.time)
-    max_retries: int = 3
-    retry_delay: float = 1.0
-
-class TaskQueue:
-    """Enhanced queue with TaskStatus state management."""
-    
-    def __init__(self, execution_context: 'ExecutionContext'):
-        self.execution_context = execution_context
-        self.queue = PriorityQueue()
-        self.task_states: Dict[str, TaskState] = {}
-        self._lock = threading.Lock()
-        self._enqueue_count = 0
-    
-    def enqueue(self, task_spec: TaskSpec) -> bool:
-        """Enqueue task with state management."""
-        with self._lock:
-            # Initialize task state
-            if task_spec.task_id not in self.task_states:
-                self.task_states[task_spec.task_id] = TaskState(
-                    task_id=task_spec.task_id,
-                    status=TaskStatus.BLOCKED
-                )
-            
-            task_state = self.task_states[task_spec.task_id]
-            
-            # Check if dependencies are satisfied
-            if self._dependencies_satisfied(task_spec):
-                # Transition to READY state
-                task_state.transition_to(TaskStatus.READY)
-                
-                # Configure cycle control if task has max_cycle setting
-                if hasattr(task_spec.task_obj, 'max_cycle') and task_spec.task_obj.max_cycle:
-                    self.execution_context.configure_node_max_cycles(
-                        task_spec.task_id, 
-                        task_spec.task_obj.max_cycle
+        if key not in cls._pools:
+            with cls._lock:
+                if key not in cls._pools:
+                    cls._pools[key] = redis.ConnectionPool(
+                        host=host,
+                        port=port,
+                        db=db,
+                        max_connections=max_connections,
+                        decode_responses=True,
+                        **kwargs
                     )
-                
-                self._enqueue_count += 1
-                priority_tuple = (task_spec.priority, self._enqueue_count, task_spec)
-                self.queue.put(priority_tuple)
-                
-                print(f"Enqueued task: {task_spec.task_id} (status: {task_state.status.value})")
-                return True
-            return False
-    
-    def dequeue(self) -> Optional[TaskSpec]:
-        """Dequeue next available task and mark as RUNNING."""
-        try:
-            if not self.queue.empty():
-                _, _, task_spec = self.queue.get_nowait()
-                with self._lock:
-                    task_state = self.task_states[task_spec.task_id]
-                    task_state.transition_to(TaskStatus.RUNNING)
-                return task_spec
-        except:
-            pass
+
+        return cls._pools[key]
+
+    @classmethod
+    def create_client(cls, **kwargs) -> redis.Redis:
+        """Create Redis client using shared pool."""
+        pool = cls.get_pool(**kwargs)
+        return redis.Redis(connection_pool=pool)
+```
+
+**Blocking Queue Operations:**
+```python
+# Replace polling with BLPOP in DistributedTaskQueue
+def dequeue(self, timeout: int = 1) -> Optional[TaskSpec]:
+    """Dequeue with blocking pop."""
+    result = self.redis_client.blpop(self.queue_key, timeout=timeout)
+    if result is None:
         return None
-    
-    def mark_completed(self, task_id: str, result: Any = None) -> None:
-        """Mark task as completed with appropriate status transition."""
-        with self._lock:
-            if task_id not in self.task_states:
-                return
-                
-            task_state = self.task_states[task_id]
-            
-            # Determine completion status based on result and cycle requirements
-            if self._should_continue_cycle(task_id, result):
-                task_state.transition_to(TaskStatus.PLANNED, result=result)
-                print(f"Task {task_id} planned for next cycle")
-            elif self._has_dependent_tasks(task_id):
-                task_state.transition_to(TaskStatus.SUCCESS, result=result)
-                print(f"Task {task_id} completed successfully")
-            else:
-                task_state.transition_to(TaskStatus.COMPLETED, result=result)
-                print(f"Task {task_id} final completion")
-        
-        # Update execution context (thread-safe)
-        self.execution_context.mark_executed(task_id, result)
-    
-    def mark_failed(self, task_id: str, error: Exception) -> None:
-        """Mark task as failed with retry logic."""
-        with self._lock:
-            if task_id not in self.task_states:
-                return
-                
-            task_state = self.task_states[task_id]
-            
-            # Check if task can be retried
-            if task_state.retry_count < self._get_max_retries(task_id):
-                task_state.transition_to(TaskStatus.RETRY_WAITING, error=error)
-                print(f"Task {task_id} scheduled for retry ({task_state.retry_count + 1})")
-                # TODO: Schedule retry after delay
-            else:
-                task_state.transition_to(TaskStatus.ERROR, error=error)
-                print(f"Task {task_id} failed permanently")
-        
-        # Update execution context
-        self.execution_context.mark_failed(task_id, error)
-    
-    def get_task_state(self, task_id: str) -> Optional[TaskState]:
-        """Get current state of a task."""
-        return self.task_states.get(task_id)
-    
-    def get_tasks_by_status(self, status: TaskStatus) -> List[str]:
-        """Get all task IDs with specific status."""
-        return [
-            task_id for task_id, state in self.task_states.items()
-            if state.status == status
-        ]
-    
-    def is_empty(self) -> bool:
-        """Check if queue is empty and no tasks in progress."""
-        running_tasks = self.get_tasks_by_status(TaskStatus.RUNNING)
-        return self.queue.empty() and len(running_tasks) == 0
-    
-    def _dependencies_satisfied(self, task_spec: TaskSpec) -> bool:
-        """Check if task dependencies are satisfied."""
-        completed_statuses = {TaskStatus.SUCCESS, TaskStatus.COMPLETED}
-        return all(
-            self.task_states.get(dep_id, TaskState("", TaskStatus.BLOCKED)).status in completed_statuses
-            for dep_id in task_spec.dependencies
-        )
-    
-    def _should_continue_cycle(self, task_id: str, result: Any) -> bool:
-        """Determine if task should continue cycling."""
-        # This would integrate with convergence detection and cycle limits
-        task_state = self.task_states.get(task_id)
-        if not task_state:
-            return False
-            
-        # Check cycle limits
-        max_cycles = self.execution_context.cycle_controller.get_max_cycles_for_node(task_id)
-        if task_state.cycle_count >= max_cycles:
-            return False
-            
-        # TODO: Add convergence detection logic
-        return False  # Simplified for now
-    
-    def _has_dependent_tasks(self, task_id: str) -> bool:
-        """Check if task has dependent tasks."""
-        return len(list(self.execution_context.graph.successors(task_id))) > 0
-    
-    def _get_max_retries(self, task_id: str) -> int:
-        """Get max retry count for a task (task-specific or workflow default)."""
-        # Find the task specification in the execution context
-        if hasattr(self.execution_context, 'graph') and task_id in self.execution_context.graph.nodes:
-            task_obj = self.execution_context.graph.nodes[task_id]["task"]
-            if hasattr(task_obj, 'get_max_retries'):
-                workflow_default = getattr(self.execution_context, 'default_max_retries', 3)
-                return task_obj.get_max_retries(workflow_default)
-        
-        # Fallback to execution context default or system default
-        return getattr(self.execution_context, 'default_max_retries', 3)
+    _, data = result
+    return self._deserialize_task_spec(data)
 ```
 
-#### 2.2 TaskWorker Implementation
-```python
-# graflow/worker/task_worker.py
-class TaskWorker:
-    """Worker that executes tasks from the queue."""
-    
-    def __init__(self, queue: TaskQueue, context: ExecutionContext):
-        self.queue = queue
-        self.context = context
-        self.running = False
-    
-    def start(self) -> None:
-        """Start the worker loop."""
-        self.running = True
-        while self.running:
-            task_spec = self.queue.dequeue()
-            if task_spec:
-                self._execute_task(task_spec)
-            else:
-                time.sleep(0.1)
-    
-    def _execute_task(self, task_spec: TaskSpec) -> None:
-        """Execute a single task and handle results."""
-        try:
-            result = task_spec.func(*task_spec.args, **task_spec.kwargs)
-            self.context.set_result(task_spec.task_id, result)
-            self.queue.mark_completed(task_spec.task_id)
-        except Exception as e:
-            self.context.set_result(task_spec.task_id, e)
-            print(f"Task {task_spec.task_id} failed: {e}")
+**Deliverables:**
+- [ ] Redis connection pooling
+- [ ] Blocking queue operations (BLPOP)
+- [ ] Performance benchmark suite
+- [ ] Memory profiling and optimization
+- [ ] Load testing framework
+
+---
+
+### Phase 2: Developer Experience (v0.4.0) - 4-6 weeks
+
+#### 2.1 IDE Integration (2 weeks)
+
+**VS Code Extension:**
+```json
+{
+  "name": "graflow-vscode",
+  "features": [
+    "Syntax highlighting for workflow definitions",
+    "Auto-completion for task decorators",
+    "Inline visualization of workflow graphs",
+    "Debug adapter protocol support",
+    "Test runner integration"
+  ]
+}
 ```
 
-### Phase 3: Dynamic Task Generation (2 weeks)
-
-#### 3.1 ExecutionContext Extension for Dynamic Task Generation
+**Debug Adapter:**
 ```python
-# graflow/core/context.py - Extension to existing ExecutionContext
-from typing import Optional, Dict, Any, Callable
-import uuid
+# graflow/debug/adapter.py
 
-# Extension methods for ExecutionContext class
-class ExecutionContext:
-    """Extended ExecutionContext with dynamic task generation support."""
-    
-    def __init__(self, *args, **kwargs):
+class GraflowDebugAdapter:
+    """Debug adapter protocol implementation."""
+
+    def set_breakpoint(self, task_id: str):
+        """Set breakpoint on task."""
+        ...
+
+    def step_over(self):
+        """Execute next task."""
+        ...
+
+    def inspect_context(self) -> Dict[str, Any]:
+        """Inspect current execution context."""
+        ...
+
+    def evaluate_expression(self, expr: str) -> Any:
+        """Evaluate expression in current context."""
+        ...
+```
+
+**Deliverables:**
+- [ ] VS Code extension
+- [ ] Debug adapter protocol
+- [ ] Interactive workflow builder (web UI)
+- [ ] Workflow validation CLI
+- [ ] Auto-generated type stubs
+
+---
+
+#### 2.2 Testing Utilities (1 week)
+
+**Test Fixtures:**
+```python
+# graflow/testing/fixtures.py
+
+import pytest
+from graflow.core.workflow import workflow
+from graflow.core.context import ExecutionContext
+
+@pytest.fixture
+def workflow_context():
+    """Create test workflow context."""
+    with workflow("test") as wf:
+        yield wf
+
+@pytest.fixture
+def execution_context(tmp_path):
+    """Create test execution context."""
+    return ExecutionContext.create(
+        graph=...,
+        start_node="test",
+        checkpoint_dir=tmp_path
+    )
+
+@pytest.fixture
+def mock_redis():
+    """Mock Redis client for testing."""
+    from fakeredis import FakeRedis
+    return FakeRedis(decode_responses=True)
+```
+
+**Test Helpers:**
+```python
+# graflow/testing/helpers.py
+
+def assert_workflow_completed(context: ExecutionContext):
+    """Assert workflow completed successfully."""
+    assert context.is_completed()
+    assert all(task_id in context.completed_tasks for task_id in context.graph.nodes)
+
+def assert_checkpoint_valid(checkpoint_path: Path):
+    """Assert checkpoint is valid."""
+    assert checkpoint_path.exists()
+    assert (checkpoint_path.parent / f"{checkpoint_path.stem}.state.json").exists()
+    assert (checkpoint_path.parent / f"{checkpoint_path.stem}.meta.json").exists()
+```
+
+**Deliverables:**
+- [ ] Test fixtures library
+- [ ] Mock helpers for Redis, LLM, etc.
+- [ ] Workflow testing utilities
+- [ ] Integration test templates
+- [ ] Performance test helpers
+
+---
+
+#### 2.3 Documentation & Examples (2 weeks)
+
+**Interactive Tutorials:**
+```markdown
+# docs/tutorials/01-getting-started.md
+
+Walk through building a simple ETL pipeline with:
+- Data extraction from API
+- Data transformation
+- Data loading to database
+- Error handling
+- Checkpoints
+```
+
+**API Reference:**
+```bash
+# Generate API docs with sphinx
+make docs
+# Hosted at docs.graflow.dev
+```
+
+**Example Library:**
+```
+examples/
+  11_production/
+    - production_etl_pipeline.py
+    - ml_training_with_checkpoints.py
+    - distributed_batch_processing.py
+  12_integrations/
+    - airflow_integration.py
+    - prefect_migration.py
+    - langchain_integration.py
+```
+
+**Deliverables:**
+- [ ] Interactive tutorials (5-10)
+- [ ] Complete API reference
+- [ ] Production examples library
+- [ ] Migration guides (from Airflow, Prefect, etc.)
+- [ ] Video tutorials
+
+---
+
+### Phase 3: Ecosystem Integration (v0.5.0) - 4-6 weeks
+
+#### 3.1 Pre-built Integrations (3 weeks)
+
+**LangChain Integration:**
+```python
+# graflow/integrations/langchain.py
+
+from langchain.chains import LLMChain
+from graflow.core.decorators import task
+
+class LangChainTask:
+    """LangChain integration for Graflow."""
+
+    @staticmethod
+    @task
+    def run_chain(chain: LLMChain, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """Run LangChain chain as Graflow task."""
+        return chain.run(**inputs)
+```
+
+**Airflow Compatibility:**
+```python
+# graflow/integrations/airflow.py
+
+from airflow.models import BaseOperator
+from graflow.core.task import Task
+
+class GraflowOperator(BaseOperator):
+    """Airflow operator for Graflow workflows."""
+
+    def __init__(self, workflow_definition, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Additional attributes for dynamic task generation
-        self.current_task: Optional[TaskSpec] = None
-        self.task_queue: Optional[TaskQueue] = None
-    
-    def next_task(self, func: Callable[..., Any], **kwargs: Any) -> str:
-        """Generate a new task dynamically."""
-        task_id: str = f"{func.__name__}_{uuid.uuid4().hex[:8]}"
-        task_spec = TaskSpec(
-            task_id=task_id,
-            func=func,
-            kwargs=kwargs
-        )
-        if self.task_queue:
-            self.task_queue.enqueue(task_spec)
-        return task_id
-    
-    def next_iteration(self, func: Optional[Callable[..., Any]] = None, **kwargs: Any) -> str:
-        """Generate an iteration task (for cycles)."""
-        if func is None and self.current_task is not None:
-            func = self.current_task.func
-        if func is None:
-            raise ValueError("No function provided and no current task available")
-        return self.next_task(func, **kwargs)
+        self.workflow = workflow_definition
+
+    def execute(self, context):
+        """Execute Graflow workflow from Airflow."""
+        return self.workflow.execute()
 ```
 
-#### 3.2 Enhanced @task Decorator with max_cycle Support
+**MLflow Tracking:**
 ```python
-# Enhancement to graflow/core/decorators.py
-from typing import Optional, Callable, TypeVar, overload
-import functools
+# graflow/integrations/mlflow.py
 
-F = TypeVar('F', bound=Callable[..., Any])
+import mlflow
+from graflow.core.decorators import task
 
-@overload
-def task(func: F) -> TaskWrapper: ... # type: ignore
-
-@overload
-def task(
-    func: None = None, 
-    *, 
-    name: Optional[str] = None, 
-    max_cycle: Optional[int] = None,
-    max_retries: Optional[int] = None
-) -> Callable[[F], TaskWrapper]: ... # type: ignore
-
-def task(
-    func: Optional[F] = None, 
-    *, 
-    name: Optional[str] = None,
-    max_cycle: Optional[int] = None,
-    max_retries: Optional[int] = None
-) -> TaskWrapper | Callable[[F], TaskWrapper]:
-    """Enhanced task decorator with max_cycle and max_retries support.
-    
-    Args:
-        func: The function to decorate
-        name: Optional custom name for the task
-        max_cycle: Maximum number of cycles for this specific task
-        max_retries: Maximum number of retries for this specific task
-        
-    Examples:
-        @task
-        def simple_task(): pass
-        
-        @task(name="custom_name", max_cycle=5, max_retries=3)
-        def iterative_task(): pass
-        
-        @task(max_retries=5)
-        def unreliable_task(): pass
-    """
-    
-    def decorator(f: F) -> TaskWrapper:
-        task_name = name if name is not None else getattr(f, '__name__', 'unnamed_task')
-        
-        @functools.wraps(f)
-        def wrapper(*args, **kwargs):
-            return f(*args, **kwargs)
-        
-        # Create TaskWrapper with configuration
-        from .task import TaskWrapper
-        task_obj = TaskWrapper(task_name, wrapper)
-        
-        # Set max_cycle if provided
-        if max_cycle is not None:
-            task_obj.max_cycle = max_cycle
-            
-        # Set max_retries if provided
-        if max_retries is not None:
-            task_obj.max_retries = max_retries
-        
-        # Copy function attributes
-        task_obj.__name__ = f.__name__
-        task_obj.__doc__ = f.__doc__
-        
-        return task_obj
-    
-    if func is not None:
-        return decorator(func)
-    return decorator
+@task
+def track_experiment(experiment_name: str, params: Dict, metrics: Dict):
+    """Track ML experiment with MLflow."""
+    with mlflow.start_run(run_name=experiment_name):
+        mlflow.log_params(params)
+        mlflow.log_metrics(metrics)
 ```
 
+**Deliverables:**
+- [ ] LangChain integration
+- [ ] Airflow compatibility layer
+- [ ] Prefect migration tools
+- [ ] MLflow tracking integration
+- [ ] Weights & Biases integration
+- [ ] dbt integration for data pipelines
 
-### Phase 4: Monitoring & API Implementation (2 weeks)
+---
 
-#### 4.1 Basic Monitoring
-```python
-# graflow/monitoring/monitor.py
-from typing import Dict, Union
-import time
+#### 3.2 Cloud Deployments (2 weeks)
 
-class WorkflowMonitor:
-    """Monitor workflow execution metrics."""
-    
-    def __init__(self) -> None:
-        self.metrics: Dict[str, Union[int, float]] = {
-            "tasks_executed": 0,
-            "tasks_failed": 0,
-            "average_execution_time": 0.0
-        }
-    
-    def record_task_execution(self, task_id: str, duration: float, success: bool) -> None:
-        """Record task execution metrics."""
-        if success:
-            self.metrics["tasks_executed"] += 1
-        else:
-            self.metrics["tasks_failed"] += 1
-        
-        # Update average execution time
-        total_tasks: int = int(self.metrics["tasks_executed"]) + int(self.metrics["tasks_failed"])
-        current_avg: float = float(self.metrics["average_execution_time"])
-        self.metrics["average_execution_time"] = (
-            (current_avg * (total_tasks - 1) + duration) / total_tasks
-        )
+**AWS Deployment:**
+```yaml
+# cloudformation/graflow-stack.yaml
+AWSTemplateFormatVersion: '2010-09-09'
+Resources:
+  GraflowECS:
+    Type: AWS::ECS::Cluster
+  GraflowService:
+    Type: AWS::ECS::Service
+  ElastiCache:
+    Type: AWS::ElastiCache::ReplicationGroup
 ```
 
-#### 4.2 REST API (FastAPI)
-```python
-# graflow/api/endpoints.py
-from fastapi import FastAPI, HTTPException
-from typing import Dict, Any, Union
-from pydantic import BaseModel
-
-app = FastAPI(title="Graflow API")
-
-class WorkflowStatus(BaseModel):
-    """Workflow status response model."""
-    workflow_id: str
-    status: str
-    tasks_completed: int
-    tasks_pending: int
-    start_time: float
-
-class MetricsResponse(BaseModel):
-    """Metrics response model."""
-    tasks_executed: int
-    tasks_failed: int
-    average_execution_time: float
-    uptime: float
-
-@app.get("/workflows/{workflow_id}/status", response_model=WorkflowStatus)
-async def get_workflow_status(workflow_id: str) -> WorkflowStatus:
-    """Get workflow execution status."""
-    # Workflow status retrieval logic
-    raise HTTPException(status_code=501, detail="Not implemented")
-
-@app.post("/workflows/{workflow_id}/stop")
-async def stop_workflow(workflow_id: str) -> Dict[str, str]:
-    """Stop a running workflow."""
-    # Workflow stop logic
-    return {"message": f"Workflow {workflow_id} stopped"}
-
-@app.get("/metrics", response_model=MetricsResponse)
-async def get_metrics() -> MetricsResponse:
-    """Get system metrics."""
-    # Metrics retrieval logic
-    raise HTTPException(status_code=501, detail="Not implemented")
+**Kubernetes Helm Chart:**
+```yaml
+# helm/graflow/values.yaml
+replicaCount: 3
+redis:
+  enabled: true
+  sentinel: true
+workers:
+  min: 2
+  max: 10
+  autoscaling: true
 ```
 
-### Phase 5: Advanced Cycle Control (3 weeks)
+**Deliverables:**
+- [ ] AWS CloudFormation templates
+- [ ] Kubernetes Helm charts
+- [ ] GCP deployment guides
+- [ ] Azure deployment guides
+- [ ] Docker Compose production setup
+- [ ] Terraform modules
 
-#### 5.1 Cycle Detection & Control Algorithms
-```python
-# graflow/core/cycle_detection.py
-from typing import List, Set, Optional
-import networkx as nx
+---
 
-class CycleDetector:
-    """Detects and manages cycles in workflow graphs."""
-    
-    def __init__(self, graph: nx.DiGraph) -> None:
-        self.graph: nx.DiGraph = graph
-    
-    def detect_cycles(self) -> List[List[str]]:
-        """Detect all cycles in the graph."""
-        return list(nx.simple_cycles(self.graph))
-    
-    def is_safe_to_add_edge(self, from_node: str, to_node: str) -> bool:
-        """Check if adding an edge would create a cycle."""
-        # Temporarily add edge and check for cycles
-        self.graph.add_edge(from_node, to_node)
-        has_cycle: bool = len(self.detect_cycles()) > 0
-        self.graph.remove_edge(from_node, to_node)
-        return not has_cycle
-```
+### Phase 4: Advanced Features (v0.6.0+) - Ongoing
 
-#### 5.2 State Convergence Detection
-```python
-# graflow/core/convergence.py
-from typing import Any, Dict, List, Union
+#### 4.1 Advanced Workflow Patterns
 
-class ConvergenceDetector:
-    """Detects convergence in iterative workflows."""
-    
-    def __init__(self, tolerance: float = 1e-6) -> None:
-        self.tolerance: float = tolerance
-        self.state_history: Dict[str, List[Any]] = {}
-    
-    def check_convergence(self, task_id: str, current_state: Any) -> bool:
-        """Check if the task state has converged."""
-        if task_id not in self.state_history:
-            self.state_history[task_id] = [current_state]
-            return False
-        
-        previous_state: Any = self.state_history[task_id][-1]
-        self.state_history[task_id].append(current_state)
-        
-        # Numerical convergence check
-        if isinstance(current_state, (int, float)) and isinstance(previous_state, (int, float)):
-            return abs(current_state - previous_state) < self.tolerance
-        
-        # Object comparison
-        return current_state == previous_state
-```
+- **Conditional branching:** Dynamic path selection
+- **Fan-out/fan-in:** Scalable parallel processing
+- **Saga pattern:** Distributed transaction support
+- **Event-driven workflows:** React to external events
+- **Sub-workflows:** Reusable workflow components
 
-## プロジェクト構造
+#### 4.2 Enterprise Features
 
-```
-graflow/
-├── __init__.py
-├── core/
-│   ├── __init__.py
-│   ├── task.py              # 既存: Executable, Task, ParallelGroup
-│   ├── workflow.py          # 既存: WorkflowContext
-│   ├── context.py           # 既存: ExecutionContext (拡張要)
-│   ├── engine.py            # 既存: WorkflowEngine (execution logic)
-│   ├── cycle.py             # 新規: 循環制御
-│   ├── channel.py           # 既存: Abstract Channel base class
-│   ├── feedback.py          # 新規: フィードバック管理
-│   └── execution_context.py # 拡張: ExecutionContext extensions
-├── channels/
-│   ├── __init__.py
-│   ├── memory.py            # 既存: MemoryChannel implementation
-│   ├── redis.py             # 既存: RedisChannel implementation
-│   └── factory.py           # 既存: ChannelFactory and ChannelManager
-├── coordination/
-│   ├── __init__.py
-│   ├── coordinator.py       # 新規: 並列実行コーディネータ
-│   └── barriers.py          # 新規: バリア同期実装
-├── queue/
-│   ├── __init__.py
-│   ├── task_queue.py        # 新規: タスクキュー
-│   └── scheduler.py         # 新規: スケジューラ
-├── worker/
-│   ├── __init__.py
-│   ├── task_worker.py       # 新規: タスクワーカー
-│   └── redis_worker.py      # 新規: Redis分散タスクワーカー
-├── decorators/
-│   ├── __init__.py
-│   └── decorators.py        # 既存: @task デコレータ
-├── monitoring/
-│   ├── __init__.py
-│   └── monitor.py           # 新規: モニタリング
-├── api/
-│   ├── __init__.py
-│   └── endpoints.py         # 新規: REST API
-└── utils/
-    ├── __init__.py
-    └── graph.py             # 既存: グラフユーティリティ
-```
+- **Multi-tenancy:** Isolated workflow execution per tenant
+- **RBAC:** Role-based access control
+- **Audit logging:** Complete audit trail
+- **Compliance:** GDPR, SOC2 support
+- **SLA monitoring:** Track and enforce SLAs
 
-## 実装優先度
+#### 4.3 ML/AI Enhancements
 
-### High Priority (Phase 1-2: 5 weeks)
-1. **Cycle Control Foundation** - Basic cycle execution control
-2. **TaskQueue/Worker** - Scheduling engine
-3. **Channel Foundation** - Inter-task data communication
-4. **Feedback Framework** - Human-in-the-loop workflow support
-5. **Parallel Group Coordination** - Redis/Multiprocessing barrier synchronization
+- **AutoML integration:** Automated model training
+- **Model versioning:** Track model versions
+- **A/B testing:** Built-in experimentation framework
+- **Feature store integration:** Connect to feature stores
+- **Real-time inference:** Low-latency model serving
 
-### Medium Priority (Phase 3-4: 4 weeks)
-1. **Dynamic Task Generation** - Runtime task creation functionality
-2. **Basic Monitoring API** - Status monitoring and REST endpoints
+---
 
-### Low Priority (Phase 5: 3 weeks)
-1. **Advanced Cycle Control** - Convergence detection, complex cycle patterns
-2. **Performance Optimization** - Redis integration, distributed execution
+## Success Metrics
 
-## 成功指標
+| Phase | Metric | Current | Target |
+|-------|--------|---------|--------|
+| 1 (Production) | Uptime | N/A | 99.9% |
+| 1 (Production) | P95 latency | N/A | <100ms |
+| 1 (Production) | Security score | C | A |
+| 2 (DX) | Setup time | 30min | <5min |
+| 2 (DX) | Time to first workflow | 1hr | <15min |
+| 3 (Ecosystem) | Integrations | 2 | 10+ |
+| 3 (Ecosystem) | Cloud platforms | 0 | 3 (AWS, GCP, Azure) |
 
-### Phase 1-2 Completion Targets
-- [ ] Basic cyclic graph execution capability
-- [ ] Simple iterative processing implementation
-- [ ] Task execution through TaskQueue
-- [ ] Human-in-the-loop feedback integration
-- [ ] Parallel group execution with barrier synchronization (Redis/Multiprocessing)
+---
 
-### Phase 3-4 Completion Targets  
-- [ ] Dynamic task generation for flexible execution flows
-- [ ] Data passing through Channels
-- [ ] Basic monitoring via REST API
+## Implementation Priorities
 
-### Phase 5 Completion Targets
-- [ ] Safe execution of complex cycle patterns
-- [ ] Automatic convergence detection
-- [ ] Production-ready deployment capability
+### Must Have (v0.3.0)
+- Observability (metrics, health checks)
+- Security hardening
+- Resilience features
+- Performance optimization
 
-## 実装時の重要な設計原則
+### Should Have (v0.4.0)
+- IDE integration
+- Testing utilities
+- Documentation improvements
 
-1. **Leverage Existing Codebase**: Extensible approach that doesn't break current implementation
-2. **Incremental Feature Addition**: Maintain Minimal Viable Product (MVP) at each Phase
-3. **Test-Driven Development**: Implement unit tests and integration tests for each feature
-4. **Documentation Maintenance**: Concurrent updates of usage examples and API documentation
-5. **Performance Considerations**: Continuous monitoring of memory usage and execution efficiency
+### Nice to Have (v0.5.0+)
+- Pre-built integrations
+- Cloud deployment templates
+- Advanced workflow patterns
 
-## Execution Flow Diagrams
+---
 
-### Sequence Diagram: ExecutionContext → TaskQueue → TaskWorker Flow
+## Resource Requirements
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant EC as ExecutionContext
-    participant TQ as TaskQueue
-    participant TW as TaskWorker
-    participant TP as TaskProcessor
-    participant Task as Task Function
+**Team:**
+- 2-3 full-time engineers
+- 1 DevOps engineer (part-time)
+- 1 technical writer (part-time)
 
-    User->>EC: execute()
-    EC->>EC: Initialize start_node
-    
-    Note over EC,TQ: Initial Task Enqueue
-    EC->>TQ: enqueue(start_task_spec)
-    TQ->>TQ: Check dependencies
-    TQ->>TQ: Configure cycle control
-    TQ->>TQ: Add to priority queue
-    
-    Note over TW,TP: Task Processing Loop
-    EC->>TW: create TaskWorker
-    TW->>TQ: dequeue()
-    TQ-->>TW: return TaskSpec
-    TQ->>TQ: mark in_progress
-    
-    TW->>EC: can_execute_node(task_id)
-    EC-->>TW: cycle check result
-    
-    TW->>TP: process_task(task_spec)
-    TP->>TP: Create ExecutionContext
-    TP->>Task: execute with context
-    Task-->>TP: result
-    
-    Note over Task,EC: Dynamic Task Generation (Optional)
-    Task->>TP: context.next_task()
-    TP->>TQ: enqueue(new_task_spec)
-    
-    TP-->>TW: execution result
-    TW->>TQ: mark_completed(task_id, result)
-    TQ->>EC: mark_executed(task_id, result)
-    EC->>EC: register_cycle_execution()
-    EC->>EC: notify_state_change("completed")
-    EC->>EC: _enqueue_dependent_tasks()
-    
-    Note over EC,TQ: Dependency Resolution
-    EC->>TQ: enqueue(dependent_tasks)
-    
-    Note over TW: Continue Processing
-    TW->>TQ: dequeue()
-    TQ-->>TW: next TaskSpec or None
-    
-    Note over EC: Completion Check
-    TW->>TQ: is_empty()
-    TQ-->>TW: true/false
-    TW-->>EC: execution complete
-    EC-->>User: workflow result
-```
+**Timeline:**
+- Phase 1: 6-8 weeks
+- Phase 2: 4-6 weeks
+- Phase 3: 4-6 weeks
+- Phase 4: Ongoing
 
-### Parallel Execution Sequence
+**Budget:**
+- Development: $150k-200k (Phase 1-3)
+- Infrastructure: $5k-10k/month
+- Tools & Services: $2k-5k/month
 
-```mermaid
-sequenceDiagram
-    participant EC as ExecutionContext
-    participant TQ as TaskQueue
-    participant TW1 as TaskWorker-1
-    participant TW2 as TaskWorker-2
-    participant TW3 as TaskWorker-3
+---
 
-    EC->>EC: _execute_parallel()
-    EC->>TQ: enqueue(start_task)
-    
-    Note over TW1,TW3: Multiple Workers Created
-    EC->>TW1: create worker_1
-    EC->>TW2: create worker_2
-    EC->>TW3: create worker_3
-    
-    par Worker 1 Processing
-        TW1->>TQ: dequeue()
-        TQ-->>TW1: TaskSpec-A
-        TW1->>TW1: execute_task(A)
-        TW1->>TQ: mark_completed(A)
-    and Worker 2 Processing
-        TW2->>TQ: dequeue()
-        TQ-->>TW2: TaskSpec-B
-        TW2->>TW2: execute_task(B)
-        TW2->>TQ: mark_completed(B)
-    and Worker 3 Processing
-        TW3->>TQ: dequeue()
-        TQ-->>TW3: TaskSpec-C
-        TW3->>TW3: execute_task(C)
-        TW3->>TQ: mark_completed(C)
-    end
-    
-    Note over EC: Wait for completion
-    EC->>TW1: stop()
-    EC->>TW2: stop()
-    EC->>TW3: stop()
-```
+## Risk Mitigation
 
-### TaskStatus State Transition Diagram
+| Risk | Likelihood | Impact | Mitigation |
+|------|------------|--------|------------|
+| Breaking changes | Medium | High | Semantic versioning, deprecation warnings |
+| Performance degradation | Low | Medium | Continuous benchmarking, load testing |
+| Security vulnerabilities | Medium | Critical | Regular audits, dependency scanning |
+| Adoption challenges | Medium | Medium | Better docs, examples, migration guides |
 
-```mermaid
-stateDiagram-v2
-    [*] --> BLOCKED: Task created with dependencies
-    
-    BLOCKED --> READY: All dependencies satisfied
-    BLOCKED --> SKIPPED: Skip conditions met or upstream failure
-    
-    READY --> RUNNING: TaskWorker dequeues and starts execution
-    READY --> SKIPPED: Pre-execution skip conditions
-    
-    RUNNING --> PLANNED: Execution success + cycle/downstream processing needed
-    RUNNING --> SUCCESS: Execution success + single completion
-    RUNNING --> ERROR: Execution failure or exception
-    RUNNING --> FEEDBACK_REQUIRED: Human-in-the-loop required
-    
-    PLANNED --> SUCCESS: Cycle termination condition met
-    PLANNED --> READY: Continue cycle (next iteration)
-    PLANNED --> ERROR: Cycle processing failure
-    PLANNED --> FEEDBACK_REQUIRED: Manual approval needed for next cycle
-    
-    FEEDBACK_REQUIRED --> READY: Feedback approved, continue execution
-    FEEDBACK_REQUIRED --> REJECTED: Human rejected the task
-    FEEDBACK_REQUIRED --> SKIPPED: Human chose to skip
-    FEEDBACK_REQUIRED --> ERROR: Feedback processing failed
-    
-    ERROR --> RETRY_WAITING: Retryable error + retry_count < max_retries
-    ERROR --> COMPLETED: Non-retryable error or retry limit reached
-    
-    RETRY_WAITING --> READY: Retry timer elapsed, ready for re-execution
-    RETRY_WAITING --> COMPLETED: Retry cancelled or timeout
-    
-    SUCCESS --> READY: Cycle condition met + convergence not achieved
-    SUCCESS --> COMPLETED: Final completion + convergence achieved
-    SUCCESS --> FEEDBACK_REQUIRED: Success but needs human validation
-    
-    REJECTED --> COMPLETED: Task permanently rejected by human
-    SKIPPED --> COMPLETED: Skip processing completed
-    COMPLETED --> [*]: Task lifecycle finished
-    
-    note right of BLOCKED
-        Initial state for tasks with dependencies
-        Waiting for prerequisite tasks to complete
-    end note
-    
-    note right of PLANNED
-        Iterative execution cycles
-        Dynamic task generation via context.next_task()
-        Increment cycle_count in TaskState
-    end note
-    
-    note right of FEEDBACK_REQUIRED
-        Human-in-the-loop workflows
-        Supports approval, text input, rejection
-        Task suspension until feedback received
-    end note
-    
-    note right of SUCCESS
-        Uses node-specific max_cycle settings
-        Automatic convergence detection
-        Can trigger dependent task execution
-    end note
-    
-    note right of ERROR
-        Increment retry_count in TaskState
-        Respects task-specific max_retries
-        Can transition to retry or permanent failure
-    end note
-    
-    note right of RETRY_WAITING
-        Implements exponential backoff
-        Configurable retry delay
-        Preserves error context for retry
-    end note
-```
+---
 
-### Cycle Control State Machine
+## Conclusion
 
-```mermaid
-stateDiagram-v2
-    [*] --> Initialize: Set max_cycle per task
-    Initialize --> Ready: Task ready for execution
-    
-    Ready --> CheckLimit: Before execution
-    CheckLimit --> Execute: Cycle count < max_cycle
-    CheckLimit --> Blocked: Cycle count >= max_cycle
-    
-    Execute --> IncrementCount: Task executed successfully
-    IncrementCount --> CheckConvergence: Update cycle count
-    
-    CheckConvergence --> Converged: State unchanged
-    CheckConvergence --> ContinueCycle: State changed
-    
-    ContinueCycle --> Ready: Schedule next iteration
-    Converged --> [*]: Stop cycling
-    Blocked --> [*]: Max cycles reached
-    
-    note right of CheckLimit
-        Uses TaskWrapper.max_cycle
-        or CycleController.default_max_iterations
-    end note
-    
-    note right of CheckConvergence
-        Optional convergence detection
-        for automatic stopping
-    end note
-```
+This development plan positions Graflow as a production-ready, developer-friendly workflow execution engine. By focusing on production hardening first, we ensure reliability. The subsequent phases on developer experience and ecosystem integration will drive adoption and make Graflow the go-to choice for Python workflow orchestration.
 
-### WorkflowContext Integration Flow
+**Next Steps:**
+1. Review and approve development plan
+2. Set up project tracking (GitHub Projects/Jira)
+3. Allocate resources
+4. Begin Phase 1 implementation
 
-```mermaid
-flowchart TD
-    A[User defines @task functions] --> B[WorkflowContext.__enter__]
-    B --> C[Tasks registered to context.graph]
-    C --> D["Pipeline operators (>> and |) used"]
-    D --> E[Dependency edges added to graph]
-    E --> F[WorkflowContext.execute called]
-    
-    F --> G[Create ExecutionContext]
-    G --> H[Initialize TaskQueue]
-    H --> I[Configure cycle limits from tasks]
-    I --> J[Find start nodes]
-    J --> K[Enqueue initial tasks]
-    
-    K --> L{Execution Mode?}
-    L -->|Sequential| M[Single TaskWorker]
-    L -->|Parallel| N[Multiple TaskWorkers]
-    
-    M --> O[Process tasks sequentially]
-    N --> P[Process tasks in parallel]
-    
-    O --> Q[Check completion]
-    P --> Q
-    Q --> R{More tasks?}
-    R -->|Yes| S[Continue processing]
-    R -->|No| T[Execution complete]
-    
-    S --> O
-    T --> U[Return results]
-    
-    style A fill:#e1f5fe
-    style G fill:#f3e5f5
-    style H fill:#e8f5e8
-    style T fill:#ffecb3
-```
+---
 
-This plan enables the gradual realization of a cycle-aware workflow engine by leveraging the existing solid foundation through incremental development.
+**Document Version:** 1.0
+**Last Updated:** 2025-12-08
+**Next Review:** 2026-01-08
+**Status:** Active
