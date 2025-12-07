@@ -42,7 +42,7 @@ def dumps(obj: Any) -> bytes:
         return cloudpickle.dumps(obj)
     except TypeError as e:
         # Serialization failed - analyze object for unpicklable components
-        logger.error(f"Serialization failed with TypeError: {e}")
+        logger.error(f"Failed to serialize object of type {type(obj).__name__}. Serialization failed with TypeError: {e}")
 
         # Try to detect TaskGraph objects for lock analysis
         from graflow.core.graph import TaskGraph
