@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, List, Optional, Union, cast
+from typing import Any, List, Optional, cast
 
 from graflow.channels.base import Channel
 
@@ -129,32 +129,35 @@ class RedisChannel(Channel):
         return cast(int, exists_result) > 0
 
     def keys(self) -> List[str]:
-        """Get all keys in the channel."""
+        """Get all keys in the channel using SCAN (non-blocking)."""
         pattern = f"{self.key_prefix}*"
-        redis_keys = self.redis_client.keys(pattern)
-        # Cast to list of strings for type safety
-        redis_keys_list = cast(List[str], redis_keys)
+        matched_keys = []
 
-        # Remove the prefix from each key
-        prefix_len = len(self.key_prefix)
-        result = []
-        for key in redis_keys_list:
-            # Convert to string and remove prefix
-            if key.startswith(self.key_prefix):
-                result.append(key[prefix_len:])
-        return result
+        # Cursor-based scan (non-blocking)
+        for key in self.redis_client.scan_iter(match=pattern, count=100):
+            # Remove key_prefix from the key
+            key_str = key.decode('utf-8') if isinstance(key, bytes) else key
+            matched_keys.append(key_str.replace(f"{self.key_prefix}", "", 1))
+
+        return matched_keys
 
     def clear(self) -> None:
-        """Clear all data from the channel."""
+        """Clear all data from the channel using SCAN (paginated)."""
         pattern = f"{self.key_prefix}*"
-        keys = self.redis_client.keys(pattern)
-        # Cast to list for type safety
-        keys_list = cast(List[Union[str, bytes]], keys)
+        batch_size = 1000
+        keys_to_delete = []
 
-        if keys_list:
-            # Convert keys to ensure they're strings
-            key_strs = [key if isinstance(key, str) else str(key) for key in keys_list]
-            self.redis_client.delete(*key_strs)
+        # Batch scan and delete
+        for key in self.redis_client.scan_iter(match=pattern, count=100):
+            keys_to_delete.append(key)
+            if len(keys_to_delete) >= batch_size:
+                if keys_to_delete:
+                    self.redis_client.delete(*keys_to_delete)
+                keys_to_delete = []
+
+        # Delete remaining keys
+        if keys_to_delete:
+            self.redis_client.delete(*keys_to_delete)
 
     def ping(self) -> bool:
         """Check if Redis connection is alive."""
