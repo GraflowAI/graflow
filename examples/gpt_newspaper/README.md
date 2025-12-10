@@ -60,8 +60,8 @@ Graflow integrates with [Langfuse](https://langfuse.com/) for complete observabi
 Required packages (already in `requirements.txt`):
 ```bash
 langfuse>=3.8.1              # Langfuse SDK
-opentelemetry-api>=1.37.0    # OpenTelemetry context API
-opentelemetry-sdk>=1.37.0    # OpenTelemetry SDK
+opentelemetry-api~=1.36.0    # OpenTelemetry context API
+opentelemetry-sdk~=1.36.0    # OpenTelemetry SDK (pinned to match exporter)
 litellm>=1.72.6              # LLM wrapper with langfuse_otel callback
 ```
 
