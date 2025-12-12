@@ -26,6 +26,7 @@
                         <th>Status</th>
                         <th>Created</th>
                         <th>Timeout</th>
+                        <th>Checkpoint</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -50,12 +51,25 @@
                         <td>
                             {% if request.status == "pending" %}
                                 <mark>{{ request.status }}</mark>
+                            {% elif request.status == "timeout" %}
+                                <mark style="background-color: #ffc107;">{{ request.status }}</mark>
                             {% else %}
                                 {{ request.status }}
                             {% endif %}
                         </td>
                         <td><small>{{ request.created_at[:19].replace('T', ' ') }}</small></td>
                         <td><small>{{ request.timeout }}s</small></td>
+                        <td>
+                            {% if request.metadata and request.metadata.get('checkpoint_id') %}
+                                <small title="{{ request.metadata.get('checkpoint_path', '') }}">
+                                    💾 {{ request.metadata.get('checkpoint_id', '')[:8] }}
+                                    <br>
+                                    {{ request.metadata.get('checkpoint_created_at', '')[:19].replace('T', ' ') }}
+                                </small>
+                            {% else %}
+                                <small>-</small>
+                            {% endif %}
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>

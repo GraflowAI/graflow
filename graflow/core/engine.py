@@ -132,6 +132,32 @@ class WorkflowEngine:
         context.checkpoint_metadata = checkpoint_metadata.to_dict()
         context.last_checkpoint_path = checkpoint_path
 
+        # Update FeedbackRequest with checkpoint information
+        feedback_manager = context.feedback_manager
+        feedback_request = feedback_manager.get_request(error.feedback_id)
+
+        if feedback_request:
+            # Add checkpoint info to metadata
+            feedback_request.metadata.update({
+                "checkpoint_path": checkpoint_path,
+                "checkpoint_id": checkpoint_metadata.checkpoint_id,
+                "checkpoint_created_at": checkpoint_metadata.created_at,
+                "checkpoint_steps": checkpoint_metadata.steps,
+                "checkpoint_reason": "feedback_timeout"
+            })
+
+            # Update request in backend
+            feedback_manager.update_request(feedback_request)
+
+            logger.info(
+                "Updated feedback request with checkpoint info",
+                extra={
+                    "feedback_id": error.feedback_id,
+                    "checkpoint_path": checkpoint_path,
+                    "checkpoint_id": checkpoint_metadata.checkpoint_id
+                }
+            )
+
     def _handle_deferred_checkpoint(self, context: ExecutionContext) -> None:
         """Handle deferred checkpoint requests.
 

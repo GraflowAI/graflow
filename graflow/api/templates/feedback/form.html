@@ -12,9 +12,40 @@
         <p><strong>Prompt:</strong></p>
         <p>{{ feedback_request.prompt }}</p>
 
+        {% if feedback_request.metadata and feedback_request.metadata.get('checkpoint_id') %}
+        <details open>
+            <summary>💾 Checkpoint Information</summary>
+            <table>
+                <tbody>
+                    <tr>
+                        <th>Checkpoint ID:</th>
+                        <td><code>{{ feedback_request.metadata.get('checkpoint_id', 'N/A') }}</code></td>
+                    </tr>
+                    <tr>
+                        <th>Created At:</th>
+                        <td>{{ feedback_request.metadata.get('checkpoint_created_at', 'N/A')[:19].replace('T', ' ') }}</td>
+                    </tr>
+                    <tr>
+                        <th>Execution Steps:</th>
+                        <td>{{ feedback_request.metadata.get('checkpoint_steps', 'N/A') }}</td>
+                    </tr>
+                    <tr>
+                        <th>Checkpoint Path:</th>
+                        <td><small><code>{{ feedback_request.metadata.get('checkpoint_path', 'N/A') }}</code></small></td>
+                    </tr>
+                    <tr>
+                        <th>Reason:</th>
+                        <td>{{ feedback_request.metadata.get('checkpoint_reason', 'N/A') }}</td>
+                    </tr>
+                </tbody>
+            </table>
+            <p><small><em>The workflow has been checkpointed and is waiting for your feedback. After you submit your response, the workflow can be resumed from this checkpoint.</em></small></p>
+        </details>
+        {% endif %}
+
         {% if feedback_request.metadata %}
         <details>
-            <summary>Additional Information</summary>
+            <summary>Additional Information (Raw)</summary>
             <pre>{{ feedback_request.metadata | tojson(indent=2) }}</pre>
         </details>
         {% endif %}
