@@ -66,17 +66,24 @@ uv sync --all-extras
 **Setup:**
 1. Start Redis:
    ```bash
-   docker run -p 6379:6379 redis:7.2
+   docker run -p 16379:6379 redis:7.2
    ```
 
 2. Start API server (Terminal 1):
    ```bash
-   uv run python -m graflow.api --backend redis --redis-host localhost --redis-port 6379
+   uv run python -m graflow.api --backend redis --redis-host localhost --redis-port 16379
    ```
 
 3. Run workflow (Terminal 2):
    ```bash
+   # With custom port (matching Redis configuration)
+   uv run python examples/12_hitl/04_api_feedback.py --redis-port 16379
+
+   # Or with default port (6379)
    uv run python examples/12_hitl/04_api_feedback.py
+
+   # With custom host and port
+   uv run python examples/12_hitl/04_api_feedback.py --redis-host localhost --redis-port 16379
    ```
 
 4. Provide feedback via API (Terminal 3):

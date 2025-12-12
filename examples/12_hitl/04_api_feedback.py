@@ -14,7 +14,10 @@ Usage:
        uv run python -m graflow.api --backend redis --redis-host localhost --redis-port 6379
 
     3. Run this workflow:
-       uv run python examples/12_hitl/04_api_feedback.py
+       uv run python examples/12_hitl/04_api_feedback.py [--redis-host HOST] [--redis-port PORT]
+
+       Example with custom port:
+       uv run python examples/12_hitl/04_api_feedback.py --redis-port 16379
 
     4. The workflow will wait for feedback. Provide it via API:
        # List pending requests
@@ -30,6 +33,7 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import logging
 import time
 
@@ -46,6 +50,22 @@ logging.basicConfig(
 
 def main():
     """Demonstrate distributed feedback via REST API."""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="HITL Feedback API Example")
+    parser.add_argument(
+        "--redis-host",
+        type=str,
+        default="localhost",
+        help="Redis host (default: localhost)"
+    )
+    parser.add_argument(
+        "--redis-port",
+        type=int,
+        default=6379,
+        help="Redis port (default: 6379)"
+    )
+    args = parser.parse_args()
+
     try:
         import redis
     except ImportError:
@@ -58,20 +78,20 @@ def main():
     print("=" * 80)
 
     # Connect to Redis
-    print("\n[Setup] Connecting to Redis...")
+    print(f"\n[Setup] Connecting to Redis at {args.redis_host}:{args.redis_port}...")
     try:
         redis_client = redis.Redis(
-            host="localhost", port=6379, db=0, decode_responses=True
+            host=args.redis_host, port=args.redis_port, db=0, decode_responses=True
         )
         redis_client.ping()
         print("        ✓ Connected to Redis")
     except Exception as e:
         print(f"        ✗ Failed to connect to Redis: {e}")
-        print("        Start Redis with: docker run -p 6379:6379 redis:7.2")
+        print(f"        Start Redis with: docker run -p {args.redis_port}:6379 redis:7.2")
         return
 
     print("\n[Setup] Make sure API server is running:")
-    print("        python -m graflow.api --backend redis --redis-host localhost --redis-port 6379")
+    print(f"        python -m graflow.api --backend redis --redis-host {args.redis_host} --redis-port {args.redis_port}")
     print()
 
     # Create workflow
