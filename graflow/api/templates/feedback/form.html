@@ -22,7 +22,7 @@
 
     <section>
         <form method="POST" action="/ui/feedback/{{ feedback_request.feedback_id }}/submit">
-            {% if feedback_request.feedback_type == "approval" %}
+            {% if feedback_request.feedback_type.value == "approval" %}
                 <!-- Approval Form -->
                 <fieldset>
                     <legend>Your Decision</legend>
@@ -39,12 +39,12 @@
                 <label for="reason">Reason (optional):</label>
                 <textarea id="reason" name="reason" rows="3" placeholder="Enter your reason..."></textarea>
 
-            {% elif feedback_request.feedback_type == "text" %}
+            {% elif feedback_request.feedback_type.value == "text" %}
                 <!-- Text Input Form -->
                 <label for="text">Your Response:</label>
                 <textarea id="text" name="text" rows="5" required placeholder="Enter your response..."></textarea>
 
-            {% elif feedback_request.feedback_type == "selection" %}
+            {% elif feedback_request.feedback_type.value == "selection" %}
                 <!-- Selection Form -->
                 <fieldset>
                     <legend>Select an Option</legend>
@@ -56,7 +56,7 @@
                     {% endfor %}
                 </fieldset>
 
-            {% elif feedback_request.feedback_type == "multi_selection" %}
+            {% elif feedback_request.feedback_type.value == "multi_selection" %}
                 <!-- Multi-Selection Form -->
                 <fieldset>
                     <legend>Select Options (multiple allowed)</legend>
@@ -68,7 +68,7 @@
                     {% endfor %}
                 </fieldset>
 
-            {% elif feedback_request.feedback_type == "custom" %}
+            {% elif feedback_request.feedback_type.value == "custom" %}
                 <!-- Custom Form -->
                 <label for="custom_data">Custom Data (JSON):</label>
                 <textarea id="custom_data" name="custom_data" rows="5" required placeholder='{"key": "value"}'></textarea>
