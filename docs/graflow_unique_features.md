@@ -1236,88 +1236,171 @@ if os.getenv("ENV") == "production":
 
 ### 8. Channel-based Communication 📡
 
-**Implementation**: `examples/03_data_flow/channels_basic.py`
+**Implementation**: `graflow/channels/`, `examples/03_data_flow/channels_basic.py`, `examples/03_data_flow/typed_channels.py`
 
-#### Workflow-scoped Key-Value Store
+Channels are workflow-scoped namespaced key-value stores for sharing state across tasks.
 
+#### Backend Support
+
+Graflow supports two channel backends:
+
+##### MemoryChannel (Default)
 ```python
-# Producer task
-@task(inject_context=True)
-def producer(context):
-    channel = context.get_channel()
-    channel.set("config", {"batch_size": 100})
-    channel.set("metrics", {"processed": 0})
+from graflow.core.context import ExecutionContext
 
-# Consumer task (decoupled)
-@task(inject_context=True)
-def consumer(context):
-    channel = context.get_channel()
-    config = channel.get("config")
-    metrics = channel.get("metrics", default={})
-```
-
-#### Channel Operations
-
-```python
-channel.set(key, value)              # Store value
-channel.get(key, default=None)       # Retrieve value
-channel.keys()                       # List all keys
-channel.clear()                      # Clear all data
-```
-
-#### Use Cases
-
-##### Shared Configuration
-```python
-@task(inject_context=True)
-def setup(context):
-    config = load_config()
-    context.get_channel().set("config", config)
-
-# All subsequent tasks access config
-@task(inject_context=True)
-def process(context):
-    config = context.get_channel().get("config")
-```
-
-##### Metrics Accumulation
-```python
-@task(inject_context=True)
-def task_with_metrics(context):
-    channel = context.get_channel()
-    metrics = channel.get("metrics", [])
-    metrics.append({"task": "...", "duration": 1.5})
-    channel.set("metrics", metrics)
-```
-
-##### Progress Tracking
-```python
-@task(inject_context=True)
-def track_progress(context):
-    channel = context.get_channel()
-    progress = channel.get("progress", 0)
-    channel.set("progress", progress + 10)
-```
-
-#### Distributed Channels (Redis)
-
-```python
 context = ExecutionContext.create(
     graph,
-    channel_backend="redis"  # Workers share state via Redis
+    start_node="start",
+    channel_backend="memory"  # Default
 )
+
+@task(inject_context=True)
+def my_task(context):
+    channel = context.get_channel()
+    channel.set("key", "value")  # Store in memory
+```
+
+**Features**:
+- ✅ Fast (in-memory)
+- ✅ Simple (no infrastructure required)
+- ✅ Checkpoint support (auto-saved)
+- ⚠️ Single process only
+
+##### RedisChannel
+```python
+import redis
+
+redis_client = redis.Redis(host='localhost', port=6379, db=0)
+
+context = ExecutionContext.create(
+    graph,
+    start_node="start",
+    channel_backend="redis",
+    channel_config={
+        "redis_client": redis_client,
+        "key_prefix": "graflow:workflow"
+    }
+)
+
+@task(inject_context=True)
+def distributed_task(context):
+    channel = context.get_channel()
+    channel.set("shared_data", {"results": [1, 2, 3]})
+    # Data shared across multiple workers
+```
+
+**Features**:
+- ✅ Distributed (cross-worker, cross-machine state sharing)
+- ✅ Persistence (Redis persistence features)
+- ✅ Scalable (data consistency across many workers)
+- ⚠️ Requires Redis server
+
+#### Type-safe Channels: TypedChannel
+
+**Implementation**: `graflow/channels/typed.py`
+
+TypedChannel provides type safety using TypedDict for message schemas.
+
+##### Message Schema Definition
+
+```python
+from typing import TypedDict
+
+class UserProfile(TypedDict):
+    """User profile information"""
+    user_id: str
+    name: str
+    email: str
+    age: int
+
+class UserMetrics(TypedDict):
+    """User activity metrics"""
+    user_id: str
+    login_count: int
+    premium: bool
+```
+
+##### Using TypedChannel
+
+```python
+@task(inject_context=True)
+def collect_user_data(context):
+    # Get type-safe channel
+    profile_channel = context.get_typed_channel(UserProfile)
+
+    # IDE autocomplete works
+    user_profile: UserProfile = {
+        "user_id": "user_123",
+        "name": "Alice",
+        "email": "alice@example.com",
+        "age": 30
+    }
+
+    profile_channel.set("current_user", user_profile)
+
+@task(inject_context=True)
+def generate_report(context):
+    # Type information preserved
+    profile_channel = context.get_typed_channel(UserProfile)
+    metrics_channel = context.get_typed_channel(UserMetrics)
+
+    user_profile = profile_channel.get("current_user")
+    user_metrics = metrics_channel.get("user_metrics")
+
+    # IDE understands types and provides autocomplete
+    print(f"User: {user_profile['name']}")  # IDE knows 'name' is str
+    print(f"Logins: {user_metrics['login_count']}")  # IDE knows 'login_count' is int
+```
+
+##### TypedChannel Benefits
+
+- ✅ **Compile-time type checking**: Detect type errors early with mypy/pyright
+- ✅ **IDE autocomplete**: Field names and types auto-completed by IDE
+- ✅ **Self-documenting**: TypedDict serves as API contract
+- ✅ **Refactoring safety**: IDE detects all usages when renaming fields
+- ✅ **Team development**: Shared schemas prevent misunderstandings
+
+##### When to Use TypedChannel
+
+**Use TypedChannel**:
+- ✅ Complex message structures
+- ✅ Team development (shared schemas)
+- ✅ Long-lived codebases
+- ✅ API-like contracts between tasks
+
+**Use Regular Channel**:
+- ✅ Simple key-value pairs
+- ✅ Prototyping and quick experiments
+- ✅ Dynamic data structures
+- ✅ Single-developer projects
+
+#### Common Use Cases
+
+```python
+# Shared configuration
+channel = context.get_channel()
+channel.set("config", {"batch_size": 100})
+
+# Metrics accumulation
+metrics = channel.get("metrics", default=[])
+metrics.append({"task": "...", "duration": 1.5})
+channel.set("metrics", metrics)
+
+# Progress tracking
+progress = channel.get("progress", default=0)
+channel.set("progress", progress + 10)
 ```
 
 #### Comparison with Competitors
 
-| Tool | Inter-task Communication | Distributed Support | API Style |
-|------|-------------------------|---------------------|-----------|
-| **Graflow** | ✅ Channels | ✅ Redis | Namespaced KVS |
-| **Airflow** | ⚠️ XCom | ⚠️ Via metadata DB | Key-value |
-| **LangGraph** | ⚠️ State object | ❌ | Shared state |
-| **Celery** | ❌ (via result backend) | ⚠️ Limited | N/A |
+| Tool | Inter-task Communication | Distributed Support | Type Safety | API Style |
+|------|-------------------------|---------------------|-------------|-----------|
+| **Graflow** | ✅ Channels | ✅ Redis | ✅ TypedChannel | Namespaced KVS |
+| **Airflow** | ⚠️ XCom | ⚠️ Via metadata DB | ❌ | Key-value |
+| **LangGraph** | ⚠️ State object | ❌ | ✅ Pydantic | Shared state |
+| **Celery** | ❌ (via result backend) | ⚠️ Limited | ❌ | N/A |
 
-**Key Advantage**: **Workflow-scoped state sharing via namespaced key-value store** with distributed support.
+**Key Advantage**: **Workflow-scoped state sharing via namespaced key-value store** with distributed support (Redis) and type safety (TypedChannel).
 
 ---
 
