@@ -24,13 +24,13 @@ python -m graflow.api --backend filesystem
 docker run -p 6379:6379 redis:7.2
 
 # Start API server
-python -m graflow.api --backend redis --redis-host localhost --redis-port 6379
+python -m graflow.api --port 8080 --backend redis --redis-host localhost --redis-port 6379
 ```
 
 The server will start at `http://localhost:8000` with:
-- Web UI: `http://localhost:8000/ui/feedback/{feedback_id}`
-- API docs: http://localhost:8000/docs
-- Health check: http://localhost:8000/health
+- Web UI: `http://localhost:8080/ui/feedback/{feedback_id}`
+- API docs: http://localhost:8080/docs
+- Health check: http://localhost:8080/health
 
 ### 2. Run a Workflow with Feedback
 

@@ -71,7 +71,7 @@ uv sync --all-extras
 
 2. Start API server (Terminal 1):
    ```bash
-   uv run python -m graflow.api --backend redis --redis-host localhost --redis-port 16379
+   uv run python -m graflow.api --port 8080 --backend redis --redis-host localhost --redis-port 16379
    ```
 
 3. Run workflow (Terminal 2):
