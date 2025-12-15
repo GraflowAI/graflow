@@ -4,7 +4,7 @@ Welcome to the Graflow examples! This directory contains progressive examples to
 
 ## 🎉 What's Available
 
-**41 comprehensive, production-ready examples** covering:
+**45 comprehensive, production-ready examples** covering:
 - ✅ **Task Basics** - Define and execute tasks with parameters
 - ✅ **Workflow Orchestration** - Sequential and parallel task composition
 - ✅ **Data Flow** - Channels, typed communication, and result storage
@@ -16,6 +16,7 @@ Welcome to the Graflow examples! This directory contains progressive examples to
 - ✅ **Group Execution Policies** - Flexible error handling for parallel tasks
 - ✅ **LLM Integration** - AI-powered workflows with LLMClient and agents
 - ✅ **Human-in-the-Loop** - Interactive workflows with human feedback
+- ✅ **Checkpoint/Resume** - Workflow state persistence and fault tolerance
 
 All examples include detailed documentation, real-world use cases, and hands-on experiments!
 
@@ -169,6 +170,20 @@ Build interactive workflows with human feedback:
 
 [View HITL examples →](12_hitl/)
 
+### ✅ 13_checkpoints - Checkpoint/Resume
+**Status**: Complete | **Difficulty**: Intermediate to Advanced
+
+Master workflow state persistence and fault tolerance:
+- Basic checkpoint creation and resumption
+- State machine workflows with checkpoint at each transition
+- Periodic checkpoints for long-running tasks
+- Fault recovery with automatic retry
+- Production-ready patterns for ML training and data pipelines
+
+[View checkpoint examples →](13_checkpoints/)
+
+**Use Cases**: Long-running ML training, multi-hour data pipelines, fault-tolerant workflows, state machine workflows
+
 ## Learning Path
 
 **Recommended order for beginners:**
@@ -262,7 +277,15 @@ Build interactive workflows with human feedback:
 3. `03_channel_integration.py` - Feedback via channels (20 min)
 4. `04_api_feedback.py` - REST API feedback submission (25 min)
 
-**Total Learning Time**: ~12.2 hours to complete all examples
+### Level 13: Checkpoint/Resume 💾
+
+**13_checkpoints/** - Workflow state persistence and fault tolerance
+1. `01_basic_checkpoint.py` - Basic checkpoint/resume workflow (15 min)
+2. `02_state_machine_checkpoint.py` - State machine with checkpoints (25 min)
+3. `03_periodic_checkpoint.py` - Periodic checkpoints for long tasks (20 min)
+4. `04_fault_recovery.py` - Fault tolerance with automatic retry (25 min)
+
+**Total Learning Time**: ~13.7 hours to complete all examples
 
 ### Quick Start Path (30 minutes)
 
@@ -411,6 +434,13 @@ examples/
 │   ├── 03_channel_integration.py
 │   └── 04_api_feedback.py
 │
+├── 13_checkpoints/     # Checkpoint/Resume
+│   ├── README.md       # Category documentation
+│   ├── 01_basic_checkpoint.py
+│   ├── 02_state_machine_checkpoint.py
+│   ├── 03_periodic_checkpoint.py
+│   └── 04_fault_recovery.py
+│
 └── README.md           # This file
 ```
 
@@ -434,6 +464,7 @@ examples/
 | 10_group_exec_policy | ✅ Complete | 5/5 | Parallel group error handling policies |
 | 11_llm_integration | ✅ Complete | 4/4 | LLM-powered workflows |
 | 12_hitl | ✅ Complete | 4/4 | Human-in-the-Loop workflows |
+| 13_checkpoints | ✅ Complete | 4/4 | Checkpoint/Resume for fault tolerance |
 
 ## Troubleshooting
 
@@ -497,7 +528,7 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md) for details.
 
 All planned examples are now complete! 🎉
 
-The **41 examples** provide comprehensive coverage from basic concepts to AI-powered production applications. You can now:
+The **45 examples** provide comprehensive coverage from basic concepts to AI-powered production applications. You can now:
 
 1. **Build Production Workflows** - Use patterns from 08_real_world
 2. **Scale with Redis** - Deploy distributed workflows from 05_distributed
@@ -508,6 +539,7 @@ The **41 examples** provide comprehensive coverage from basic concepts to AI-pow
 7. **Handle Parallel Errors** - Implement flexible error policies from 10_group_exec_policy
 8. **Integrate LLMs** - Build AI-powered workflows with LLMClient and agents from 11_llm_integration
 9. **Add Human Feedback** - Build interactive workflows with HITL from 12_hitl
+10. **Implement Fault Tolerance** - Build resilient workflows with checkpoint/resume from 13_checkpoints
 
 Additional examples may be added based on community feedback and emerging use cases.
 
