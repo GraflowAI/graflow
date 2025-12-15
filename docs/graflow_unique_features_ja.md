@@ -1,762 +1,945 @@
-## 🌟 はじめに: AIエージェント時代のワークフローと「理想と現実のギャップ」
+# Graflow独自機能とオリジナリティ
+## LangGraph、LangChain、Celery、Airflowとの包括的比較
 
-LLMの台頭により、システム開発の現場では「AIエージェント」をどのように業務や自社製品に組み込むかが喫緊の関心事となっています。
+**ドキュメントバージョン**: 1.3
+**最終更新**: 2025-12-05
+**著者**: Graflowチーム
 
-一方で、いざプロダクション環境でエージェントを動かそうとすると、既存のツールと要件の間に **「理想と現実のギャップ」** を感じることはないでしょうか？
+**更新履歴**:
+- v1.3 (2025-12-05): コア機能 #3「ステートマシン実行」にワークフロー制御（terminate_workflow/cancel_workflow）を追加
+- v1.2 (2025-12-05): コア機能 #10 に「Human-in-the-Loop (HITL)」を追加し、比較分析とユースケースを更新
+- v1.1 (2025-10-23): コア機能 #9 に「チェックポイント／リジューム」を追加し、関連セクションを全面刷新
+- v1.0 (2025-10-22): 初版
 
-- 「自律的に動くエージェントは魅力的だが、本番環境では挙動を制御したい」
-- 「SuperAgentの挙動が不安定なので挙動を把握したい」
-- 「多数のエージェントタスクの並列処理やHuman-in-the-Loop(HITL)、長時間走るコストの高いタスクの再開処理（checkpoint/resume）がうまく扱えない」
+---
 
-本記事では、こうした課題意識から開発している新しいオーケストレーションエンジン **「Graflow」** の設計について解説します
+## 目次
 
-:::message
-💡 **関連記事**
-以降、以前の記事「[AI Agent時代でもWorkflowが重要な理由](https://zenn.dev/myui/articles/27f69e5fe41345)」で整理した内容（Agentic Workflowの重要性）をベースに、実際に開発したGraflowの設計を深掘りします。
-:::
+1. [エグゼクティブサマリー](#エグゼクティブサマリー)
+2. [コア独自機能](#コア独自機能)
+3. [詳細機能分析](#詳細機能分析)
+4. [比較分析](#比較分析)
+5. [ユースケースガイドライン](#ユースケースガイドライン)
+6. [本番環境デプロイメント](#本番環境デプロイメント)
+7. [今後のロードマップ](#今後のロードマップ)
 
-## 🌊 Agentフレームワークの潮流：SuperAgent型の隆盛
+---
 
-2025年中盤のGoogle ADKの登場あたりから、AI Agentフレームワークの潮流にも大きな変化が起きており、**新世代のSuperAgent型フレームワーク** が次々と登場し、開発者の注目を集めています：
+## エグゼクティブサマリー
 
-- **[Google ADK](https://github.com/google/adk-python)** : Googleが提供する、プログラマブルなエージェント開発フレームワーク
-- **[Bedrock AgentCore](https://aws.amazon.com/jp/bedrock/agentcore/)**: 
-BedrockのAPIをサポートしたエージェント構築フレームワーク
-- **[PydanticAI](https://ai.pydantic.dev/)**: Pydanticチームによる、型安全性を重視したシンプルなエージェントフレームワーク
-- **[SmolAgents](https://huggingface.co/docs/smolagents/)**: HuggingFaceによる、軽量で拡張可能なエージェントフレームワーク
-- **[OpenAI Agents SDK](https://openai.github.io/openai-agents-python/ja/)**: OpenAIによるAI Agent構築用のフレームワーク。[Swarm](https://github.com/openai/swarm) を本番運用向けにアップグレードしたもの
+Graflowは、**汎用ワークフロー実行エンジン**であり、タスクオーケストレーションシステムの長所に、**動的グラフ変更**、**ワーカーフリート管理**、**プラグ可能な実行戦略**、**チェックポイント／リジューム機能**、**Pythonic DSL設計**といった独自の革新を組み合わせています。
 
-これらのフレームワークは、いわゆるスーパーエージェント[^superagent]型の **ReActスタイルのツール呼び出し（Reasoning + Acting）や推論ループ（Think-Act-Observe）を効率的に実装する**ことに特化しています。
+### 主要な差別化要因
 
-[^superagent]: SuperAgentの定義として、ReActのようにツール呼び出しを利用して自立的に動作すること。Subエージェントを定義できるものをSuperAgentと呼んでいます。
+| 機能 | 説明 | 競合ツール |
+|------|------|-----------|
+| **ワーカーフリート管理** | TaskWorkerによるグループ化タスクの分散並列実行 | Celery、Airflow（部分的） |
+| **ランタイム動的タスク** | 実行中にワークフローグラフを変更可能 | なし（LangGraphはコンパイル時のみ） |
+| **ステートマシン実行** | next_iteration()によるサイクル、terminate_workflow/cancel_workflowによる早期終了制御 | なし |
+| **Pythonic演算子DSL** | ワークフローグラフ（DAG＋ループ）を数学的構文（`>>`、`\|`）で表現 | なし |
+| **プラグ可能タスクハンドラー** | GPU、SSH、クラウド、Dockerなどのカスタム実行戦略 | Celery / Airflow で限定的 |
+| **Docker実行** | コンテナ化タスク実行を標準装備 | 外部ツールが必要 |
+| **細粒度エラーポリシー** | 5つの組み込み並列グループエラーモード | なし |
+| **シームレスなローカル/分散切替** | 1行でバックエンドを切り替え | なし（多くは追加インフラ必須） |
+| **チャンネルベース通信** | ワークフロー全体で共有する名前空間付きKVS | XCom（Airflow）、State（LangGraph） |
+| **チェックポイント／リジューム** | タスク内からのユーザー制御チェックポイント保存 | LangGraph（自動のみ）、Airflow（限定的） |
+| **Human-in-the-Loop (HITL)** | 実行中の人間介入とフィードバック待機、汎用Webhook通知 | LangGraph（限定的）、他なし |
 
-:::message
-💡 **Agentフレームワーク選択についてもっと詳しく**
+---
 
-フレームワーク選択の実践的な考察については、[LayerX PdM Kenta Watanabeさんの記事](https://zenn.dev/layerx/articles/91321c52241600)が参考になります。記事では、「過度な抽象化を避ける」ことの重要性が説かれています。
-:::
+## コア独自機能
 
-## 🎯 Graflowのアプローチ: Agentic Workflow（Type B）
+### 概要
 
-AIワークフローは自律性の度合いで3つに分類されます：
+Graflowの独自機能は**10つのカテゴリー**で構成されています。
 
-- **Type A**: 決定的ワークフロー（従来型ETL、RPA）
-- **Type B**: Agentic Workflow（構造化フロー + エージェント自律性）
-- **Type C**: SuperAgent（完全自律エージェント）
+1. **ワーカーフリート管理** — タスクグループを分散並列実行
+2. **ランタイム動的タスク** — 実行中にグラフ構造を変更
+3. **ステートマシン実行** — next_iterationによるサイクル制御、terminate/cancel_workflowによる早期終了
+4. **プラグ可能タスクハンドラー** — Dockerを含む柔軟な実行戦略
+5. **細粒度エラーポリシー** — 並列グループ単位で柔軟に制御
+6. **Pythonic演算子DSL** — DAGとループを直感的に記述
+7. **シームレスなローカル/分散切替** — バックエンドのワンライン切替
+8. **チャンネル通信** — 名前空間付きKVSによるステート共有
+9. **チェックポイント／リジューム** — ワークフロー状態の永続化と復旧
+10. **Human-in-the-Loop (HITL)** — 実行中の人間介入とフィードバック取得
 
-![3つのワークフロータイプ](https://storage.googleapis.com/zenn-user-upload/ea64fdef54c5-20251208.jpg)
+---
 
-完全自律型（Type C）は魅力的ですが、プロダクション環境では**制御の難しさ、コスト肥大化、品質保証の欠如**という課題があります。プロンプトによるLLMの制御は、指示通りに動作するとは限りません。
+## 詳細機能分析
 
-Type Bは構造化オーケストレーションと局所的自律性のバランスをとった **「制御された自律性」** を実現しているアプローチと言えます。
-- **構造化オーケストレーション**: 全体フローは人間が設計
-- **局所的自律性（Fatな自立ノード）**: 各タスク内部でエージェントが自律的に動作
+### 1. ワーカーフリート管理 🚀
 
-そこでGraflowでは **柔軟性と制御性のバランス**こそ、実務でAIを使いこなす最適解と考え、**Type BのAgentic Workflow** に特化することを選択しました。
+**実装ファイル**: `graflow/worker/worker.py`, `examples/05_distributed/redis_worker.py`
 
-## 🔧 Graflowが解決する実務課題
+GraflowはTaskWorkerプロセスを標準装備しており、任意の場所でワーカーを起動しやすく分散並列処理を構成できます。
 
-冒頭で挙げた課題に対して、Graflowはどう答えるのか。具体的に見ていきます。
-ここでは、LangGraphのアプローチと比較して、実際のコードを交え、設計の背景を説明します。
+#### アーキテクチャ概観
 
-### 💡 課題1: エージェント内部の推論ループまでグラフ化すると、可読性・保守性が悪くなる
-
-#### ✅ Graflowスタイル: SuperエージェントはFatノード
-
-Graflowのアプローチでは、スーパーエージェント内部をタスクグラフで表現するLangGraphなどとは異なり、スーパーエージェントを **Fatノードとして扱い**、ワークフローの「タスク間の連携」に集中するアプローチを取っています。
-
-その上で、SuperAgentにはGoogle ADK等の既存のSuperAgent系のライブラリをラップして利用できるようにしています[^plan_superagent]。
-
-[^plan_superagent]: ADKの[context compression](https://google.github.io/adk-docs/context/compaction/)やcontext caching等もそのまま利用できるという利点があります。Google ADK以外にもBedrock AgentCoreやPydanicAIなどをLLM Agent（SuperAgent）としてサポートする予定です。
-
-SuperAgentの実装にGoogle ADKを利用する際の利用イメージは以下のとおりです。
-
-```py
-# ADK LlmAgent を作成
-from google.adk.agents import LlmAgent
-adk_agent = LlmAgent(
-    name="supervisor",
-    model="gemini-2.0-flash-exp",
-    tools=[search_tool, calculator_tool],
-    sub_agents=[analyst_agent, writer_agent]
-)
-
-# Graflow でラップ
-from graflow.llm.agents.adk_agent import AdkLLMAgent
-agent = AdkLLMAgent(adk_agent)
-
-# ExecutionContext に登録
-context.register_llm_agent("supervisor", agent)
-
-# タスクで使用（inject_llm_agentで依存性注入）
-@task(inject_llm_agent="supervisor")
-def supervise_task(agent: LLMAgent, query: str) -> str:
-    result = agent.run(query)
-    return result["output"]
+```
+┌─────────────┐
+│ メインプロセス │  タスクをRedisキューへ投入
+└─────┬───────┘
+      │
+      ▼
+┌─────────────────────────────────────────┐
+│               Redisタスクキュー             │
+│  ┌────────┐ ┌────────┐ ┌────────┐ │
+│  │ Task 1 │ │ Task 2 │ │ Task 3 │ │
+│  └────────┘ └────────┘ └────────┘ │
+└───────┬──────────┬──────────┬──────────┘
+        │          │          │
+   ┌────▼───┐ ┌───▼────┐ ┌──▼─────┐
+   │Worker1│ │Worker2 │ │Worker3 │
+   │ 4 CPU │ │ 8 CPU  │ │16 CPU  │
+   └────────┘ └────────┘ └────────┘
 ```
 
-**フレームワークに縛られない**: Graflowはワークフローに特化しているので、Google ADK、PydanticAI、SmolAgents…どのフレームワークで作ったエージェントも、タスクとしてラップすれば同じワークフローで使えるという利点があります。
+#### 主要機能
 
-#### LangGraphの戦略: SuperAgentもワークフローも自前実装（フルスタック型）
+- **専用TaskWorkerプロセス**: サーバーやコンテナからキューに接続して実行
+- **Graceful Shutdown**: SIGTERM/SIGINTで安全に停止、処理中タスクを完了
+- **ThreadPoolExecutor**: ワーカー内でのマルチタスク処理
+- **メトリクス収集**: 処理件数、成功/失敗数、総実行時間などをエクスポーズ
+- **水平スケール**: ワーカー追加でリニアにスループットを伸長
+- **特化ワーカー**: GPU専用、I/O専用などの構成が容易
+- **本番運用テンプレート**: systemdサービス、Dockerfile、Kubernetes Manifestを提供
 
-一方、LangGraph v1.0は **SuperAgentもワークフロー実装も自前で提供する**フルスタック型の戦略を取っています。
+#### 競合比較
 
-LangChain v1.0では、LCEL（LangChain Expression Language）が公式ドキュメント上で使われなくなり、時代の潮流に乗るように **`create_react_agent`を中核としたReActエージェント機能** が強化（開発シフト）されました[^langgraph_v1]。
+| 観点 | Graflow | Celery | LangGraph | Airflow |
+|------|---------|--------|-----------|---------|
+| CLIワーカー | ✅ 標準 | ✅ | ❌ | ✅ |
+| Graceful停止 | ✅ | ✅ | N/A | ✅ |
+| メトリクス | ✅ 標準 | ⚠️ Flower | ❌ | ✅ |
+| オートスケール | ✅ | ✅ | ❌ | ⚠️ |
+| ステート共有 | ✅ Redisチャンネル | ⚠️ ブローカー | ⚠️ State | ⚠️ XCom |
 
-[^langgraph_v1]: [これだけで分かり！LangChain v1.0 アップデートまとめ](https://speakerdeck.com/os1ma/koredakedewan-wakari-langchain-v1-dot-0-atupudetomatome)（Generative Agents 大嶋さん）に詳しい解説があります。
+---
 
-```python
-# LangGraphの得意領域: エージェント内部の思考プロセス
-from langgraph.prebuilt import create_react_agent
+### 2. ランタイム動的タスク生成 🔄
 
-agent = create_react_agent(llm, tools)
-# Think → Act → Observe のループをグラフで表現
-```
+**実装ファイル**: `examples/07_dynamic_tasks/runtime_dynamic_tasks.py`
 
-![LangGraph ReAct](https://storage.googleapis.com/zenn-user-upload/72539bf6ce7d-20251212.png)
-
-LangGraphは従来は「ワークフロー実装の低レベルライブラリ」として位置づけだったと思いますが、現在では **SuperAgent機能（ReAct、Middleware、HumanInTheLoop等）を自前で充実させる**方向に向かっています。
-
-#### 戦略の対比: フルスタック vs 責務分離
-
-| | LangGraph v1.0 | Graflow |
-|---|---|---|
-| **戦略** | フルスタック型 | 責務分離型 |
-| **SuperAgent** | 自前実装（create_react_agent） | 外部フレームワークに委譲（ADK、PydanticAI等） |
-| **ワークフロー** | グラフベース（SuperAgentもグラフ化） | グラフベース（Agentic Workflow特化） |
-| **利点** | 統一された実装体験 | 各領域のベストツールを活用可能 |
-
-Graflowは **「Agentic Workflowが重要、SuperAgent部分は専門フレームワークに任せる」** という戦略を取り、ワークフローオーケストレーションに集中しています。
-
-:::message
-💡 **LangGraphの詳細はこちら**
-LangGraphの仕組みや`create_react_agent`の詳細は、[【完全理解】LangGraphの仕組みを徹底解説（hiroktsさん）](https://zenn.dev/hirokts/articles/a27405fe0d2d50)で丁寧に解説されています。
-:::
-
-### 💡 課題2: 条件分岐とループが事前定義必須で、実行時の柔軟性が低い
-
-LangGraphでは `conditional_edge`（条件分岐）やループをコンパイル時に定義する必要があります。実行時にファイル数やデータ量に応じて動的に処理を変更することが困難です。
-
-#### LangGraphのアプローチ: 事前定義された条件分岐とループ
-
-```python
-from langgraph.graph import StateGraph, END
-
-# 条件分岐関数を事前定義
-def should_retry(state):
-    return "retry" if state["score"] < 0.8 else "continue"
-
-# グラフ構築時に全パスを定義
-graph = StateGraph(State)
-graph.add_node("process", process_fn)
-graph.add_node("retry", retry_fn)
-graph.add_node("finalize", finalize_fn)
-
-# conditional_edge で分岐を事前定義
-graph.add_conditional_edges(
-    "process",
-    should_retry,  # 条件関数
-    {
-        "retry": "retry",      # リトライパス
-        "continue": "finalize"  # 正常パス
-    }
-)
-
-# ループもエッジで事前定義
-graph.add_edge("retry", "process")  # リトライ → 処理に戻る
-graph.add_edge("finalize", END)
-
-app = graph.compile()  # ここで固定される
-```
-
-**制約**:
-- すべての分岐パスを事前にグラフで定義する必要がある
-- 実行時に判明する条件（ファイル数、データサイズ等）への柔軟な対応が困難
-- ループ回数や終了条件を動的に変更できない
-- 実装がややこしくなりがち
-
-#### Graflowのアプローチ: 実行時の動的制御
-
-このようなLangGraphを使っていての不満から、Graflowは動的なタスク生成と実行時のタスクグラフの動的な構成により、ユーザタスク内で条件分岐を書く方がよりシンプルだと考え、以下のような設計を取りました。
+実行中の入力に応じてタスクを増減でき、静的DAGでは対応しづらい適応型ワークフローを表現できます。
 
 ```python
 @task(inject_context=True)
-def process_data(context: TaskExecutionContext):
-    result = run_processing()
-
-    # 実行時にスコアを見て判断
-    if result.score < 0.8:
-        # リトライが必要 → 自分自身を再度実行
-        context.next_iteration()
-    else:
-        # 次のタスクへ進む（通常フロー）
-        context.next_task(finalize_task())
-
-@task(inject_context=True)
-def process_directory(context: TaskExecutionContext):
-    files = list_files()  # 実行時にファイル数が判明
-
-    # ファイル数に応じてタスクを動的生成
-    for file in files:
-        # 事前にグラフを定義する必要なし
-        context.next_task(process_file(file))
-
-@task(inject_context=True)
-def adaptive_processing(context: TaskExecutionContext):
+def adaptive_processor(context: TaskExecutionContext):
     data_quality = check_quality()
 
-    # データ品質に応じて異なるタスクを実行時に決定
     if data_quality < 0.5:
-        context.next_task(cleanup_task())
+        cleanup_task = TaskWrapper("cleanup", cleanup_low_quality_data)
+        context.next_task(cleanup_task)
     elif data_quality > 0.9:
-        context.next_task(enhance_task())
+        enhance_task = TaskWrapper("enhance", enhance_high_quality_data)
+        context.next_task(enhance_task)
     else:
-        context.next_task(standard_task())
+        process_task = TaskWrapper("process", standard_processing)
+        context.next_task(process_task)
 ```
 
-**柔軟性**:
-- ✅ 実行時に条件を評価して次のアクションを決定
-- ✅ ファイル数やデータ量に応じて動的にタスクを生成
-- ✅ ループ回数や終了条件を実行時に変更可能
-- ✅ 早期終了（`terminate_workflow()`）や異常終了（`cancel_workflow()`）も可能
+- `context.next_task` で新タスクを生成しキューへ投入
+- 既存タスクへジャンプする `goto=True` もサポート
+- 動的なステップ追加でもチェックポイント／リジュームと整合
 
-**応用例**:
-- LLMの回答品質で分岐（スコアが低ければ再生成ループ）
-- データ品質に応じてクリーンアップタスクを追加
-- エラー時にリトライタスクを自動生成
-- 処理対象が1000件なら並列タスクを動的生成
+---
 
-### 💡 課題3: 長時間ワークフローが途中で落ちたら最初から
+### 3. ステートマシン実行 ⏩
 
-LangGraphのcheckpointは自動のみで、任意タイミングでの保存ができません。
-長時間のMLトレーニングやデータ処理では、重要なポイントで明示的に状態を保存したいニーズがあります。
+**実装ファイル**: `graflow/core/context.py`, `graflow/core/engine.py`
 
-**Graflowの解決策**: ユーザー制御の**checkpoint/resume**
+Graflowは高度なワークフロー制御機能を提供し、イテレーション、早期終了、キャンセルを統一的に扱います。
 
-チェックポイントの作成には実行時のオーバヘッドもかかるため、Graflowではユーザがタスクの中でcheckpointの作成を制御するというアプローチを取っています。
+#### イテレーション制御
+
+`next_iteration()` を用いることで、収束処理や状態遷移を明示的に表現できます。チャンネルに状態を保存しながらループするパターンを推奨します。
+
+```python
+@task(inject_context=True)
+def iterative_task(context: TaskExecutionContext):
+    channel = context.get_channel()
+    iteration = channel.get("iteration", 0)
+
+    result = run_step(iteration)
+    channel.set("iteration", iteration + 1)
+
+    if not converged(result):
+        context.next_iteration()
+    else:
+        channel.set("result", result)
+        return "DONE"
+```
+
+#### ワークフロー正常終了（terminate_workflow）
+
+タスクから `context.terminate_workflow(message)` を呼び出すことで、現在のタスクを完了としてマークしつつ、後続タスクを実行せずにワークフローを正常終了できます。
+
+```python
+@task(inject_context=True)
+def check_cache(context):
+    cache_result = get_from_cache()
+
+    if cache_result is not None:
+        # キャッシュヒット - 以降の処理をスキップ
+        context.terminate_workflow("データがキャッシュに存在")
+        return cache_result
+
+    # キャッシュミス - 通常フローで後続タスクを実行
+    return None
+```
+
+**使用例**:
+- キャッシュヒット時の早期完了
+- 条件を満たしたため残りのステップが不要
+- データが既に最新のため更新不要
+
+#### ワークフローキャンセル（cancel_workflow）
+
+タスクから `context.cancel_workflow(message)` を呼び出すことで、ワークフロー全体を異常終了させます。現在のタスクは完了としてマークされず、`GraflowWorkflowCanceledError` 例外が発生します。
+
+```python
+@task(inject_context=True)
+def validate_data(context, data):
+    if not data.is_valid():
+        # データ検証失敗 - ワークフロー全体をキャンセル
+        context.cancel_workflow("データ検証失敗: 無効な形式")
+
+    return process(data)
+```
+
+**使用例**:
+- 不正なデータが検出された
+- 重大なエラーが発生して続行不可能
+- ユーザーが明示的にキャンセルを要求
+
+#### 制御フロー優先順位
+
+```python
+# 制御フロー優先順位（エンジン内での処理順）:
+# 1. cancel_workflow  ← タスク完了前に例外発生（異常終了）
+# 2. terminate_workflow ← タスク完了、ループ終了（正常終了）
+# 3. goto_called  ← タスク完了、successorスキップ
+# 4. 通常フロー  ← タスク完了、successor実行
+```
+
+#### 特徴まとめ
+
+- サイクル数は CycleController が制限し、無限ループを防止
+- チェックポイントと組み合わせることで途中経過の復旧が可能
+- `terminate_workflow`: タスク完了済み、後続スキップ、正常終了
+- `cancel_workflow`: タスク未完了、例外発生、異常終了
+
+---
+
+### 4. プラグ可能タスクハンドラー 🧩
+
+**実装ファイル**: `graflow/core/handlers/`
+
+Graflowは実行戦略（Execution Strategy）をプラグインとして定義でき、ローカル実行、Docker、SSH、クラウドAPI呼び出しなどを同一DSLで混在させられます。
+
+| ハンドラー | 用途 | 特徴 |
+|------------|------|------|
+| `direct` | プロセス内実行 | デバッグ、単体テストに最適 |
+| `docker` | コンテナ実行 | 依存関係の隔離、GPUサポート |
+| `group_policy` | 並列グループ制御 | エラーポリシーと連携 |
+| カスタム | 任意実装 | APIコール、リモート実行、GPU特化など |
+
+ハンドラーは `@task(handler="docker", handler_kwargs={...})` のように指定します。
+
+---
+
+### 5. 細粒度エラーポリシー ⚠️
+
+**実装ファイル**: `graflow/core/handlers/group_policy.py`
+
+並列グループに対して5種類のエラーハンドリングモードを提供。
+
+| モード | 動作 | 典型ユースケース |
+|--------|------|----------------|
+| `strict` | いずれか失敗したらグループ全体を失敗扱い | 重要業務ワークフロー |
+| `best_effort` | 成功分のみを採用し失敗は無視 | 部分成功を許容するデータ収集 |
+| `at_least_n` | 指定した件数以上が成功すれば続行 | アンサンブル推論（3件中2件成功で十分など） |
+| `critical_tasks` | 指定したタスクだけは必ず成功させる | プライマリ処理は必須、副次処理は任意 |
+| `custom` | 独自ポリシーを実装して適用 | 特殊要件に合わせたエラーロジック |
+
+これらのモードは `parallel_group.with_policy(...)` で適用でき、`ErrorHandlingPolicy` ヘルパーを介して簡潔に指定可能です。ライブ統計に基づき、失敗時の自動リトライ／スキップを制御できます。
+
+---
+
+### 6. Pythonic演算子DSL ➕
+
+**実装ファイル**: `graflow/core/workflow.py`
+
+Graflowは演算子オーバーロードを使って、DAGおよびサイクルを数学的に記述します。
+
+```python
+with workflow("etl") as wf:
+    fetch >> (transform_a | transform_b) >> merge >> load
+
+@task(inject_context=True)
+def loop(context):
+    if not context.get_channel().get("done"):
+        context.next_iteration()
+```
+
+| 構文 | 意味 |
+|------|------|
+| `a >> b` | aの出力がbの入力 |
+| `a \| b` | 並列分岐 |
+| `(a \| b) >> c` | ファンイン |
+| `next_iteration()` | 同一タスクの次サイクルをキューに投入 |
+| `context.next_task(executable)` | 新しいタスクを生成しキューに追加 |
+| `context.next_task(existing, goto=True)` | 既存タスクへジャンプ（後続をスキップ） |
+
+**ポイント**: GraflowはDAGだけでなく、状態機械のループもDSLで表現できます。
+
+---
+
+### 7. シームレスなローカル/分散切替 🔁
+
+Graflow では ExecutionContext のキューは常にインメモリですが、並列・分散実行が必要な `ParallelGroup`（例: `(task_a | task_b)`）に対しては `GroupExecutor` を通じてバックエンドを切り替えます。
+
+```python
+parallel = (task_a | task_b | task_c).with_execution(
+    backend=CoordinationBackend.REDIS,
+    backend_config={"redis_client": redis_client, "key_prefix": "graflow:prod"}
+)
+parallel.run()
+```
+
+- Sequential（直列）タスクは常にローカル実行（in-memory queue）で処理される
+- `(task_a | task_b)` のような ParallelGroup 実行時にのみ、THREADING や REDIS バックエンドを選択可能
+- REDIS バックエンドの場合、`GroupExecutor` が Redis キューへタスクを発行し、`TaskWorker` がそれを消費する（キープレフィックスを合わせること）
+- ParallelGroup の実行モデルは Bulk Synchronous Parallel (BSP) に準拠しており、並列タスク完了後にバリア同期を行ってから次段へ進む
+
+---
+
+### 8. チャンネル通信 🧠
+
+**実装ファイル**: `graflow/channels/`
+
+チャンネルはワークフロー全体で共有される名前空間付きKey-Valueストアです。
+
+- MemoryChannel（デフォルト）: ローカル実行向け、チェックポイントに含まれる
+- RedisChannel: 分散実行向け、ワーカー間でステート共有
+- TypedChannel: TypedDictでスキーマを強制
+
+```python
+channel = context.get_channel()
+channel.set("epoch", 10)
+loss = channel.get("loss")
+```
+
+**ベストプラクティス**
+- チャンネルを単一の真実として扱い、副作用を明確化
+- 大規模データは外部ストレージへ格納し、チャンネルには参照のみを保存
+- チェックポイント利用時はチャンネルデータも保存される点に留意
+
+---
+
+### 9. チェックポイント／リジューム 💾
+
+**実装ファイル**: `graflow/core/checkpoint.py`, `tests/core/test_checkpoint.py`
+
+Graflowはタスク内から `context.checkpoint()` を呼び出すだけで、ワークフローの完全なスナップショットを取得できます。チェックポイントはタスク完了直後にエンジンが作成するため、一貫したステートが保存されます。
+
+#### 3ファイル構成
+
+```
+checkpoint_base_path/
+├── checkpoint.pkl         # ExecutionContext（グラフやチャンネルを含む）
+├── checkpoint.state.json  # 実行ステート（ステップ数、保留タスク、サイクル情報）
+└── checkpoint.meta.json   # メタデータ（タイムスタンプ、ユーザーメタデータ）
+```
+
+#### コアAPI
+
+##### タスク内でチェックポイントをスケジュール（推奨）
+
+```python
+@task(inject_context=True)
+def process_batch(context):
+    run_expensive_step()
+    context.checkpoint(metadata={"stage": "post_processing"})
+```
+
+- タスクは処理を完了させた上でチェックポイントが作成される
+- 直近のパスは `context.execution_context.last_checkpoint_path` に保存
+- メタデータでバッチ番号や状態名を記録するとリジュームが容易
+
+##### 即時チェックポイント（同一タスクから再開したい場合）
+
+```python
+checkpoint_path, metadata = context.checkpoint(
+    metadata={"stage": "critical_section"},
+    deferred=False,
+    path="checkpoints/manual/snapshot.pkl"
+)
+print(f"Checkpoint saved to {checkpoint_path}")
+```
+
+- `deferred=False` でその場でファイルを作成し、現在タスクから再開できる
+- `(path, metadata)` を即時に取得可能
+
+##### ホストコードから手動保存
+
+```python
+from graflow.core.checkpoint import CheckpointManager
+
+checkpoint_path, metadata = CheckpointManager.create_checkpoint(
+    execution_context,
+    metadata={"stage": "before_shutdown"}
+)
+```
+
+##### リジューム
+
+```python
+from graflow.core.checkpoint import CheckpointManager
+from graflow.core.engine import WorkflowEngine
+
+checkpoint_path = "checkpoints/session_12345_step_40.pkl"
+restored_context, metadata = CheckpointManager.resume_from_checkpoint(checkpoint_path)
+
+engine = WorkflowEngine()
+engine.execute(restored_context)
+```
+
+- グラフや保留タスクはチェックポイントに含まれるため再構築不要
+- Redisバックエンド使用時は同じRedisインスタンスへ接続すること
+
+##### クイックスタート: 保存と再開
+
+1. 長時間タスクに `context.checkpoint(metadata=...)` を挿入
+2. 出力されたパス（ログまたは `last_checkpoint_path`）を記録
+3. 再起動時に `CheckpointManager.resume_from_checkpoint(path)` を呼び、`WorkflowEngine.execute()` に渡す
+
+#### 代表的なユースケース
+
+1. **長時間ML訓練**
 
 ```python
 @task(inject_context=True)
 def train_model(context):
-    for epoch in range(100):
-        train_one_epoch(epoch)
-
-        if epoch % 10 == 0:
-            # 重要なポイントで明示的に保存
-            context.checkpoint(path="/tmp/my_checkpoint_1211",metadata={"epoch": epoch})
-
-# 再開
-CheckpointManager.resume_from_checkpoint("/tmp/my_checkpoint_1211")
-```
-
-**結果**: 90エポック目で落ちても、90エポック目から再開。無駄な再計算なし。
-
-### 💡 課題4: 承認待ちで数時間待てない
-
-**Graflowの解決策**: **Human-in-the-Loop (HITL)** とcheckpointの組み合わせ
-Graflowでは、context.request_feedback()の呼び出しによってHuman-in-the-loopを実現可能です。
-
-```python
-@task(inject_context=True)
-def request_deployment_approval(context):
-    response = context.request_feedback(
-        feedback_type="approval",
-        prompt="本番環境へのデプロイを承認しますか？",
-        timeout=300,  # 5分待機
-        notification_config={
-            "type": "webhook",
-            "url": "https://hooks.slack.com/services/XXX",
-            "message": "承認が必要です"
-        }
-    )
-
-    if not response.approved:
-        context.cancel_workflow("承認が拒否されました")
-```
-
-この際、人間のフィードバックはすぐには帰ってこないことも想定されますが、その間、プロセスが待機状態になってしまうのは非効率的です。そこで、HITLにはtimeoutを設定可能とし、timeoutした際にはcheckpointが作成されるようになっております。
-
-**動作**:
-1. 5分以内に承認 → そのまま続行
-2. 5分経過 → 自動でcheckpoint保存
-3. 数時間後に承認API経由で承認 → checkpointから再開
-
-シーケンス図で表すと次のような流れになります。
-![](https://storage.googleapis.com/zenn-user-upload/11c7d4501585-20251212.png)
-
-
-### 💡 課題5: タスクの並列処理とワーカーの水平スケールができない
-
-実務では、数百〜数千のAgentに並列処理したいニーズがあります。例えば、「1000件の画像を並列処理」「複数リージョンのデータを同時集計」「異なるLLMモデルとコンテキストの組み合わせで並列処理」といったシナリオです。
-
-#### Graflowの解決策: Redisベースの**分散ワーカー実行**
-
-Graflowは分散実行アーキテクチャを採用しており[^1]、タスクワーカーを水平スケール可能です（デフォルトではノード内のスレッド実行となります）。
-
-以下のようにタスクワーカーを複数起動するだけで、並列処理が可能になります：
-
-```bash
-# Terminal 1
-python -m graflow.worker.main --worker-id worker-1 --redis-host localhost
-
-# Terminal 2
-python -m graflow.worker.main --worker-id worker-2 --redis-host localhost
-
-# Terminal 3
-python -m graflow.worker.main --worker-id worker-3 --redis-host localhost
-```
-
-ワークフロー側は、ローカル実行から分散実行への切り替えが1行で可能：
-
-```python
-# ローカル実行 → 分散実行を1行で切り替え
-parallel = (task_a | task_b | task_c).with_execution(
-    backend=CoordinationBackend.REDIS,
-    backend_config={"redis_client": redis_client}
-)
-```
-
-**結果**:
-- **Kubernetes環境**: HPA（Horizontal Pod Autoscaler）でRedisキューの残タスク数に基づきワーカーPod数を自動調整
-- **ECS環境**: タスク数ベースのAuto Scalingで同様の仕組みを実現
-- **並列度**: ワーカー数 × 同時実行タスク数で柔軟にスケール
-
-シンプルなAPIで、分散実行と水平スケーリングを実現しています。
-
----
-
-## 🎁 その他の重要機能
-
-Graflowには、上記で紹介した課題解決機能に加えて、実務で役立つ独自機能が組み込まれています。
-
-### 🤖 軽量なLLM統合: inject_llm_client
-
-SuperAgentを使わない、よりシンプルなLLM呼び出しには `inject_llm_client` を使います。タスク内で直接LLM APIを呼び出し、複数のモデルを使い分けることも可能です。
-
-```python
-# LLMClient を ExecutionContext に登録
-from graflow.llm.client import LLMClient
-
-context.register_llm_client(LLMClient())
-
-# タスク内で複数モデルを使い分け
-@task(inject_llm_client=True, inject_context=True)
-def multi_model_task(llm: LLMClient, context: TaskExecutionContext) -> dict:
-    """タスク内で複数のモデルを使い分け"""
-
-    # チャンネルからデータを取得
     channel = context.get_channel()
-    text = channel.get("input_text")
+    epoch = channel.get("epoch", 0)
+    model = channel.get("model")
 
-    # 簡単なタスクは低コストモデル
-    summary = llm.completion_text(
-        [{"role": "user", "content": f"Summarize: {text}"}],
-        model="gpt-4o-mini"
-    )
+    model = train_epoch(model)
+    channel.set("model", model)
+    channel.set("epoch", epoch + 1)
 
-    # 複雑な推論は高性能モデル
-    analysis = llm.completion_text(
-        [{"role": "user", "content": f"Analyze deeply: {text}"}],
-        model="claude-3-5-sonnet-20241022"
-    )
+    if (epoch + 1) % 10 == 0:
+        context.checkpoint(metadata={"epoch": epoch + 1})
 
-    # 結果をチャンネルに保存
-    result = {"summary": summary, "analysis": analysis}
-    channel.set("analysis_result", result)
-
-    return result
+    if epoch + 1 < max_epochs:
+        context.next_iteration()
+    else:
+        return "Training complete"
 ```
 
-**inject_llm_client の利点**:
-- ✅ **シンプル**: ReActループ不要、直接API呼び出し
-- ✅ **柔軟なモデル選択**: タスク内で用途に応じてモデルを切り替え可能
-- ✅ **コスト最適化**: 簡単なタスクは低コストモデル、複雑なタスクは高性能モデル
-- ✅ **マルチプロバイダー**: LiteLLM統合により、OpenAI、Anthropic Claude、Bedrock、Gemini、Azureなどを統一APIで利用。Ollama経由でgpt-ossも利用可能。
+    - 途中で障害が起きても最新チェックポイントから再開（例: epoch 40）
 
-**使い分けの指針**:
-- **SuperAgent（inject_llm_agent）**: ツール呼び出しを伴う複雑な推論タスク、マルチターン対話
-- **LLMClient（inject_llm_client）**: 単発のLLM呼び出し、プロンプトベースのシンプルな処理
-
-### 📝 Pythonic演算子DSL: DAG × State Machineのハイブリッド設計
-
-Graflowは演算子オーバーロード（`>>`、`|`）を使って、DAGとループを数学的・直感的に記述できます。
-
-#### ハイブリッド設計の核心
-
-Graflowは **「DAG × State Machine のハイブリッド」** という独自のアプローチを採用しています：
-
-- **DAG部分（静的構造）**: 演算子（`>>`、`|`）でタスクグラフの骨格を定義
-- **State Machine部分（動的遷移）**: `next_task()`、`next_iteration()` で実行時に状態遷移
-
-この2つの組み合わせにより、**静的な可読性と動的な柔軟性**を両立しています。
+2. **多段ETLパイプライン**
 
 ```python
 with workflow("etl_pipeline") as wf:
-    # DAG部分: 演算子で静的な構造を定義
-    # 直列実行: >>
-    fetch >> transform >> load
+    extract >> validate >> transform >> load
 
-    # 並列実行: |
-    (transform_a | transform_b | transform_c) >> merge
+    @task(inject_context=True)
+    def transform(context):
+        result = expensive_transformation()
+        context.checkpoint(metadata={"stage": "transformed"})
+        return result
+```
 
-    # 複雑なフロー
-    fetch >> (validate | enrich) >> process >> (save_db | save_cache)
+3. **分散ワークフローのフェイルオーバー**
 
-# State Machine部分: タスク内で動的に遷移
+```python
+from graflow.queue.redis import RedisTaskQueue
+
+context = ExecutionContext.create(
+    graph,
+    "start",
+    channel_backend="redis",
+    config={"redis_client": redis_client, "key_prefix": "graflow:etl"}
+)
+redis_queue = RedisTaskQueue(context, redis_client=redis_client, key_prefix="graflow:etl")
+
 @task(inject_context=True)
-def adaptive_task(context: TaskExecutionContext):
-    result = process_data()
+def distributed_step(context):
+    process_partition()
+    context.checkpoint(metadata={"worker": "worker-1"})
+    finalize_partition()
+```
 
-    # 実行時に次の状態を決定（State Machineのように）
-    if result.needs_retry:
-        context.next_iteration()  # 自己ループ
-    elif result.quality > 0.9:
-        context.next_task(premium_task())  # 動的分岐
+4. **ステートマシンの遷移ごとに保存**
+
+```python
+@task(inject_context=True)
+def order_state_machine(context):
+    channel = context.get_channel()
+    state = channel.get("order_state", "NEW")
+
+    if state == "NEW":
+        validate_order()
+        channel.set("order_state", "VALIDATED")
+        context.checkpoint(metadata={"state": "VALIDATED"})
+        context.next_iteration()
+    elif state == "VALIDATED":
+        process_payment()
+        channel.set("order_state", "PAID")
+        context.checkpoint(metadata={"state": "PAID"})
+        context.next_iteration()
+    elif state == "PAID":
+        ship_order()
+        return "ORDER_COMPLETE"
+```
+
+#### 特徴まとめ
+
+- **ローカルバックエンド**: ファイルベース（`.pkl`, `.state.json`, `.meta.json`）
+- **Redisバックエンド**: 分散環境での共有チェックポイント（設計済み）
+- **S3バックエンド**: クラウドストレージ対応を計画
+- **完全な状態保存**: グラフ、チャンネル、保留タスク、サイクル情報、ユーザーメタデータ
+- **バリデーション**: schema_version 検証と原子的ファイル書き込みで破損を防止
+
+#### ベストプラクティス
+
+1. コストの高い処理直後に `context.checkpoint()` を挿入
+2. メタデータにバッチ番号やタイムスタンプを格納
+3. リジューム失敗時はログを確認し初期状態から再実行
+4. 古いチェックポイントは世代管理して容量を最適化
+5. CIで `CheckpointManager.resume_from_checkpoint` のユニットテストを実施
+
+---
+
+### 10. Human-in-the-Loop (HITL) 👤
+
+**実装ファイル**: `graflow/hitl/manager.py`, `graflow/hitl/types.py`, `docs/hitl/hitl_design_ja.md`
+
+Graflowは実行中のワークフローで人間のフィードバックを待機し、承認、テキスト入力、選択などの応答を受け取れます。即座の応答と遅延応答の両方をインテリジェントに処理します。
+
+#### コアAPI
+
+##### タスク内でフィードバックをリクエスト
+
+```python
+@task(inject_context=True)
+def approval_task(context):
+    # 承認を要求（3分待機）
+    response = context.request_approval(
+        prompt="本番環境へのデプロイを承認しますか？",
+        timeout=180
+    )
+
+    if response:
+        deploy_to_production()
     else:
-        context.next_task(standard_task())  # 別の動的分岐
+        cancel_deployment()
 ```
 
-**LangChain/LangGraphとの違い**:
-- **LangChain**: 巡回を含まないDAGのみ（State Machine不可）
-- **LangGraph**: StateGraphで巡回をサポートするが、`add_node`、`add_edge`、`add_conditional_edges` で全パスを事前定義
-- **Graflow**: 演算子でDAG骨格 + 実行時動的遷移のハイブリッド
+##### 複数のフィードバックタイプ
 
 ```python
-# LangGraph
-graph = StateGraph(...)
-graph.add_node("fetch", fetch_fn)
-graph.add_node("transform", transform_fn)
-graph.add_edge("fetch", "transform") # エッジを貼っていく表現が面倒
+# テキスト入力
+comments = context.request_text_input(
+    prompt="このレポートについてのコメントを入力してください",
+    timeout=300
+)
 
-# Graflow
-fetch >> transform
-```
+# 選択肢から選択
+action = context.request_selection(
+    prompt="次のアクションを選択してください",
+    options=["retry", "skip", "abort"],
+    timeout=180
+)
 
-なお、State Machine内部の実行ループを簡略化すると以下のようになります。
-![実行ループ](https://storage.googleapis.com/zenn-user-upload/d7bad1ef2a4e-20251212.png)
-
-### 🐳 プラグ可能タスクハンドラー: Docker実行を標準装備
-
-タスクごとに実行戦略（ハンドラー）を切り替えられます。Docker実行は標準装備で、依存関係の隔離やサンドボックス実行（LLMによって生成されたコードを後続タスクで安全に実行）が可能です。
-
-```python
-@task(handler="docker", handler_kwargs={
-    "image": "pytorch/pytorch:2.0-gpu",
-    "gpu": True,
-    "volumes": {"/data": "/workspace/data"},
-})
-def train_on_gpu():
-    # Dockerコンテナ内でGPU実行
-    return train_model()
-```
-
-**ハンドラーの種類**:
-- `direct`: プロセス内実行（デフォルト）
-- `docker`: コンテナ実行（GPU、依存関係隔離）
-- カスタム: クラウド実行(cloud-run）、リモート実行など自由に実装可能
-
-### 📡 チャンネル通信: タスク間のステート共有
-
-ワークフロー全体で共有される名前空間付きKey-Valueストア（Channel）により、タスク間で柔軟にデータをやり取りできます。
-
-```python
-@task(inject_context=True)
-def task_a(context):
-    channel = context.get_channel()
-    channel.set("user_id", "user_12345")
-    channel.set("session_data", {"score": 0.95})
-
-@task(inject_context=True)
-def task_b(context):
-    channel = context.get_channel()
-    user_id = channel.get("user_id")  # "user_12345"
-    score = channel.get("session_data")["score"]  # 0.95
-
-    # チャンネルを更新
-    channel.set("processed", True)
-```
-
-#### バックエンドの選択: メモリとRedis
-
-Channelは**2つのバックエンド**をサポートし、ローカル実行と分散実行をシームレスに切り替えられます。Apache AirflowのXComのようなコンセプトになります。
-
-**MemoryChannel（デフォルト）**: ローカル実行向け
-- ✅ **高速**: メモリ内で完結、レイテンシ最小
-- ✅ **シンプル**: 追加インフラ不要
-- ✅ **チェックポイント対応**: checkpoint時に自動保存
-- ⚠️ **制約**: 単一プロセス内のみ有効
-
-**RedisChannel**: 分散実行向け
-- ✅ **分散対応**: 複数ワーカー・複数マシン間でステート共有
-- ✅ **永続性**: Redisの永続化機能で障害耐性向上
-- ✅ **スケーラブル**: 大量のワーカーでもデータ一貫性を保持
-- ⚠️ **要インフラ**: Redis サーバーが必要
-
-#### 型安全なデータ交換: TypedChannel
-
-大規模開発やチーム開発では、タスク間のデータ構造を明確にすることが重要です。GraflowはTypedChannelにより、**コンパイル時の型チェックとIDEの自動補完**を実現します。
-
-```python
-from typing import TypedDict
-
-# メッセージスキーマを定義
-class UserProfile(TypedDict):
-    """ユーザープロファイル情報"""
-    user_id: str
-    name: str
-    email: str
-    age: int
-
-class UserMetrics(TypedDict):
-    """ユーザーアクティビティメトリクス"""
-    user_id: str
-    login_count: int
-    premium: bool
-
-@task(inject_context=True)
-def collect_user_data(context):
-    # 型安全なチャンネルを取得
-    profile_channel = context.get_typed_channel(UserProfile)
-
-    # IDEが自動補完してくれる
-    user_profile: UserProfile = {
-        "user_id": "user_123",
-        "name": "Alice",
-        "email": "alice@example.com",
-        "age": 30
-    }
-
-    profile_channel.set("current_user", user_profile)
-```
-
-**TypedChannelの利点**:
-- ✅ **コンパイル時型チェック**: mypyやpyrightで型エラーを事前検出
-- ✅ **IDEの自動補完**: フィールド名や型をIDEが補完
-- ✅ **自己文書化**: TypedDictがAPI契約として機能
-- ✅ **リファクタリング安全性**: フィールド名変更時にIDEが全箇所を検出
-- ✅ **チーム開発**: 共有スキーマで認識齟齬を防止
-
-オンメモリのTypedDictをタスク間で共有するLangGraphとは異なり、Redisを利用できるので、メモリに載せるには大きなデータも保管可能です。
-
-### ⚙️ 並列グループの細粒度エラーポリシー: 柔軟な障害制御
-
-並列タスク実行時、すべてのエラーが同じ重要度とは限りません。Graflowは**並列グループ単位で柔軟にエラーハンドリングポリシーを設定**でき、ビジネス要件に応じた細かい制御が可能です。
-
-#### 4つの組み込みポリシー
-
-**1. Strict Mode（デフォルト）**: すべてのタスクが成功必須
-
-```python
-parallel = (task_a | task_b | task_c).with_execution(
-    backend=CoordinationBackend.THREADING
-    # デフォルトでstrict mode（明示的にpolicy指定不要）
+# カスタムフィードバック
+response = context.request_feedback(
+    feedback_type=FeedbackType.CUSTOM,
+    prompt="パラメータを調整してください",
+    metadata={"current_params": {...}},
+    timeout=300
 )
 ```
 
-- **適用例**: 金融取引、セキュリティ操作、データ検証パイプライン
-
-**2. Best-effort**: 一部失敗しても続行
+##### チャネル統合
 
 ```python
-from graflow.core.handlers.group_policy import BestEffortGroupPolicy
-
-# マルチチャンネル通知（一部失敗しても続行）
-notifications = (send_email | send_sms | send_slack).with_execution(
-    backend=CoordinationBackend.THREADING,
-    policy=BestEffortGroupPolicy()  # または policy="best_effort"
-)
-```
-
-- **適用例**: マルチチャンネル通知、任意のデータ enrichment、オプション分析処理
-
-**3. At-least-N**: 最小成功数を指定（クォーラムベース）
-
-```python
-from graflow.core.handlers.group_policy import AtLeastNGroupPolicy
-
-# 4つのタスク中、最低2つが成功すればOK
-parallel = (task_a | task_b | task_c | task_d).with_execution(
-    backend=CoordinationBackend.THREADING,
-    policy=AtLeastNGroupPolicy(min_success=2)
-)
-```
-
-- **適用例**: マルチリージョンデプロイ、冗長データソース、分散コンセンサス
-
-**4. Critical Tasks**: 重要タスクのみ失敗判定
-
-```python
-from graflow.core.handlers.group_policy import CriticalGroupPolicy
-
-# extract_data と validate_schema だけが必須
-parallel = (extract_data | validate_schema | enrich_metadata).with_execution(
-    backend=CoordinationBackend.THREADING,
-    policy=CriticalGroupPolicy(
-        critical_task_ids=["extract_data", "validate_schema"]
+@task(inject_context=True)
+def approval_with_channel(context):
+    # フィードバック応答を自動的にチャネルに書き込む
+    response = context.request_approval(
+        prompt="デプロイを承認しますか？",
+        channel_key="deployment_approved",
+        write_to_channel=True,
+        timeout=180
     )
-)
-# enrich_metadata が失敗してもワークフローは続行
+
+@task(inject_context=True)
+def execute_deployment(context):
+    # 他のタスクがチャネルから承認ステータスを読み取る
+    approved = context.get_channel().get("deployment_approved")
+    if approved:
+        deploy()
 ```
 
-- **適用例**: 必須ステップ + オプションステップの混在パイプライン
+#### ユーザー通知システム
 
-#### カスタムポリシーの実装
-
-ドメイン固有のロジックを実装できます：
+##### コンソール通知（デフォルト）
 
 ```python
-from graflow.core.handlers.group_policy import GroupExecutionPolicy
-from graflow.exceptions import ParallelGroupError
-
-class CustomFailuresPolicy(GroupExecutionPolicy):
-    def __init__(self, critical_task_ids: list[str], max_failures: int):
-        self.critical_task_ids = critical_task_ids
-        self.max_failures = max_failures
-
-    def on_group_finished(self, group_id, tasks, results, context):
-        # 結果の整合性チェック
-        self._validate_group_results(group_id, tasks, results)
-        ...
-
-# 使用例
-parallel = (task_a | task_b | task_c).with_execution(
-    policy=CustomFailuresPolicy(
-        critical_task_ids=["task_a"],
-        max_failures=1
+@task(inject_context=True)
+def approval_task(context):
+    # デフォルト: コンソールにAPIエンドポイントを表示
+    response = context.request_approval(
+        prompt="デプロイを承認しますか？",
+        timeout=180
     )
-)
 ```
 
-#### ポリシーの選択指針
+出力例：
+```
+================================================================================
+🔔 フィードバックリクエスト: deploy_task_a1b2c3d4
+タイプ: approval
+プロンプト: デプロイを承認しますか？
+タイムアウト: 180秒
 
-| ポリシー | 適用場面 | 例 |
-|---------|---------|-----|
-| **Strict Mode** | すべて成功必須 | 金融取引、重要な業務処理 |
-| **Best-effort** | 部分成功で可 | 通知、分析、任意のエンリッチメント |
-| **At-least-N** | クォーラム/冗長性 | マルチリージョンデプロイ、データソース冗長化 |
-| **Critical Tasks** | 優先度混在 | 必須 + オプションステップの混在パイプライン |
-| **Custom Policy** | ドメイン固有ロジック | 段階的ロールアウト、コンプライアンス要件 |
+📋 フィードバックAPIエンドポイント:
+   http://localhost:8000/api/feedback/deploy_task_a1b2c3d4/respond
 
-**利点まとめ**:
-- ✅ **ビジネスロジックに合致**: ポリシーで業務要件を直接表現
-- ✅ **詳細なエラー情報**: ParallelGroupError で失敗タスクと成功タスクを把握
-- ✅ **拡張可能**: カスタムポリシーで複雑なロジックも実装可能
+例:
+  curl -X POST http://localhost:8000/api/feedback/deploy_task_a1b2c3d4/respond \
+    -H "Content-Type: application/json" \
+    -d '{"approved": true, "reason": "承認"}'
+================================================================================
+```
 
-### 🔍 LangFuse/OpenTelemetryトレーシング: 実行時の可観測性を強化
-
-LLMワークフローでは、「どのタスクがどのLLM呼び出しを行ったか」「エラーがどこで発生したか」を追跡することが重要です。Graflowは**LangFuseのOpenTelemetryクライアント** を統合し、ワークフロー全体の実行トレースを自動収集します。
-
-#### トレーシング機能の特徴
-
-- **自動トレース収集**: タスク開始/終了、LLM呼び出しを自動記録
-- **OpenTelemetryコンテキスト伝播**: LiteLLMやGoogle ADKのLLM呼び出しを自動的にワークフロートレースに関連付け
-- **分散トレーシング**: Redis経由の分散実行でも、複数ワーカー間でトレースIDを共有
-- **ランタイムグラフエクスポート**: 実行時のタスク依存関係をグラフとして可視化
-
-#### 基本的な使い方
+##### Slack Webhook通知
 
 ```python
-from graflow.core.workflow import workflow
-from graflow.trace.langfuse import LangFuseTracer
+from graflow.hitl.types import NotificationConfig, NotificationType
 
-# LangFuseトレーサーを初期化
-tracer = LangFuseTracer(enable_runtime_graph=True)
+@task(inject_context=True)
+def approval_with_slack(context):
+    notification_config = NotificationConfig(
+        notification_type=NotificationType.WEBHOOK,
+        api_base_url="https://api.example.com",
+        webhook_url="https://hooks.slack.com/services/YOUR/WEBHOOK/URL",
+        webhook_payload_template="""
+        {
+            "text": "🔔 *フィードバックリクエスト*",
+            "blocks": [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "*プロンプト:*\\n{{ prompt }}"
+                    }
+                },
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "*APIエンドポイント:*\\n<{{ api_url }}|フィードバック送信>"
+                    }
+                }
+            ]
+        }
+        """
+    )
 
-with workflow("my_workflow", tracer=tracer) as wf:
-    search >> analyze >> report
-    wf.execute("search")
-
-# トレースはLangFuseプラットフォームに自動送信される
+    response = context.request_feedback(
+        feedback_type=FeedbackType.APPROVAL,
+        prompt="本番環境へのデプロイを承認しますか？",
+        timeout=300,
+        notification_config=notification_config
+    )
 ```
 
-#### OpenTelemetryコンテキスト伝播によるLLM呼び出しの自動リンク
-
-Graflowの強力な機能の一つが、**OpenTelemetryコンテキスト伝播**による自動トレースリンクです。LiteLLMやGoogle ADKなどのLLMクライアントは、OpenTelemetryコンテキストを検出すると、自動的にGraflowのワークフロートレースに紐づけられます。
-
-**動作の仕組み**:
-1. Graflowがタスク開始時にLangFuse spanを作成
-2. LangFuseTracer が OpenTelemetry コンテキストを設定（trace_id、span_id）
-3. LiteLLM/ADKがOpenTelemetryコンテキストを検出し、同じtrace_id/span_idでLLM呼び出しを記録
-4. LangFuseプラットフォームで「ワークフロー → タスク → LLM呼び出し」の階層構造が自動的に表示される
-
-![LangFuse Tracing](https://storage.googleapis.com/zenn-user-upload/cdba8849de3a-20251212.png)
-
-#### 分散実行でのトレーシング
-
-分散ワーカー環境でも、トレースIDが自動的に伝播され、複数ワーカー間で統一されたトレースが構築されます。
-
-#### ランタイムグラフのエクスポート
-
-実行時のタスク依存関係をグラフとして取得できます。
+##### 汎用Webhook（Discord、Teams、カスタムエンドポイント）
 
 ```python
-tracer = LangFuseTracer(enable_runtime_graph=True)
+@task(inject_context=True)
+def approval_with_custom_endpoint(context):
+    notification_config = NotificationConfig(
+        notification_type=NotificationType.WEBHOOK,
+        api_base_url="https://api.example.com",
+        webhook_url="https://your-system.com/api/notifications",
+        webhook_method="POST",
+        webhook_headers={"Authorization": "Bearer YOUR_TOKEN"},
+        webhook_secret="your-hmac-secret",  # HMAC署名用
+        webhook_retry_count=3,
+        webhook_timeout=10
+    )
 
-# ワークフロー実行後
-runtime_graph = tracer.get_runtime_graph()
-
-# エクスポート（dict/json/graphml形式）
-graph_data = tracer.export_runtime_graph(format="json")
+    response = context.request_feedback(
+        feedback_type=FeedbackType.APPROVAL,
+        prompt="承認が必要です",
+        timeout=180,
+        notification_config=notification_config
+    )
 ```
 
-**利点まとめ**:
-- ✅ **完全なトレーサビリティ**: ワークフロー → タスク → LLM呼び出しの全階層を追跡
-- ✅ **自動統合**: LiteLLM/ADKの呼び出しを手動でログ記録する必要なし
-- ✅ **デバッグ効率化**: エラーがどのタスクのどのLLM呼び出しで発生したか即座に特定
-- ✅ **パフォーマンス分析**: タスク実行時間、LLMレイテンシ、並列度を可視化
-- ✅ **OSS**: LangFuseをself-hostすれば完全無料で運用可能
+##### カスタム通知ハンドラー
+
+```python
+def my_custom_notifier(feedback_request, api_url):
+    """カスタム通知ロジック"""
+    send_email(
+        to="admin@example.com",
+        subject=f"フィードバックリクエスト: {feedback_request.task_id}",
+        body=f"API URL: {api_url}"
+    )
+
+@task(inject_context=True)
+def approval_with_custom(context):
+    notification_config = NotificationConfig(
+        notification_type=NotificationType.CUSTOM,
+        api_base_url="https://api.example.com",
+        custom_handler=my_custom_notifier
+    )
+
+    response = context.request_feedback(
+        feedback_type=FeedbackType.APPROVAL,
+        prompt="カスタム通知テスト",
+        timeout=180,
+        notification_config=notification_config
+    )
+```
+
+#### インテリジェントなタイムアウト処理
+
+**シナリオ1: 即座の承認（3分以内）**
+```
+タスクが承認を要求 → ポーリング（3分） → 人間が承認 → タスク継続
+```
+
+**シナリオ2: 遅延承認（数時間/数日）**
+```
+タスクが承認を要求 → ポーリング（3分） → タイムアウト
+→ チェックポイント作成 → ワークフロー終了
+→ （後で）人間がAPIで承認 → ワークフローがチェックポイントから再開
+→ 承認を受けてタスク継続
+```
+
+**シナリオ3: 分散実行**
+```
+ワーカー1: タスクがフィードバック要求 → タイムアウト → チェックポイント → ワーカー終了
+→ 人間がAPIでフィードバック提供（Redisに保存）
+→ ワーカー2: チェックポイントから再開 → フィードバック取得 → 継続
+```
+
+#### 外部API経由でフィードバック提供
+
+```bash
+# 保留中フィードバック一覧
+GET /api/feedback?session_id={session_id}
+
+# 承認を提供
+POST /api/feedback/{feedback_id}/respond
+{
+  "approved": true,
+  "reason": "マネージャーにより承認",
+  "responded_by": "alice@example.com"
+}
+
+# テキストフィードバック提供
+POST /api/feedback/{feedback_id}/respond
+{
+  "text": "セクション3のタイポを修正してください",
+  "responded_by": "bob@example.com"
+}
+```
+
+#### バックエンドサポート
+
+| 機能 | Filesystem | Redis |
+|------|------------|-------|
+| **永続性** | ✅ ファイルベース | ✅ メモリ + 永続化 |
+| **クロスプロセス** | ⚠️ 同一マシンのみ | ✅ 可能（ネットワーク） |
+| **クロスノード** | ❌ 不可 | ✅ 可能 |
+| **Pub/Sub通知** | ❌ なし | ✅ あり |
+| **ユースケース** | 開発/シングルノード | 本番/分散 |
+
+#### 通知メカニズム（ハイブリッドアプローチ）
+
+- **Redis Pub/Sub**: 低レイテンシ通知（アクティブポーリング最適化）
+- **ポーリングフォールバック**: Pub/Sub失敗時の信頼性確保
+- **ストレージが信頼できる情報源**: 再開時に応答を確実に取得
+
+#### 代表的なユースケース
+
+1. **承認ワークフロー**: デプロイ、支払い処理などの承認
+2. **データ検証**: ML予測や品質チェックの人間検証
+3. **パラメータチューニング**: 実行中のパラメータ調整
+4. **エラーリカバリ**: エラー時の人間判断（リトライ、スキップ、中止）
+5. **バッチ処理レビュー**: 定期的な人間レビューが必要な処理
+
+#### 特徴まとめ
+
+- **複数のフィードバックタイプ**: 承認、テキスト入力、選択、マルチ選択、カスタム
+- **インテリジェントなタイムアウト**: 短期ポーリング → チェックポイント → 再開
+- **永続的なフィードバック状態**: プロセス再起動後も保持
+- **チャネル統合**: フィードバック応答の自動チャネル書き込み
+- **汎用ユーザー通知**: コンソール、Slack、Discord、Teams、カスタムエンドポイント、カスタムハンドラー
+- **HMAC署名**: Webhookセキュリティ
+- **分散実行対応**: Redis経由でクロスプロセス・クロスノードフィードバック
+
+#### ベストプラクティス
+
+1. タイムアウトを適切に設定（即座: 3-5分、遅延: 数時間以上を想定）
+2. メタデータにコンテキスト情報を含める
+3. 本番環境ではRedisバックエンドを使用
+4. Webhook通知でHMAC署名を有効化
+5. チャネル統合でフィードバックを他タスクと共有
 
 ---
 
-### 📊 課題と解決策まとめ
+## 比較分析
 
-| 課題 | 既存ツールの課題 | Graflowの解決策 |
-|----|----------------|----------------|
-| **グラフ爆発** | エージェント内部までグラフ化 | **Fatノード設計**（内部ブラックボックス化） |
-| **柔軟性不足** | compile()で固定 | **動的タスク生成**（runtime fan-out） |
-| **長時間処理** | checkpoint自動のみ | **ユーザー制御checkpoint/resume** |
-| **承認フロー** | 承認待ち時に実行継続できない | **HITL + checkpoint**（長時間待機も対応） |
-| **並列処理** | 分散実行が困難または複雑 | **Redisベース分散ワーカー**（Airflow風の水平スケール） |
+### 機能マトリックス
 
-## 🚀 OSS公開について
+| 機能 | Graflow | LangGraph | Celery | Airflow |
+|------|---------|-----------|--------|---------|
+| **Pythonic DSL** | ✅ `>>`, `\|`（DAG＋サイクル） | ❌ | ⚠️ 部分的 | ⚠️ 部分的 |
+| **ランタイム動的タスク** | ✅ `next_task()` | ❌ | ❌ | ⚠️ Dynamic DAG |
+| **ステートマシン実行** | ✅ `next_iteration()` + `terminate/cancel_workflow()` | ⚠️ グラフサイクル | ❌ | ❌ |
+| **ワーカーフリートCLI** | ✅ 組み込み | ❌ | ✅ | ✅ |
+| **カスタムハンドラー** | ✅ プラグ可能 | ❌ | ⚠️ Taskクラス | ⚠️ Operator |
+| **Docker実行** | ✅ 組み込み | ❌ | ⚠️ Operator経由 | ⚠️ DockerOperator |
+| **並列エラーポリシー** | ✅ 5モード + カスタム | ❌ | ⚠️ 基本的 | ⚠️ trigger_rule |
+| **ローカル/分散切替** | ✅ 1行 | ❌ | ❌ | ❌ |
+| **チャンネル通信** | ✅ 名前空間付きKVS | ⚠️ State | ❌ | ⚠️ XCom |
+| **Graceful Shutdown** | ✅ 標準 | N/A | ✅ | ✅ |
+| **メトリクス収集** | ✅ ワーカーレベル | ❌ | ⚠️ Flower | ✅ |
+| **サイクル検出** | ✅ 組み込み | ⚠️ 手動 | N/A | ❌ |
+| **コンテキストマネージャー** | ✅ `with workflow()` | ❌ | ❌ | ❌ |
+| **型安全性** | ✅ TypedChannel | ✅ Pydantic | ❌ | ❌ |
+| **チェックポイント／リジューム** | ✅ 本番対応 | ⚠️ メモリのみ | ❌ | ⚠️ タスクリトライ |
+| **Human-in-the-Loop (HITL)** | ✅ 完全実装 | ⚠️ 限定的 | ❌ | ❌ |
 
-:::message
-**📅 2025年1月に正式OSS公開予定！**
+### パフォーマンス比較
 
-現在は公開に向けて、ドキュメントとプロジェクトサイトの制作中ですが、**先行ユーザーの皆様に評価していただいています**。
-
-- GitHub: https://github.com/GraflowAI/graflow （公開準備中）
-- 公開予定: 2025年1月
-- ライセンス: Apache 2.0
-:::
-
-### 先行ユーザー募集
-
-正式公開前に試してみたい方は、[@myui](https://x.com/myui) にDMなりでお問い合わせください。
-
-## 📝 まとめ
-
-Graflowは、**プロダクション環境でAIエージェントワークフローを安心して動かす**ための、新しいオーケストレーションエンジンです。
-
-### Graflowの5つのコア価値
-
-1. **戦略的シンプルさ**: SuperAgent（ReAct等）はADK/PydanticAI等の専門フレームワークに委譲し、ワークフローオーケストレーションに集中
-2. **実行時の柔軟性**: `next_task()`による動的タスク生成、`next_iteration()`によるループ制御、`terminate/cancel_workflow()`による早期終了
-3. **開発体験**: Pythonic演算子DSL（`>>`、`|`）で直感的にワークフローを記述
-4. **プロダクション対応**: checkpoint/resume、分散実行（Airflow風の水平スケール）、HITL、Dockerハンドラー
-5. **段階的移行**: ローカル実行→分散実行の切り替えが1行で可能
-
-### LangGraph v1.0との戦略的違い
-
-| | LangGraph v1.0 | Graflow |
-|---|---|---|
-| **方針** | フルスタック（SuperAgent + Workflow） | 責務分離（Workflow特化） |
-| **SuperAgent** | 自前実装（create_react_agent） | 外部委譲（ADK、PydanticAI等） |
-| **得意領域** | エージェント内部の推論制御 | タスク間連携・分散実行・HITL |
-| **開発哲学** | LangChain エコシステム統合、SuperAgent方面にシフト中 | ベストツール組み合わせ、Agentic Workflow中心 |
-
-**2025年1月のOSS公開をどうぞご期待ください。**
+| 指標 | Graflow | LangGraph | Celery | Airflow |
+|------|---------|-----------|--------|---------|
+| **ローカル実行オーバーヘッド** | 低（インプロセス） | 低 | 高（ブローカー経由） | 高（DB） |
+| **分散レイテンシ** | 中（Redis） | N/A | 中 | 高（ポーリング） |
+| **スループット** | 高（ワーカーフリート） | 低（単一プロセス） | 高 | 中 |
+| **メモリフットプリント** | 中 | 低 | 中 | 高 |
 
 ---
 
-[^1]: Airflowも同様の分散実行アーキテクチャ（Celery/Kubernetes Executor）を採用しています。詳細は[ZOZOのテックブログ](https://techblog.zozo.com/entry/cloud-composer-v2#%E3%83%AF%E3%83%BC%E3%82%AB%E3%83%BC%E3%81%AE%E6%B0%B4%E5%B9%B3%E3%82%B9%E3%82%B1%E3%83%BC%E3%83%AB%E3%81%8C%E5%8F%AF%E8%83%BD)を参照してください。
+## ユースケースガイドライン
+
+### Graflowが適するケース ✅
+
+1. **汎用データ/MLパイプライン**: ETL、特徴量生成、バッチ推論
+2. **動的ワークフロー**: 条件分岐が多い処理、グラフのオンデマンド拡張
+3. **分散実行**: ワーカーフリート管理、地理分散、リソース特化
+4. **カスタム実行戦略**: リモートAPI呼び出し、GPU/TPU、レート制限制御
+5. **開発スピード重視**: ローカルで即実行しつつ本番へ段階移行
+6. **ステートマシン/ループ処理**: 注文処理、状態遷移、ゲームループ、早期終了/キャンセル制御
+7. **コンテナ化実行**: 隔離環境、依存関係衝突回避、信頼できないコード
+8. **長時間ワークフローの信頼性確保**: 定期的なチェックポイントと再開が必要な処理
+9. **承認ワークフロー**: デプロイ、支払い、重要操作の人間承認が必要
+10. **インタラクティブパイプライン**: 人間のフィードバックや調整が必要な処理
+
+### LangGraphを選ぶべきケース ✅
+
+- 会話型AIやLLMエージェント
+- ツール呼び出し中心のフロー
+- 内蔵の自動チェックポイント／再実行を活用したい場合
+- ヒューマンループが必須の対話型シナリオ
+
+### Celeryを選ぶべきケース ✅
+
+- シンプルなバックグラウンドジョブ（メール送信など）
+- 分散タスクキューのみが必要
+- 既存Celeryエコシステムへ統合する場合
+
+### Airflowを選ぶべきケース ✅
+
+- ETL中心の定期バッチ
+- 豊富なOperatorライブラリが必要
+- 既存Airflowインフラが整備済み
+
+---
+
+## 本番環境デプロイメント
+
+### 代表的なトポロジー
+
+#### 単一ノード（開発/PoC）
+```
+┌─────────────────────────────────┐
+│           単一サーバーインスタンス           │
+│ ┌──────────────┐ ┌──────────┐ │
+│ │ Graflowアプリ │ │ Redis (ローカル) │ │
+│ └──────────────┘ └──────────┘ │
+│ ┌──────────────┐                 │
+│ │ Graflow Worker │  (ThreadPoolで並列) │
+│ └──────────────┘                 │
+└─────────────────────────────────┘
+```
+
+#### マルチノード（本番）
+```
+┌──────────────┐
+│ Redisクラスタ │
+└──────┬───────┘
+       │
+   ┌───┴────┬─────┬─────┐
+┌─▼───┐ ┌─▼───┐ ┌─▼───┐ ┌─▼───┐
+│API  │ │Worker│ │Worker│ │Worker│
+│サーバ│ │ CPU │ │ GPU │ │ I/O │
+└─────┘ └─────┘ └─────┘ └─────┘
+```
+
+### デプロイ手法
+
+- **Docker Compose**: Redisとワーカー複数を簡単に起動
+- **Kubernetes**: Helmチャートでスケール・監視を標準化
+- **Systemd**: オンプレ環境向けの永続ワーカーサービス
+
+### モニタリング
+
+- Prometheus / Grafana によるワーカー指標収集
+- キュー長、成功率、タスクレイテンシ（P50/P95/P99）を可視化
+- Redis Commander でキューの検査
+- 将来的なダッシュボードAPIに備えたメトリクスエンドポイント
+
+---
+
+## 今後のロードマップ
+
+1. **高度なモニタリング**: Prometheusエクスポーター、Grafanaテンプレート、リアルタイムUI
+2. **高度なスケジューリング**: Cron、優先度キュー、ワークフロー間依存
+3. **ワークフロー合成**: ネスト構成、テンプレート、ライブラリ化
+4. **統合強化**: Kubernetesネイティブ、AWS Lambda、Apache Beam
+5. **チェックポイント拡張**: Redis/S3バックエンド、圧縮、ライフサイクル管理
+6. **HITL機能拡張**: Web UI、SSE通知、OAuth 2.0認証、フィードバック履歴管理
+
+---
+
+## 結論
+
+Graflowは次世代のワークフローオーケストレーションを体現し、以下を同時に満たします。
+
+- **Pythonicな表現力** — DSLでDAGとループをシンプルに表現
+- **本番運用の堅牢性** — ワーカーフリート、並列エラーポリシー、チェックポイント
+- **開発の俊敏性** — ローカルと分散のシームレスな切替
+- **拡張性** — カスタムハンドラー／実行戦略で容易に拡張
+- **動的対応力** — 実行時タスク生成、ステートマシン制御、ワークフロー早期終了/キャンセル
+- **人間統合** — HITL機能による実行中の承認・フィードバック取得
+
+LangGraphの軽量性とAirflowの重量級インフラの間を埋め、**現代のデータ／MLワークフローに最適な選択肢**を提供します。
+
+---
+
+**ドキュメント管理者**: Graflowチーム
+**最終レビュー**: 2025-12-05（ワークフロー制御機能追加）
+**次回レビュー**: 四半期ごと
