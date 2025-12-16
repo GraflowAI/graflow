@@ -230,10 +230,19 @@ ReAct/Supervisor パターン用の基底クラス。
 #### 主要メソッド
 
 ```python
+from graflow.llm.agents.types import AgentResult
+
 class LLMAgent(ABC):
     @abstractmethod
-    def run(query: str, **kwargs) -> Any:
-        """エージェントのメインロジック（ReActループ、サブエージェント調整など）"""
+    def run(query: str, **kwargs) -> AgentResult:
+        """エージェントのメインロジック（ReActループ、サブエージェント調整など）
+
+        Returns:
+            AgentResult (TypedDict):
+                - output: 最終的なエージェント出力（str または output_schema 設定時は Pydantic BaseModel）
+                - steps: 実行トレース（AgentStep の dict のリスト）
+                - metadata: 追加メタデータ（dict）
+        """
         pass
 
     def get_state() -> Dict[str, Any]:
@@ -261,20 +270,29 @@ Google ADK の `LlmAgent` をラップし、Graflow の `LLMAgent` インター�
 
 - **Sub-agents サポート**: ADK の階層的エージェント構造を活用
 - **Tools 統合**: ADK の tool calling 機能（Graflow tasks とは独立）
+- **構造化出力**: `output_schema` による Pydantic BaseModel バリデーションをサポート
 - **LiteLLM 統合**: ADK で LiteLLM を使用
 
 #### 実装例
 
 ```python
 from google.adk.agents import LlmAgent
+from graflow.llm.agents.types import AgentResult
 
 class AdkLLMAgent(LLMAgent):
     def __init__(self, adk_agent: LlmAgent):
         """ADK LlmAgent をラップ"""
         self._adk_agent = adk_agent
 
-    def run(self, input_text: str, **kwargs) -> Dict[str, Any]:
-        """ADK agent を実行"""
+    def run(self, input_text: str, **kwargs) -> AgentResult:
+        """ADK agent を実行
+
+        Returns:
+            AgentResult:
+                - output: str または Pydantic BaseModel（output_schema 設定時）
+                - steps: 実行イベントのリスト
+                - metadata: エージェントメタデータ
+        """
         adk_result = self._adk_agent.run(input_text, **kwargs)
         return self._convert_adk_result(adk_result)
 
