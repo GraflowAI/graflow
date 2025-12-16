@@ -5,6 +5,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, AsyncIterator, Dict, List
 
+from graflow.llm.agents.types import AgentResult
+
 
 class LLMAgent(ABC):
     """Abstract base class for LLM agents.
@@ -35,19 +37,28 @@ class LLMAgent(ABC):
         self,
         input_text: str,
         **kwargs: Any
-    ) -> Dict[str, Any]:
+    ) -> AgentResult:
         """Run the agent synchronously with the given input.
 
         Args:
-            input_text: Input text/query for the agent
-            **kwargs: Additional parameters specific to the agent implementation
+            input_text:
+                Input text or query for the agent.
+            **kwargs:
+                Additional parameters specific to the concrete agent
+                implementation (e.g. user_id, trace_id, session_id).
 
         Returns:
-            Agent execution result as a dictionary. The structure depends on
-            the agent implementation, but typically includes:
-            - "output": Final output text
-            - "steps": Execution steps/trace
-            - "metadata": Additional metadata
+            AgentResult:
+                A structured result object containing:
+
+                - output:
+                    Final agent output.
+                    Either a free-form string or a structured Pydantic BaseModel
+                    if the agent is configured with an output schema.
+                - steps:
+                    Execution trace emitted by the agent.
+                - metadata:
+                    Additional metadata such as model name, usage, or event counts.
 
         Example:
             ```python
