@@ -124,8 +124,8 @@ def main():
                 """
             )
 
-            print(f"Agent response:\n{result}\n")
-            return result
+            print(f"Agent response:\n{result['output']}\n")
+            return result["output"]
 
         @task
         def process_results():
@@ -162,7 +162,8 @@ if __name__ == "__main__":
 #    # Then inject agent into task
 #    @task(inject_llm_agent="agent_name")
 #    def my_task(llm_agent):
-#        result = llm_agent.send_message("...")
+#        result = llm_agent.run("...")
+#        return result["output"]
 #
 # 2. **Google ADK Integration**
 #    from google.adk.agents import LlmAgent
@@ -234,12 +235,12 @@ if __name__ == "__main__":
 #    @task(inject_llm_agent="assistant")
 #    def conversation(llm_agent):
 #        # First message
-#        response1 = llm_agent.send_message("What's 2+2?")
+#        response1 = llm_agent.run("What's 2+2?")
 #
 #        # Follow-up (agent remembers context)
-#        response2 = llm_agent.send_message("Now multiply that by 3")
+#        response2 = llm_agent.run("Now multiply that by 3")
 #
-#        return response2
+#        return response2["output"]
 #
 # 4. Combine with LLMClient:
 #    @task(inject_llm_client=True, inject_llm_agent="assistant")
@@ -248,16 +249,16 @@ if __name__ == "__main__":
 #        summary = llm_client.completion(messages=[...])
 #
 #        # Use agent for complex reasoning with tools
-#        analysis = llm_agent.send_message(f"Analyze this: {summary}")
+#        result = llm_agent.run(f"Analyze this: {summary}")
 #
-#        return analysis
+#        return result["output"]
 #
 # 5. Error handling:
 #    @task(inject_llm_agent="assistant")
 #    def safe_agent_call(llm_agent):
 #        try:
-#            result = llm_agent.send_message("...")
-#            return result
+#            result = llm_agent.run("...")
+#            return result["output"]
 #        except Exception as e:
 #            print(f"Agent error: {e}")
 #            return "fallback result"
