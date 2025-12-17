@@ -59,7 +59,10 @@ adk = [
     "openinference-instrumentation-google-adk>=0.1.0",
 ]
 pydantic-ai = [
-    "pydantic-ai-slim>=1.33.0",
+    # Slim version without logfire (to avoid opentelemetry-sdk conflict with google-adk)
+    # OpenAI is required for openai compatible models and LiteLLM provider
+    "pydantic-ai-slim[openai]>=1.33.0",
+    "griffe>=1.0.0",  # Required by pydantic-ai-slim
 ]
 tracing = [
     "opentelemetry-api>=1.37.0",
