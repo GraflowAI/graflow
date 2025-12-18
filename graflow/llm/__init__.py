@@ -58,23 +58,34 @@ Agent example:
     ```
 """
 
-from graflow.llm.client import LLMClient, extract_text, make_message, setup_langfuse_for_litellm
+from graflow.llm.agents import LLMAgent
+from graflow.llm.client import LLMClient, extract_text, make_message
 
 __all__ = [
+    "LLMAgent",
     "LLMClient",
     "extract_text",
     "make_message",
-    "setup_langfuse_for_litellm",
 ]
 
 # Optional: Agent classes (only if dependencies available)
 try:
-    from graflow.llm.agents import AdkLLMAgent, LLMAgent  # noqa: F401
-    __all__.extend(["AdkLLMAgent", "LLMAgent"])
+    from graflow.llm.agents import AdkLLMAgent  # noqa: F401
+    __all__.extend(["AdkLLMAgent"])
 except ImportError:
     pass
 
-# Optional: Serialization helpers (only if google-adk available)
+# Optional: Pydantic AI agent (only if pydantic-ai is installed)
+try:
+    from graflow.llm.agents import (  # noqa: F401
+        PydanticLLMAgent,
+        create_pydantic_ai_agent_with_litellm,
+    )
+    __all__.extend(["PydanticLLMAgent", "create_pydantic_ai_agent_with_litellm"])
+except ImportError:
+    pass
+
+# Optional: Serialization helpers
 try:
     from graflow.llm.serialization import agent_to_yaml, yaml_to_agent  # noqa: F401
     __all__.extend(["agent_to_yaml", "yaml_to_agent"])
