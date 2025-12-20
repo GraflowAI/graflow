@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Optional, Union
@@ -730,6 +731,9 @@ class TaskWrapper(Executable):
         self.inject_llm_agent = inject_llm_agent
         self.resolve_keyword_args = resolve_keyword_args
 
+        # Initialize bound kwargs storage for instance creation
+        self._bound_kwargs: dict[str, Any] = {}
+
         # Store reference to original unwrapped function for serialization
         # functools.wraps preserves this in __wrapped__ attribute
         self._original_func = getattr(func, '__wrapped__', func)
@@ -898,20 +902,71 @@ class TaskWrapper(Executable):
         - inject_llm_client: Injects LLMClient as named argument 'llm_client'
         - inject_llm_agent: Injects LLMAgent as named argument 'llm_agent'
         - resolve_keyword_args: Resolves keyword arguments from channel
+
+        Instance Creation Mode (when called with task_id or params but no execution context):
+        - Called with task_id and/or bound parameters creates a new TaskWrapper instance
+        - Auto-generates task_id if params provided without explicit task_id
+        - Stores bound parameters for later execution
         """
         if not hasattr(self, '_execution_context'):
-            return self # for Lazy evaluation cases where context is not set yet
+            # Check if this is instance creation mode (has task_id or binding params)
+            # vs lazy evaluation mode (no params, just returns self)
+            has_task_id = 'task_id' in kwargs
+            has_binding_params = bool(kwargs and not has_task_id) or bool(args)
 
+            if has_task_id or has_binding_params:
+                # Instance creation mode
+
+                # Only allow keyword arguments for instance creation
+                if args:
+                    raise TypeError(
+                        f"TaskWrapper instance creation does not support positional arguments. "
+                        f"Please use keyword arguments only. Got {len(args)} positional args."
+                    )
+
+                # Extract or generate task_id
+                if 'task_id' in kwargs:
+                    new_task_id = kwargs.pop('task_id')
+                else:
+                    # Auto-generate task_id when binding params provided
+                    func_name = getattr(self.func, '__name__', 'task')
+                    new_task_id = f"{func_name}_{uuid.uuid4().hex[:8]}"
+
+                # Create new TaskWrapper instance
+                new_instance = TaskWrapper(
+                    task_id=new_task_id,
+                    func=self.func,
+                    inject_context=self.inject_context,
+                    inject_llm_client=self.inject_llm_client,
+                    inject_llm_agent=self.inject_llm_agent,
+                    register_to_context=True,  # Uses _register_to_context() internally
+                    handler_type=getattr(self, 'handler_type', None),
+                    resolve_keyword_args=self.resolve_keyword_args
+                )
+
+                # Store bound parameters (remaining kwargs after task_id extraction)
+                if kwargs:
+                    new_instance._bound_kwargs = kwargs
+
+                return new_instance
+            else:
+                # Lazy evaluation mode - return self
+                return self
+
+        # Execution mode (has execution context) - existing logic
         exec_context = self._execution_context
 
         # Resolve keyword arguments from channel
         resolved_kwargs = self._resolve_keyword_args_from_channel(exec_context)
 
+        # Get bound kwargs (creation-time parameters)
+        bound_kwargs = getattr(self, '_bound_kwargs', {})
+
         # Prepare injection kwargs
         injection_kwargs = self._prepare_injection_kwargs(exec_context)
 
-        # Merge all kwargs: user-provided kwargs override resolved kwargs
-        all_kwargs = {**resolved_kwargs, **injection_kwargs, **kwargs}
+        # Merge all kwargs: channel < bound < injection < user-provided
+        all_kwargs = {**resolved_kwargs, **bound_kwargs, **injection_kwargs, **kwargs}
 
         if self.inject_context:
             task_context = exec_context.current_task_context
@@ -932,17 +987,25 @@ class TaskWrapper(Executable):
         - inject_llm_client: Injects LLMClient as named argument 'llm_client'
         - inject_llm_agent: Injects LLMAgent as named argument 'llm_agent'
         - resolve_keyword_args: Resolves keyword arguments from channel
+
+        Parameter priority (lowest to highest):
+        1. Channel kwargs (resolved from channel)
+        2. Bound kwargs (passed at task creation time)
+        3. Injection kwargs (system-injected: llm_client, llm_agent)
         """
         exec_context = self.get_execution_context()
 
         # Resolve keyword arguments from channel
         resolved_kwargs = self._resolve_keyword_args_from_channel(exec_context)
 
+        # Get bound kwargs (creation-time parameters)
+        bound_kwargs = getattr(self, '_bound_kwargs', {})
+
         # Prepare injection kwargs
         injection_kwargs = self._prepare_injection_kwargs(exec_context)
 
-        # Merge all kwargs
-        all_kwargs = {**resolved_kwargs, **injection_kwargs}
+        # Merge all kwargs: channel < bound < injection
+        all_kwargs = {**resolved_kwargs, **bound_kwargs, **injection_kwargs}
 
         # TaskExecutionContext injection (positional argument)
         if self.inject_context:
