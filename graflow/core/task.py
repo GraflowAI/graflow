@@ -21,7 +21,8 @@ def _reconstruct_task_wrapper(
     inject_context: bool,
     inject_llm_client: bool,
     inject_llm_agent: Optional[str],
-    handler_type: Optional[str]
+    handler_type: Optional[str],
+    resolve_keyword_args: bool = True
 ) -> TaskWrapper:
     """Reconstruct TaskWrapper from serialized components.
 
@@ -37,6 +38,7 @@ def _reconstruct_task_wrapper(
         inject_llm_client: Whether to inject LLMClient
         inject_llm_agent: Agent name to inject
         handler_type: Handler type string
+        resolve_keyword_args: Whether to resolve keyword arguments from channel
 
     Returns:
         Fresh TaskWrapper instance (state will be restored by pickle)
@@ -56,7 +58,8 @@ def _reconstruct_task_wrapper(
         inject_llm_client=inject_llm_client,
         inject_llm_agent=inject_llm_agent,
         register_to_context=False,  # Don't re-register during deserialization
-        handler_type=handler_type
+        handler_type=handler_type,
+        resolve_keyword_args=resolve_keyword_args
     )
 
     return task_wrapper
@@ -703,7 +706,8 @@ class TaskWrapper(Executable):
         inject_llm_client: bool = False,
         inject_llm_agent: Optional[str] = None,
         register_to_context: bool = True,
-        handler_type: Optional[str] = None
+        handler_type: Optional[str] = None,
+        resolve_keyword_args: bool = True
     ) -> None:
         """Initialize a task wrapper with task_id and function.
 
@@ -716,6 +720,7 @@ class TaskWrapper(Executable):
                             (agent must be registered in ExecutionContext)
             register_to_context: Whether to register to workflow context
             handler_type: Execution handler type ("direct", "docker", or custom)
+            resolve_keyword_args: Whether to resolve keyword arguments from channel
         """
         super().__init__()
         self._task_id = task_id
@@ -723,6 +728,7 @@ class TaskWrapper(Executable):
         self.inject_context = inject_context
         self.inject_llm_client = inject_llm_client
         self.inject_llm_agent = inject_llm_agent
+        self.resolve_keyword_args = resolve_keyword_args
 
         # Store reference to original unwrapped function for serialization
         # functools.wraps preserves this in __wrapped__ attribute
@@ -767,7 +773,8 @@ class TaskWrapper(Executable):
                 self.inject_context,
                 self.inject_llm_client,
                 self.inject_llm_agent,
-                self.handler_type
+                self.handler_type,
+                self.resolve_keyword_args
             ),
             state,  # Additional state to restore
             None,   # listitems
@@ -804,6 +811,64 @@ class TaskWrapper(Executable):
         if existing_func is not None:
             self.func = existing_func
 
+    def _resolve_keyword_args_from_channel(self, exec_context: ExecutionContext) -> dict[str, Any]:
+        """Resolve function keyword arguments from channel by matching parameter names.
+
+        Args:
+            exec_context: Execution context containing channel
+
+        Returns:
+            Dictionary of resolved keyword arguments
+        """
+        import inspect
+
+        resolved_kwargs = {}
+
+        if not self.resolve_keyword_args:
+            return resolved_kwargs
+
+        # Get function signature
+        sig = inspect.signature(self._original_func)
+
+        # Determine which parameters to skip (injected parameters)
+        skip_params = set()
+        param_list = list(sig.parameters.values())
+
+        # Skip first parameter if inject_context=True
+        if self.inject_context and param_list:
+            skip_params.add(param_list[0].name)
+
+        # Skip injected kwargs
+        if self.inject_llm_client:
+            skip_params.add('llm_client')
+        if self.inject_llm_agent:
+            skip_params.add('llm_agent')
+
+        # Get channel
+        channel = exec_context.get_channel()
+
+        # Resolve each keyword-compatible parameter from channel
+        for param_name, param in sig.parameters.items():
+            # Only process KEYWORD_ONLY and POSITIONAL_OR_KEYWORD parameters
+            if param.kind not in (
+                inspect.Parameter.KEYWORD_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            ):
+                continue
+
+            if param_name in skip_params:
+                continue
+
+            # Check if value exists in channel
+            if param_name in channel.keys():
+                resolved_kwargs[param_name] = channel.get(param_name)
+            elif param.default is not inspect.Parameter.empty:
+                # Parameter has default value, skip
+                continue
+            # If no value in channel and no default, let function handle it
+
+        return resolved_kwargs
+
     def _prepare_injection_kwargs(self, exec_context: ExecutionContext) -> dict[str, Any]:
         """Prepare keyword arguments for injection."""
         injection_kwargs = {}
@@ -832,25 +897,29 @@ class TaskWrapper(Executable):
         - inject_context: Injects TaskExecutionContext as positional argument
         - inject_llm_client: Injects LLMClient as named argument 'llm_client'
         - inject_llm_agent: Injects LLMAgent as named argument 'llm_agent'
+        - resolve_keyword_args: Resolves keyword arguments from channel
         """
-        if self.inject_context:
-            exec_context = self.get_execution_context()
-            injection_kwargs = self._prepare_injection_kwargs(exec_context)
+        exec_context = self.get_execution_context()
 
+        # Resolve keyword arguments from channel
+        resolved_kwargs = self._resolve_keyword_args_from_channel(exec_context)
+
+        # Prepare injection kwargs
+        injection_kwargs = self._prepare_injection_kwargs(exec_context)
+
+        # Merge all kwargs: user-provided kwargs override resolved kwargs
+        all_kwargs = {**resolved_kwargs, **injection_kwargs, **kwargs}
+
+        if self.inject_context:
             task_context = exec_context.current_task_context
             if not task_context:
                 # Fallback: create temporary task context
                 with exec_context.executing_task(self) as task_ctx:
-                    return self.func(task_ctx, *args, **{**kwargs, **injection_kwargs})
-            return self.func(task_context, *args, **{**kwargs, **injection_kwargs})
-
-        elif self.inject_llm_client or self.inject_llm_agent:
-            exec_context = self.get_execution_context()
-            injection_kwargs = self._prepare_injection_kwargs(exec_context)
-            return self.func(*args, **{**kwargs, **injection_kwargs})
+                    return self.func(task_ctx, *args, **all_kwargs)
+            return self.func(task_context, *args, **all_kwargs)
 
         else:
-            return self.func(*args, **kwargs)
+            return self.func(*args, **all_kwargs)
 
     def run(self) -> Any:
         """Execute the wrapped function with dependency injection.
@@ -859,9 +928,18 @@ class TaskWrapper(Executable):
         - inject_context: Injects TaskExecutionContext as positional argument
         - inject_llm_client: Injects LLMClient as named argument 'llm_client'
         - inject_llm_agent: Injects LLMAgent as named argument 'llm_agent'
+        - resolve_keyword_args: Resolves keyword arguments from channel
         """
         exec_context = self.get_execution_context()
+
+        # Resolve keyword arguments from channel
+        resolved_kwargs = self._resolve_keyword_args_from_channel(exec_context)
+
+        # Prepare injection kwargs
         injection_kwargs = self._prepare_injection_kwargs(exec_context)
+
+        # Merge all kwargs
+        all_kwargs = {**resolved_kwargs, **injection_kwargs}
 
         # TaskExecutionContext injection (positional argument)
         if self.inject_context:
@@ -869,11 +947,11 @@ class TaskWrapper(Executable):
             if not task_context:
                 # Fallback: create temporary task context
                 with exec_context.executing_task(self) as task_ctx:
-                    return self.func(task_ctx, **injection_kwargs)
-            return self.func(task_context, **injection_kwargs)
+                    return self.func(task_ctx, **all_kwargs)
+            return self.func(task_context, **all_kwargs)
 
-        # No context injection - just pass injection kwargs
-        return self.func(**injection_kwargs)
+        # No context injection - just pass all kwargs
+        return self.func(**all_kwargs)
 
     def __repr__(self) -> str:
         """Return string representation of this task wrapper."""
