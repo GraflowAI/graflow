@@ -83,7 +83,21 @@ class TaskGraph:
 
     def get_start_nodes(self) -> List[str]:
         """Get nodes with no predecessors (start nodes)."""
-        return [node for node in self._graph.nodes() if self._graph.in_degree(node) == 0]
+        start_nodes = [node for node in self._graph.nodes() if self._graph.in_degree(node) == 0]
+        if len(start_nodes) <= 1:
+            return start_nodes
+
+        # Remove ParallelGroup members from start nodes
+        from graflow.core.task import ParallelGroup
+
+        for node_id, node_data in self._graph.nodes(data=True):
+            if node_id in start_nodes:
+                task = node_data.get("task")
+                if isinstance(task, ParallelGroup):
+                    for member in task.tasks:
+                        start_nodes.remove(member.task_id)
+
+        return start_nodes
 
     def successors(self, node: str) -> List[str]:
         """Get successor nodes of the given node."""
