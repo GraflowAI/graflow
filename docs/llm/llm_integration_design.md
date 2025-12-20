@@ -231,10 +231,19 @@ Base class for ReAct/Supervisor patterns.
 #### Main Methods
 
 ```python
+from graflow.llm.agents.types import AgentResult
+
 class LLMAgent(ABC):
     @abstractmethod
-    def run(query: str, **kwargs) -> Any:
-        """Main agent logic (ReAct loop, sub-agent coordination, etc.)"""
+    def run(query: str, **kwargs) -> AgentResult:
+        """Main agent logic (ReAct loop, sub-agent coordination, etc.)
+
+        Returns:
+            AgentResult (TypedDict):
+                - output: Final agent output (str or Pydantic BaseModel if output_schema is configured)
+                - steps: Execution trace (list of AgentStep dicts)
+                - metadata: Additional metadata (dict)
+        """
         pass
 
     def get_state() -> Dict[str, Any]:
@@ -262,20 +271,29 @@ Wraps Google ADK's `LlmAgent` to conform to Graflow's `LLMAgent` interface.
 
 - **Sub-agents Support**: Leverages ADK's hierarchical agent structure
 - **Tools Integration**: ADK's tool calling feature (independent of Graflow tasks)
+- **Structured Output**: Supports `output_schema` for Pydantic BaseModel validation
 - **LiteLLM Integration**: Uses LiteLLM with ADK
 
 #### Implementation Example
 
 ```python
 from google.adk.agents import LlmAgent
+from graflow.llm.agents.types import AgentResult
 
 class AdkLLMAgent(LLMAgent):
     def __init__(self, adk_agent: LlmAgent):
         """Wrap ADK LlmAgent"""
         self._adk_agent = adk_agent
 
-    def run(self, input_text: str, **kwargs) -> Dict[str, Any]:
-        """Execute ADK agent"""
+    def run(self, input_text: str, **kwargs) -> AgentResult:
+        """Execute ADK agent
+
+        Returns:
+            AgentResult with:
+                - output: str or Pydantic BaseModel (if output_schema is configured)
+                - steps: List of execution events
+                - metadata: Agent metadata
+        """
         adk_result = self._adk_agent.run(input_text, **kwargs)
         return self._convert_adk_result(adk_result)
 

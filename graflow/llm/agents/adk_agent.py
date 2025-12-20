@@ -11,8 +11,10 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Dict, Iterator, 
 from opentelemetry import context as context_api
 from opentelemetry import trace as trace_api
 from opentelemetry.trace import Span
+from pydantic import BaseModel
 
-from .base import LLMAgent
+from graflow.llm.agents.base import LLMAgent
+from graflow.llm.agents.types import AgentResult, AgentStep
 
 if TYPE_CHECKING:
     from google.adk.agents import LlmAgent
@@ -575,7 +577,7 @@ class AdkLLMAgent(LLMAgent):
         trace_id: Optional[str] = None,
         session_id: Optional[str] = None,
         **kwargs: Any
-    ) -> Dict[str, Any]:
+    ) -> AgentResult:
         """Run the ADK agent synchronously.
 
         Args:
@@ -586,10 +588,10 @@ class AdkLLMAgent(LLMAgent):
             **kwargs: Additional parameters forwarded to Runner.run()
 
         Returns:
-            Dictionary with agent execution result:
-            - "output": Final output text
-            - "steps": List of execution events
-            - "metadata": Additional metadata
+            AgentResult:
+                - output: Final output (free-form text or a Pydantic BaseModel when output_schema is configured)
+                - steps: Execution trace
+                - metadata: Additional metadata such as model name, usage, event counts
 
         Example:
             ```python
@@ -773,7 +775,7 @@ class AdkLLMAgent(LLMAgent):
         """
         return cls(adk_agent, app_name)
 
-    def _convert_event_to_result(self, final_event: Any, all_events: List[Any]) -> Dict[str, Any]:
+    def _convert_event_to_result(self, final_event: Any, all_events: List[Any]) -> AgentResult:
         """Convert ADK events to standard format.
 
         Args:
@@ -781,21 +783,32 @@ class AdkLLMAgent(LLMAgent):
             all_events: All events from the ADK Runner execution
 
         Returns:
-            Standardized result dictionary with output, steps, and metadata
+            AgentResult with output, steps, and metadata
         """
-        # Extract output text from final event
-        output = ""
+        # Extract the final output text from the ADK final response event
+        output_text = ""
         if hasattr(final_event, "content") and final_event.content:
             if hasattr(final_event.content, "parts") and final_event.content.parts:
-                # Get text from first part
-                first_part = final_event.content.parts[0]
-                if hasattr(first_part, "text"):
-                    output = first_part.text or ""
+                output_text = getattr(final_event.content.parts[0], "text", "") or ""
+
+        # If output_schema (BaseModel) is configured on the LlmAgent instance,
+        # the final response text is expected to be a JSON string that conforms
+        # to the schema. Parse and validate it using Pydantic.
+        output: Any = output_text
+        output_schema = getattr(self._adk_agent, "output_schema", None)
+
+        if isinstance(output_schema, type) and issubclass(output_schema, BaseModel):
+            # Type narrowing for mypy
+            schema: type[BaseModel] = output_schema
+            # model_validate_json() raises a validation error if the JSON is invalid
+            # or does not conform to the schema. This is intentional and enforces
+            # the structured-output contract at the agent level.
+            output = schema.model_validate_json(output_text)
 
         # Convert events to steps
-        steps = []
+        steps: List[AgentStep] = []
         for event in all_events:
-            step = {
+            step: AgentStep = {
                 "type": type(event).__name__,
                 "is_final": event.is_final_response() if hasattr(event, "is_final_response") else False,
                 "is_partial": getattr(event, "partial", False),
@@ -817,32 +830,3 @@ class AdkLLMAgent(LLMAgent):
                 "event_count": len(all_events),
             }
         }
-
-    def _convert_adk_result(self, adk_result: Any) -> Dict[str, Any]:
-        """Convert ADK result to standard format (legacy, for backwards compatibility).
-
-        Args:
-            adk_result: Result from ADK agent.run()
-
-        Returns:
-            Standardized result dictionary
-        """
-        # ADK result format may vary, handle common cases
-        if isinstance(adk_result, dict):
-            return {
-                "output": adk_result.get("output", str(adk_result)),
-                "steps": adk_result.get("steps", []),
-                "metadata": adk_result.get("metadata", {})
-            }
-        elif isinstance(adk_result, str):
-            return {
-                "output": adk_result,
-                "steps": [],
-                "metadata": {}
-            }
-        else:
-            return {
-                "output": str(adk_result),
-                "steps": [],
-                "metadata": {}
-            }

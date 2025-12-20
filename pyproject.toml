@@ -13,9 +13,6 @@ dependencies = [
     "jinja2>=3.1.6",
     "python-dotenv>=1.1.1",
     "litellm>=1.79.1", # 1.72.6+ required for langfuse_otel callback
-    "opentelemetry-api>=1.37.0",
-    "opentelemetry-exporter-otlp>=1.37.0",
-    "wrapt>=1.17.3",
     "pydantic>=2.10.0",
 ]
 
@@ -43,23 +40,63 @@ dev = [
     "grandalf>=0.8",
     "matplotlib>=3.10.3",
     "docker>=7.1.0",
+    # ADK
+    "google-adk>=1.17.0",
+    "nest-asyncio>=1.6.0",  # required by google-adk for nested event loops
+    "wrapt>=1.17.3",        # required for ADK monkey patches
+    "openinference-instrumentation-google-adk>=0.1.0",
+    # pydantic-ai
+    "pydantic-ai-slim[openai]>=1.33.0",
+    "griffe>=1.0.0",  # Required by pydantic-ai-slim
 ]
 
 [project.optional-dependencies]
-extras = [
-    "docker>=7.1.0",
-    "redis>=6.2.0",
-    "matplotlib>=3.10.3",
-    "grandalf>=0.8",
-    "pygraphviz>=1.14",
-    "google-adk>=1.17.0",
-    "opentelemetry-sdk>=1.37.0",
-    "langfuse>=3.8.1",
-    "nest-asyncio>=1.6.0",
-    "openinference-instrumentation-google-adk>=0.1.0",
+api = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
 ]
+visualization = [
+    "matplotlib>=3.10.3",
+    "grandalf>=0.8",
+    "pygraphviz>=1.14",
+]
+adk = [
+    "google-adk>=1.17.0",
+    "nest-asyncio>=1.6.0",  # required by google-adk for nested event loops
+    "wrapt>=1.17.3",        # required for ADK monkey patches
+    "openinference-instrumentation-google-adk>=0.1.0",
+]
+pydantic-ai = [
+    # Slim version without logfire (to avoid opentelemetry-sdk conflict with google-adk)
+    # OpenAI is required for openai compatible models and LiteLLM provider
+    "pydantic-ai-slim[openai]>=1.33.0",
+    "griffe>=1.0.0",  # Required by pydantic-ai-slim
+]
+tracing = [
+    "opentelemetry-api>=1.37.0",
+    "opentelemetry-exporter-otlp>=1.37.0",
+    "opentelemetry-sdk>=1.37.0",
+    "langfuse>=3.8.1",
+]
+docker = [
+    "docker>=7.1.0",
+]
+redis = [
+    "redis>=6.2.0",
+]
+standard = [    
+    "graflow[api]",
+    "graflow[visualization]",
+    "graflow[tracing]",
+    "graflow[docker]",
+    "graflow[redis]",
+    "graflow[adk]",
+]
+all = [    
+    "graflow[standard]",
+    "graflow[pydantic-ai]"
+]
+
 
 [build-system]
 requires = ["hatchling"]

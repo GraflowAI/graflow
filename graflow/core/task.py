@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Optional, Union
@@ -13,7 +14,7 @@ from graflow.exceptions import GraflowRuntimeError
 
 if TYPE_CHECKING:
     from graflow.core.handlers.group_policy import GroupExecutionPolicy
-
+    from graflow.core.workflow import WorkflowContext
 
 def _reconstruct_task_wrapper(
     task_id: str,
@@ -21,7 +22,8 @@ def _reconstruct_task_wrapper(
     inject_context: bool,
     inject_llm_client: bool,
     inject_llm_agent: Optional[str],
-    handler_type: Optional[str]
+    handler_type: Optional[str],
+    resolve_keyword_args: bool = True
 ) -> TaskWrapper:
     """Reconstruct TaskWrapper from serialized components.
 
@@ -37,6 +39,7 @@ def _reconstruct_task_wrapper(
         inject_llm_client: Whether to inject LLMClient
         inject_llm_agent: Agent name to inject
         handler_type: Handler type string
+        resolve_keyword_args: Whether to resolve keyword arguments from channel
 
     Returns:
         Fresh TaskWrapper instance (state will be restored by pickle)
@@ -56,7 +59,8 @@ def _reconstruct_task_wrapper(
         inject_llm_client=inject_llm_client,
         inject_llm_agent=inject_llm_agent,
         register_to_context=False,  # Don't re-register during deserialization
-        handler_type=handler_type
+        handler_type=handler_type,
+        resolve_keyword_args=resolve_keyword_args
     )
 
     return task_wrapper
@@ -68,6 +72,7 @@ class Executable(ABC):
     def __init__(self) -> None:
         """Initialize executable with default handler type."""
         self.handler_type: str = "direct"
+        self._pending_registration = False
 
     @property
     @abstractmethod
@@ -144,12 +149,12 @@ class Executable(ABC):
         if isinstance(other, SequentialTask):
             # self >> (a >> b >> c) → SequentialTask([self, a, b, c])
             # Edge: self -> a (leftmost)
-            self._add_dependency_edge(self.task_id, other.leftmost.task_id)
+            self._add_dependency_edge(other.leftmost)
             return SequentialTask([self, *other.tasks])
         else:
             # self >> other → SequentialTask([self, other])
             # Edge: self -> other
-            self._add_dependency_edge(self.task_id, other.task_id)
+            self._add_dependency_edge(other)
             return SequentialTask([self, other])
 
     def __lshift__(self, other: Executable) -> SequentialTask:
@@ -166,12 +171,12 @@ class Executable(ABC):
         if isinstance(other, SequentialTask):
             # self << (a >> b >> c) → SequentialTask([a, b, c, self])
             # Edge: c (rightmost) -> self
-            other.rightmost._add_dependency_edge(other.rightmost.task_id, self.task_id)
+            other.rightmost._add_dependency_edge(self)
             return SequentialTask([*other.tasks, self])
         else:
             # self << other → SequentialTask([other, self])
             # Edge: other -> self
-            other._add_dependency_edge(other.task_id, self.task_id)
+            other._add_dependency_edge(self)
             return SequentialTask([other, self])
 
     def __or__(self, other: Executable) -> ParallelGroup:
@@ -193,24 +198,35 @@ class Executable(ABC):
         elif isinstance(other, ParallelGroup):
             # Add this task to the existing ParallelGroup instead of creating a new one
             other.tasks.insert(0, self)  # Insert at the beginning to maintain order
-            other._add_dependency_edge(other.task_id, self.task_id)
+            other._add_dependency_edge(self)
             return other
         else:
             raise TypeError(
                 f"Can only combine with Task, TaskWrapper, SequentialTask, or ParallelGroup: {type(other)}"
             )
 
-    def _add_dependency_edge(self, from_task: str, to_task: str) -> None:
-        """Add dependency edge in current context."""
-        from .workflow import current_workflow_context
-        current_context = current_workflow_context()
-        current_context.add_edge(from_task, to_task)
+    def _add_dependency_edge(self, to_task: Executable) -> None:
+        """Add dependency edge from self to to_task in current context."""
+        from .workflow import require_workflow_context
+        current_context = require_workflow_context()
+        self._ensure_registered(current_context)
+        to_task._ensure_registered(current_context)
+        current_context.add_edge(self.task_id, to_task.task_id)
+
+    def _ensure_registered(self, ctx: WorkflowContext) -> None:
+        if self._pending_registration:
+            ctx.add_node(self.task_id, self, skip_if_exists=True)
+            self._pending_registration = False
 
     def _register_to_context(self) -> None:
         """Register this root task to current workflow context."""
-        from .workflow import current_workflow_context
-        current_context = current_workflow_context()
+        from .workflow import get_current_workflow_context
+        current_context = get_current_workflow_context()
+        if current_context is None:
+            self._pending_registration = True
+            return
         current_context.add_node(self.task_id, self)
+        self._pending_registration = False
 
 
 class SequentialTask(Executable):
@@ -293,19 +309,13 @@ class SequentialTask(Executable):
             # Chain to another chain: (a >> b) >> (c >> d)
             # → SequentialTask([a, b, c, d])
             # Edge: b -> c (rightmost -> other.leftmost)
-            self.rightmost._add_dependency_edge(
-                self.rightmost.task_id,
-                other.leftmost.task_id
-            )
+            self.rightmost._add_dependency_edge(other.leftmost)
             return SequentialTask(self.tasks + other.tasks)
         else:
             # Chain to a single task: (a >> b) >> c
             # → SequentialTask([a, b, c])
             # Edge: b -> c (rightmost -> other)
-            self.rightmost._add_dependency_edge(
-                self.rightmost.task_id,
-                other.task_id
-            )
+            self.rightmost._add_dependency_edge(other)
             return SequentialTask([*self.tasks, other])
 
     def __lshift__(self, other: Executable) -> SequentialTask:
@@ -321,19 +331,13 @@ class SequentialTask(Executable):
             # Chain from another chain: (c >> d) << (a >> b)
             # → SequentialTask([a, b, c, d])
             # Edge: b -> c (other.rightmost -> leftmost)
-            other.rightmost._add_dependency_edge(
-                other.rightmost.task_id,
-                self.leftmost.task_id
-            )
+            other.rightmost._add_dependency_edge(self.leftmost)
             return SequentialTask(other.tasks + self.tasks)
         else:
             # Chain from a single task: c << (a >> b)
             # → SequentialTask([other, a, b])
             # Edge: other -> a
-            other._add_dependency_edge(
-                other.task_id,
-                self.leftmost.task_id
-            )
+            other._add_dependency_edge(self.leftmost)
             return SequentialTask([other, *self.tasks])
 
     def __or__(self, other: Executable) -> ParallelGroup:
@@ -574,12 +578,12 @@ class ParallelGroup(Executable):
         if isinstance(other, SequentialTask):
             # group >> (a >> b >> c) → SequentialTask([group, a, b, c])
             # Edge: group -> a (leftmost)
-            self._add_dependency_edge(self.task_id, other.leftmost.task_id)
+            self._add_dependency_edge(other.leftmost)
             return SequentialTask([self, *other.tasks])
         else:
             # group >> other → SequentialTask([group, other])
             # Edge: group -> other
-            self._add_dependency_edge(self.task_id, other.task_id)
+            self._add_dependency_edge(other)
             return SequentialTask([self, other])
 
     def __lshift__(self, other: Executable) -> SequentialTask:
@@ -599,12 +603,12 @@ class ParallelGroup(Executable):
         if isinstance(other, SequentialTask):
             # group << (a >> b >> c) → SequentialTask([a, b, c, group])
             # Edge: c (rightmost) -> group
-            other.rightmost._add_dependency_edge(other.rightmost.task_id, self.task_id)
+            other.rightmost._add_dependency_edge(self)
             return SequentialTask([*other.tasks, self])
         else:
             # group << other → SequentialTask([other, group])
             # Edge: other -> group
-            other._add_dependency_edge(other.task_id, self.task_id)
+            other._add_dependency_edge(self)
             return SequentialTask([other, self])
 
     def __or__(self, other: Executable) -> ParallelGroup:
@@ -703,7 +707,8 @@ class TaskWrapper(Executable):
         inject_llm_client: bool = False,
         inject_llm_agent: Optional[str] = None,
         register_to_context: bool = True,
-        handler_type: Optional[str] = None
+        handler_type: Optional[str] = None,
+        resolve_keyword_args: bool = True
     ) -> None:
         """Initialize a task wrapper with task_id and function.
 
@@ -716,6 +721,7 @@ class TaskWrapper(Executable):
                             (agent must be registered in ExecutionContext)
             register_to_context: Whether to register to workflow context
             handler_type: Execution handler type ("direct", "docker", or custom)
+            resolve_keyword_args: Whether to resolve keyword arguments from channel
         """
         super().__init__()
         self._task_id = task_id
@@ -723,6 +729,10 @@ class TaskWrapper(Executable):
         self.inject_context = inject_context
         self.inject_llm_client = inject_llm_client
         self.inject_llm_agent = inject_llm_agent
+        self.resolve_keyword_args = resolve_keyword_args
+
+        # Initialize bound kwargs storage for instance creation
+        self._bound_kwargs: dict[str, Any] = {}
 
         # Store reference to original unwrapped function for serialization
         # functools.wraps preserves this in __wrapped__ attribute
@@ -767,7 +777,8 @@ class TaskWrapper(Executable):
                 self.inject_context,
                 self.inject_llm_client,
                 self.inject_llm_agent,
-                self.handler_type
+                self.handler_type,
+                self.resolve_keyword_args
             ),
             state,  # Additional state to restore
             None,   # listitems
@@ -804,6 +815,64 @@ class TaskWrapper(Executable):
         if existing_func is not None:
             self.func = existing_func
 
+    def _resolve_keyword_args_from_channel(self, exec_context: ExecutionContext) -> dict[str, Any]:
+        """Resolve function keyword arguments from channel by matching parameter names.
+
+        Args:
+            exec_context: Execution context containing channel
+
+        Returns:
+            Dictionary of resolved keyword arguments
+        """
+        import inspect
+
+        resolved_kwargs = {}
+
+        if not self.resolve_keyword_args:
+            return resolved_kwargs
+
+        # Get function signature
+        sig = inspect.signature(self._original_func)
+
+        # Determine which parameters to skip (injected parameters)
+        skip_params = set()
+        param_list = list(sig.parameters.values())
+
+        # Skip first parameter if inject_context=True
+        if self.inject_context and param_list:
+            skip_params.add(param_list[0].name)
+
+        # Skip injected kwargs
+        if self.inject_llm_client:
+            skip_params.add('llm_client')
+        if self.inject_llm_agent:
+            skip_params.add('llm_agent')
+
+        # Get channel
+        channel = exec_context.get_channel()
+
+        # Resolve each keyword-compatible parameter from channel
+        for param_name, param in sig.parameters.items():
+            # Only process KEYWORD_ONLY and POSITIONAL_OR_KEYWORD parameters
+            if param.kind not in (
+                inspect.Parameter.KEYWORD_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            ):
+                continue
+
+            if param_name in skip_params:
+                continue
+
+            # Check if value exists in channel
+            if param_name in channel.keys():
+                resolved_kwargs[param_name] = channel.get(param_name)
+            elif param.default is not inspect.Parameter.empty:
+                # Parameter has default value, skip
+                continue
+            # If no value in channel and no default, let function handle it
+
+        return resolved_kwargs
+
     def _prepare_injection_kwargs(self, exec_context: ExecutionContext) -> dict[str, Any]:
         """Prepare keyword arguments for injection."""
         injection_kwargs = {}
@@ -832,25 +901,83 @@ class TaskWrapper(Executable):
         - inject_context: Injects TaskExecutionContext as positional argument
         - inject_llm_client: Injects LLMClient as named argument 'llm_client'
         - inject_llm_agent: Injects LLMAgent as named argument 'llm_agent'
-        """
-        if self.inject_context:
-            exec_context = self.get_execution_context()
-            injection_kwargs = self._prepare_injection_kwargs(exec_context)
+        - resolve_keyword_args: Resolves keyword arguments from channel
 
+        Instance Creation Mode (when called with task_id or params but no execution context):
+        - Called with task_id and/or bound parameters creates a new TaskWrapper instance
+        - Auto-generates task_id if params provided without explicit task_id
+        - Stores bound parameters for later execution
+        """
+        if not hasattr(self, '_execution_context'):
+            # Check if this is instance creation mode (has task_id or binding params)
+            # vs lazy evaluation mode (no params, just returns self)
+            has_task_id = 'task_id' in kwargs
+            has_binding_params = bool(kwargs and not has_task_id) or bool(args)
+
+            if has_task_id or has_binding_params:
+                # Instance creation mode
+
+                # Only allow keyword arguments for instance creation
+                if args:
+                    raise TypeError(
+                        f"TaskWrapper instance creation does not support positional arguments. "
+                        f"Please use keyword arguments only. Got {len(args)} positional args."
+                    )
+
+                # Extract or generate task_id
+                if 'task_id' in kwargs:
+                    new_task_id = kwargs.pop('task_id')
+                else:
+                    # Auto-generate task_id when binding params provided
+                    func_name = getattr(self.func, '__name__', 'task')
+                    new_task_id = f"{func_name}_{uuid.uuid4().hex[:8]}"
+
+                # Create new TaskWrapper instance
+                new_instance = TaskWrapper(
+                    task_id=new_task_id,
+                    func=self.func,
+                    inject_context=self.inject_context,
+                    inject_llm_client=self.inject_llm_client,
+                    inject_llm_agent=self.inject_llm_agent,
+                    register_to_context=True,  # Uses _register_to_context() internally
+                    handler_type=getattr(self, 'handler_type', None),
+                    resolve_keyword_args=self.resolve_keyword_args
+                )
+
+                # Store bound parameters (remaining kwargs after task_id extraction)
+                if kwargs:
+                    new_instance._bound_kwargs = kwargs
+
+                return new_instance
+            else:
+                # Lazy evaluation mode - return self
+                return self
+
+        # Execution mode (has execution context) - existing logic
+        exec_context = self._execution_context
+
+        # Resolve keyword arguments from channel
+        resolved_kwargs = self._resolve_keyword_args_from_channel(exec_context)
+
+        # Get bound kwargs (creation-time parameters)
+        bound_kwargs = getattr(self, '_bound_kwargs', {})
+
+        # Prepare injection kwargs
+        injection_kwargs = self._prepare_injection_kwargs(exec_context)
+
+        # Merge all kwargs: channel < bound < injection < user-provided
+        all_kwargs = {**resolved_kwargs, **bound_kwargs, **injection_kwargs, **kwargs}
+
+        if self.inject_context:
             task_context = exec_context.current_task_context
             if not task_context:
                 # Fallback: create temporary task context
                 with exec_context.executing_task(self) as task_ctx:
-                    return self.func(task_ctx, *args, **{**kwargs, **injection_kwargs})
-            return self.func(task_context, *args, **{**kwargs, **injection_kwargs})
-
-        elif self.inject_llm_client or self.inject_llm_agent:
-            exec_context = self.get_execution_context()
-            injection_kwargs = self._prepare_injection_kwargs(exec_context)
-            return self.func(*args, **{**kwargs, **injection_kwargs})
+                    return self.func(task_ctx, *args, **all_kwargs)
+            return self.func(task_context, *args, **all_kwargs)
 
         else:
-            return self.func(*args, **kwargs)
+            return self.func(*args, **all_kwargs)
 
     def run(self) -> Any:
         """Execute the wrapped function with dependency injection.
@@ -859,9 +986,26 @@ class TaskWrapper(Executable):
         - inject_context: Injects TaskExecutionContext as positional argument
         - inject_llm_client: Injects LLMClient as named argument 'llm_client'
         - inject_llm_agent: Injects LLMAgent as named argument 'llm_agent'
+        - resolve_keyword_args: Resolves keyword arguments from channel
+
+        Parameter priority (lowest to highest):
+        1. Channel kwargs (resolved from channel)
+        2. Bound kwargs (passed at task creation time)
+        3. Injection kwargs (system-injected: llm_client, llm_agent)
         """
         exec_context = self.get_execution_context()
+
+        # Resolve keyword arguments from channel
+        resolved_kwargs = self._resolve_keyword_args_from_channel(exec_context)
+
+        # Get bound kwargs (creation-time parameters)
+        bound_kwargs = getattr(self, '_bound_kwargs', {})
+
+        # Prepare injection kwargs
         injection_kwargs = self._prepare_injection_kwargs(exec_context)
+
+        # Merge all kwargs: channel < bound < injection
+        all_kwargs = {**resolved_kwargs, **bound_kwargs, **injection_kwargs}
 
         # TaskExecutionContext injection (positional argument)
         if self.inject_context:
@@ -869,11 +1013,11 @@ class TaskWrapper(Executable):
             if not task_context:
                 # Fallback: create temporary task context
                 with exec_context.executing_task(self) as task_ctx:
-                    return self.func(task_ctx, **injection_kwargs)
-            return self.func(task_context, **injection_kwargs)
+                    return self.func(task_ctx, **all_kwargs)
+            return self.func(task_context, **all_kwargs)
 
-        # No context injection - just pass injection kwargs
-        return self.func(**injection_kwargs)
+        # No context injection - just pass all kwargs
+        return self.func(**all_kwargs)
 
     def __repr__(self) -> str:
         """Return string representation of this task wrapper."""

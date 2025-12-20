@@ -17,11 +17,11 @@ def task(id_or_func: F) -> TaskWrapper: ... # type: ignore
 # Usage: @task (without parentheses, directly on function)
 
 @overload
-def task(id_or_func: str, *, inject_context: bool = False, inject_llm_client: bool = False, inject_llm_agent: Optional[str] = None, handler: Optional[str] = None) -> Callable[[F], TaskWrapper]: ... # type: ignore
+def task(id_or_func: str, *, inject_context: bool = False, inject_llm_client: bool = False, inject_llm_agent: Optional[str] = None, handler: Optional[str] = None, resolve_keyword_args: bool = True) -> Callable[[F], TaskWrapper]: ... # type: ignore
 # Usage: @task("custom_id") or @task("custom_id", inject_context=True, handler="docker")
 
 @overload
-def task(*, id: Optional[str] = None, inject_context: bool = False, inject_llm_client: bool = False, inject_llm_agent: Optional[str] = None, handler: Optional[str] = None) -> Callable[[F], TaskWrapper]: ... # type: ignore
+def task(*, id: Optional[str] = None, inject_context: bool = False, inject_llm_client: bool = False, inject_llm_agent: Optional[str] = None, handler: Optional[str] = None, resolve_keyword_args: bool = True) -> Callable[[F], TaskWrapper]: ... # type: ignore
 # Usage: @task() or @task(id="custom_id") or @task(inject_context=True) or @task(handler="docker")
 
 def task(
@@ -31,7 +31,8 @@ def task(
     inject_context: bool = False,
     inject_llm_client: bool = False,
     inject_llm_agent: Optional[str] = None,
-    handler: Optional[str] = None
+    handler: Optional[str] = None,
+    resolve_keyword_args: bool = True
 ) -> TaskWrapper | Callable[[F], TaskWrapper]:
     """Decorator to convert a function into a Task object.
 
@@ -56,6 +57,8 @@ def task(
         inject_llm_agent: Agent name string to inject LLMAgent as first parameter
                          (agent must be registered in ExecutionContext)
         handler: Execution handler type ("direct", "docker", or custom)
+        resolve_keyword_args: If True (default), automatically resolve function keyword arguments
+                             from channel by matching parameter names to channel keys
 
     Returns:
         TaskWrapper instance or decorator function
@@ -79,7 +82,7 @@ def task(
     # Handle @task("task_id") and @task("task_id", inject_context=True) syntax
     if isinstance(id_or_func, str):
         def string_decorator(f: F) -> TaskWrapper:
-            return task(f, id=id_or_func, inject_context=inject_context, inject_llm_client=inject_llm_client, inject_llm_agent=inject_llm_agent, handler=handler)  # type: ignore
+            return task(f, id=id_or_func, inject_context=inject_context, inject_llm_client=inject_llm_client, inject_llm_agent=inject_llm_agent, handler=handler, resolve_keyword_args=resolve_keyword_args)  # type: ignore
         return string_decorator
 
     def decorator(f: F) -> TaskWrapper:
@@ -103,7 +106,8 @@ def task(
             inject_context=inject_context,
             inject_llm_client=inject_llm_client,
             inject_llm_agent=inject_llm_agent,
-            handler_type=handler
+            handler_type=handler,
+            resolve_keyword_args=resolve_keyword_args
         )
 
         # Copy original function attributes to ensure compatibility

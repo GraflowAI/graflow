@@ -41,8 +41,8 @@ install:
 install-dev:
 	uv sync --dev
 
-# Install extras (e.g., graphviz)
-install-extras:
+# Install recommended extras (e.g., graphviz)
+install-all:
 	export CFLAGS="-I$(brew --prefix graphviz)/include"
 	export LDFLAGS="-L$(brew --prefix graphviz)/lib"
 	uv sync --all-extras --dev
