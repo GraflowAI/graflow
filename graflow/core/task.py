@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Optional, Union
 from graflow.coordination.coordinator import CoordinationBackend
 from graflow.coordination.executor import GroupExecutor
 from graflow.core.context import ExecutionContext
+from graflow.core.graph import TaskGraph
 from graflow.exceptions import GraflowRuntimeError
 
 if TYPE_CHECKING:
@@ -907,10 +908,11 @@ class TaskWrapper(Executable):
         - Called with task_id and/or bound parameters creates a new TaskWrapper instance
         - Auto-generates task_id if params provided without explicit task_id
         - Stores bound parameters for later execution
+        - With no parameters, executes the task directly (testing convenience)
         """
         if not hasattr(self, '_execution_context'):
             # Check if this is instance creation mode (has task_id or binding params)
-            # vs lazy evaluation mode (no params, just returns self)
+            # vs direct execution mode (no params)
             has_task_id = 'task_id' in kwargs
             has_binding_params = bool(kwargs and not has_task_id) or bool(args)
 
@@ -979,7 +981,7 @@ class TaskWrapper(Executable):
         else:
             return self.func(*args, **all_kwargs)
 
-    def run(self) -> Any:
+    def run(self, *args, **kwargs) -> Any:
         """Execute the wrapped function with dependency injection.
 
         Multiple injection types can co-exist:
@@ -992,32 +994,48 @@ class TaskWrapper(Executable):
         1. Channel kwargs (resolved from channel)
         2. Bound kwargs (passed at task creation time)
         3. Injection kwargs (system-injected: llm_client, llm_agent)
+        4. User-provided kwargs
+
+        If no execution context is set, a temporary in-memory context is created
+        to allow direct task execution (testing convenience).
         """
-        exec_context = self.get_execution_context()
+        temp_context = None
+        if hasattr(self, '_execution_context'):
+            exec_context = self.get_execution_context()
+        else:
+            graph = TaskGraph()
+            graph.add_node(self, self.task_id)
+            exec_context = ExecutionContext.create(graph, start_node=self.task_id)
+            temp_context = exec_context
+            self.set_execution_context(exec_context)
 
-        # Resolve keyword arguments from channel
-        resolved_kwargs = self._resolve_keyword_args_from_channel(exec_context)
+        try:
+            # Resolve keyword arguments from channel
+            resolved_kwargs = self._resolve_keyword_args_from_channel(exec_context)
 
-        # Get bound kwargs (creation-time parameters)
-        bound_kwargs = getattr(self, '_bound_kwargs', {})
+            # Get bound kwargs (creation-time parameters)
+            bound_kwargs = getattr(self, '_bound_kwargs', {})
 
-        # Prepare injection kwargs
-        injection_kwargs = self._prepare_injection_kwargs(exec_context)
+            # Prepare injection kwargs
+            injection_kwargs = self._prepare_injection_kwargs(exec_context)
 
-        # Merge all kwargs: channel < bound < injection
-        all_kwargs = {**resolved_kwargs, **bound_kwargs, **injection_kwargs}
+            # Merge all kwargs: channel < bound < injection < user-provided
+            all_kwargs = {**resolved_kwargs, **bound_kwargs, **injection_kwargs, **kwargs}
 
-        # TaskExecutionContext injection (positional argument)
-        if self.inject_context:
-            task_context = exec_context.current_task_context
-            if not task_context:
-                # Fallback: create temporary task context
-                with exec_context.executing_task(self) as task_ctx:
-                    return self.func(task_ctx, **all_kwargs)
-            return self.func(task_context, **all_kwargs)
+            # TaskExecutionContext injection (positional argument)
+            if self.inject_context:
+                task_context = exec_context.current_task_context
+                if not task_context:
+                    # Fallback: create temporary task context
+                    with exec_context.executing_task(self) as task_ctx:
+                        return self.func(task_ctx, *args, **all_kwargs)
+                return self.func(task_context, *args, **all_kwargs)
 
-        # No context injection - just pass all kwargs
-        return self.func(**all_kwargs)
+            # No context injection - just pass all kwargs
+            return self.func(*args, **all_kwargs)
+        finally:
+            if temp_context is not None and hasattr(self, '_execution_context'):
+                delattr(self, '_execution_context')
 
     def __repr__(self) -> str:
         """Return string representation of this task wrapper."""
