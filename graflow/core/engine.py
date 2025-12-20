@@ -219,8 +219,6 @@ class WorkflowEngine:
         # Initialize first task
         if start_task_id is not None:
             task_id = start_task_id
-        elif context.start_node is not None:
-            task_id = context.start_node
         else:
             task_id = context.get_next_task()
 
