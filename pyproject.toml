@@ -40,6 +40,14 @@ dev = [
     "grandalf>=0.8",
     "matplotlib>=3.10.3",
     "docker>=7.1.0",
+    # ADK
+    "google-adk>=1.17.0",
+    "nest-asyncio>=1.6.0",  # required by google-adk for nested event loops
+    "wrapt>=1.17.3",        # required for ADK monkey patches
+    "openinference-instrumentation-google-adk>=0.1.0",
+    # pydantic-ai
+    "pydantic-ai-slim[openai]>=1.33.0",
+    "griffe>=1.0.0",  # Required by pydantic-ai-slim
 ]
 
 [project.optional-dependencies]
