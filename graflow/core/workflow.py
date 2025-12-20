@@ -102,11 +102,18 @@ class WorkflowContext:
         """
         self._llm_agent_providers[name] = agent_or_factory
 
-    def execute(self, start_node: Optional[str] = None, max_steps: int = 10000, ret_context: bool = False) -> Any | tuple[Any, ExecutionContext]:
+    def execute(self, start_node: Optional[str] = None, max_steps: int = 10000, ret_context: bool = False, initial_channel: Optional[dict[str, Any]] = None) -> Any | tuple[Any, ExecutionContext]:
         """Execute the workflow starting from the specified node.
+
+        Args:
+            start_node: Optional starting node (auto-detected if None)
+            max_steps: Maximum execution steps
+            ret_context: If True, return (result, ExecutionContext) tuple
+            initial_channel: Optional dict of initial channel values to set before execution
 
         Returns:
             Result from the last executed task handler (may be ``None``).
+            If ret_context=True, returns tuple of (result, ExecutionContext).
         """
 
         if start_node is None:
@@ -123,6 +130,12 @@ class WorkflowContext:
         from graflow.core.context import ExecutionContext
         from graflow.core.engine import WorkflowEngine
         exec_context = ExecutionContext.create(self.graph, start_node, max_steps=max_steps, tracer=self._tracer)
+
+        # Set initial channel values if provided
+        if initial_channel:
+            ch = exec_context.get_channel()
+            for key, value in initial_channel.items():
+                ch.set(key, value)
 
         self._attach_llm_agents(exec_context)
 
