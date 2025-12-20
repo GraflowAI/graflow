@@ -952,8 +952,8 @@ class TaskWrapper(Executable):
 
                 return new_instance
             else:
-                # Lazy evaluation mode - return self
-                return self
+                # No context and no bindings: execute directly (testing convenience)
+                return self.run()
 
         # Execution mode (has execution context) - existing logic
         exec_context = self._execution_context
