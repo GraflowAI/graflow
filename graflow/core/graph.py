@@ -27,7 +27,7 @@ class TaskGraph:
         """Get the underlying NetworkX graph."""
         return self._graph
 
-    def add_node(self, task: Executable, task_id: Optional[str] = None, allow_duplicate: bool = False) -> None:
+    def add_node(self, task: Executable, task_id: Optional[str] = None, skip_if_exists: bool = False) -> None:
         """Add a task node to the graph.
 
         If a node with the same task_id already exists, logs a warning and skips adding.
@@ -35,11 +35,11 @@ class TaskGraph:
         if task_id is None:
             task_id = task.task_id
         if task_id in self._graph.nodes:
-            if allow_duplicate:
-                logger.warning("Node '%s' already exists in graph, skipping duplicate add_node", task_id)
+            if skip_if_exists:
+                logger.debug("Node '%s' already exists in graph, skipping duplicate add_node", task_id)
+                return
             else:
                 raise DuplicateTaskError(f"Node '{task_id}' already exists in graph")
-            return
         self._graph.add_node(task_id, task=task)
 
     def add_edge(self, from_node: str, to_node: str) -> None:

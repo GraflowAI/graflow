@@ -13,7 +13,7 @@ from graflow.exceptions import GraflowRuntimeError
 
 if TYPE_CHECKING:
     from graflow.core.handlers.group_policy import GroupExecutionPolicy
-
+    from graflow.core.workflow import WorkflowContext
 
 def _reconstruct_task_wrapper(
     task_id: str,
@@ -71,6 +71,7 @@ class Executable(ABC):
     def __init__(self) -> None:
         """Initialize executable with default handler type."""
         self.handler_type: str = "direct"
+        self._pending_registration = False
 
     @property
     @abstractmethod
@@ -147,12 +148,12 @@ class Executable(ABC):
         if isinstance(other, SequentialTask):
             # self >> (a >> b >> c) → SequentialTask([self, a, b, c])
             # Edge: self -> a (leftmost)
-            self._add_dependency_edge(self.task_id, other.leftmost.task_id)
+            self._add_dependency_edge(other.leftmost)
             return SequentialTask([self, *other.tasks])
         else:
             # self >> other → SequentialTask([self, other])
             # Edge: self -> other
-            self._add_dependency_edge(self.task_id, other.task_id)
+            self._add_dependency_edge(other)
             return SequentialTask([self, other])
 
     def __lshift__(self, other: Executable) -> SequentialTask:
@@ -169,12 +170,12 @@ class Executable(ABC):
         if isinstance(other, SequentialTask):
             # self << (a >> b >> c) → SequentialTask([a, b, c, self])
             # Edge: c (rightmost) -> self
-            other.rightmost._add_dependency_edge(other.rightmost.task_id, self.task_id)
+            other.rightmost._add_dependency_edge(self)
             return SequentialTask([*other.tasks, self])
         else:
             # self << other → SequentialTask([other, self])
             # Edge: other -> self
-            other._add_dependency_edge(other.task_id, self.task_id)
+            other._add_dependency_edge(self)
             return SequentialTask([other, self])
 
     def __or__(self, other: Executable) -> ParallelGroup:
@@ -196,24 +197,35 @@ class Executable(ABC):
         elif isinstance(other, ParallelGroup):
             # Add this task to the existing ParallelGroup instead of creating a new one
             other.tasks.insert(0, self)  # Insert at the beginning to maintain order
-            other._add_dependency_edge(other.task_id, self.task_id)
+            other._add_dependency_edge(self)
             return other
         else:
             raise TypeError(
                 f"Can only combine with Task, TaskWrapper, SequentialTask, or ParallelGroup: {type(other)}"
             )
 
-    def _add_dependency_edge(self, from_task: str, to_task: str) -> None:
-        """Add dependency edge in current context."""
-        from .workflow import current_workflow_context
-        current_context = current_workflow_context()
-        current_context.add_edge(from_task, to_task)
+    def _add_dependency_edge(self, to_task: Executable) -> None:
+        """Add dependency edge from self to to_task in current context."""
+        from .workflow import require_workflow_context
+        current_context = require_workflow_context()
+        self._ensure_registered(current_context)
+        to_task._ensure_registered(current_context)
+        current_context.add_edge(self.task_id, to_task.task_id)
+
+    def _ensure_registered(self, ctx: WorkflowContext) -> None:
+        if self._pending_registration:
+            ctx.add_node(self.task_id, self, skip_if_exists=True)
+            self._pending_registration = False
 
     def _register_to_context(self) -> None:
         """Register this root task to current workflow context."""
-        from .workflow import current_workflow_context
-        current_context = current_workflow_context()
+        from .workflow import get_current_workflow_context
+        current_context = get_current_workflow_context()
+        if current_context is None:
+            self._pending_registration = True
+            return
         current_context.add_node(self.task_id, self)
+        self._pending_registration = False
 
 
 class SequentialTask(Executable):
@@ -296,19 +308,13 @@ class SequentialTask(Executable):
             # Chain to another chain: (a >> b) >> (c >> d)
             # → SequentialTask([a, b, c, d])
             # Edge: b -> c (rightmost -> other.leftmost)
-            self.rightmost._add_dependency_edge(
-                self.rightmost.task_id,
-                other.leftmost.task_id
-            )
+            self.rightmost._add_dependency_edge(other.leftmost)
             return SequentialTask(self.tasks + other.tasks)
         else:
             # Chain to a single task: (a >> b) >> c
             # → SequentialTask([a, b, c])
             # Edge: b -> c (rightmost -> other)
-            self.rightmost._add_dependency_edge(
-                self.rightmost.task_id,
-                other.task_id
-            )
+            self.rightmost._add_dependency_edge(other)
             return SequentialTask([*self.tasks, other])
 
     def __lshift__(self, other: Executable) -> SequentialTask:
@@ -324,19 +330,13 @@ class SequentialTask(Executable):
             # Chain from another chain: (c >> d) << (a >> b)
             # → SequentialTask([a, b, c, d])
             # Edge: b -> c (other.rightmost -> leftmost)
-            other.rightmost._add_dependency_edge(
-                other.rightmost.task_id,
-                self.leftmost.task_id
-            )
+            other.rightmost._add_dependency_edge(self.leftmost)
             return SequentialTask(other.tasks + self.tasks)
         else:
             # Chain from a single task: c << (a >> b)
             # → SequentialTask([other, a, b])
             # Edge: other -> a
-            other._add_dependency_edge(
-                other.task_id,
-                self.leftmost.task_id
-            )
+            other._add_dependency_edge(self.leftmost)
             return SequentialTask([other, *self.tasks])
 
     def __or__(self, other: Executable) -> ParallelGroup:
@@ -577,12 +577,12 @@ class ParallelGroup(Executable):
         if isinstance(other, SequentialTask):
             # group >> (a >> b >> c) → SequentialTask([group, a, b, c])
             # Edge: group -> a (leftmost)
-            self._add_dependency_edge(self.task_id, other.leftmost.task_id)
+            self._add_dependency_edge(other.leftmost)
             return SequentialTask([self, *other.tasks])
         else:
             # group >> other → SequentialTask([group, other])
             # Edge: group -> other
-            self._add_dependency_edge(self.task_id, other.task_id)
+            self._add_dependency_edge(other)
             return SequentialTask([self, other])
 
     def __lshift__(self, other: Executable) -> SequentialTask:
@@ -602,12 +602,12 @@ class ParallelGroup(Executable):
         if isinstance(other, SequentialTask):
             # group << (a >> b >> c) → SequentialTask([a, b, c, group])
             # Edge: c (rightmost) -> group
-            other.rightmost._add_dependency_edge(other.rightmost.task_id, self.task_id)
+            other.rightmost._add_dependency_edge(self)
             return SequentialTask([*other.tasks, self])
         else:
             # group << other → SequentialTask([other, group])
             # Edge: other -> group
-            other._add_dependency_edge(other.task_id, self.task_id)
+            other._add_dependency_edge(self)
             return SequentialTask([other, self])
 
     def __or__(self, other: Executable) -> ParallelGroup:
@@ -899,7 +899,10 @@ class TaskWrapper(Executable):
         - inject_llm_agent: Injects LLMAgent as named argument 'llm_agent'
         - resolve_keyword_args: Resolves keyword arguments from channel
         """
-        exec_context = self.get_execution_context()
+        if not hasattr(self, '_execution_context'):
+            return self # for Lazy evaluation cases where context is not set yet
+
+        exec_context = self._execution_context
 
         # Resolve keyword arguments from channel
         resolved_kwargs = self._resolve_keyword_args_from_channel(exec_context)

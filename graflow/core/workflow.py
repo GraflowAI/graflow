@@ -7,7 +7,7 @@ import uuid
 from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 from graflow.core.graph import TaskGraph
-from graflow.exceptions import GraphCompilationError
+from graflow.exceptions import GraflowRuntimeError, GraphCompilationError
 from graflow.trace.base import Tracer
 
 if TYPE_CHECKING:
@@ -43,23 +43,24 @@ class WorkflowContext:
         self._redis_client: Optional[Any] = None
         self._tracer = tracer
         self._llm_agent_providers: dict[str, LLMAgentProvider] = {}
+        self._token: Optional[contextvars.Token] = None
 
     def __enter__(self):
         """Enter the workflow context."""
         # Store previous context if any
-        self._previous_context = _current_context.get()
-        # Set this as current context
-        _current_context.set(self)
+        self._token = _current_context.set(self)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Exit the workflow context."""
         # Restore previous context
-        _current_context.set(self._previous_context)
+        if self._token is not None:
+            _current_context.reset(self._token)
+            self._token = None
 
-    def add_node(self, name: str, task: Executable) -> None:
+    def add_node(self, name: str, task: Executable, skip_if_exists: bool = True) -> None:
         """Add a task node to this workflow's graph."""
-        self.graph.add_node(task, name)
+        self.graph.add_node(task, name, skip_if_exists=skip_if_exists)
 
     def add_edge(self, from_node: str, to_node: str) -> None:
         """Add an edge between tasks in this workflow's graph."""
@@ -212,6 +213,19 @@ def current_workflow_context() -> WorkflowContext:
         name = uuid.uuid4().hex
         ctx = WorkflowContext(name)
         _current_context.set(ctx)
+    return ctx
+
+def require_workflow_context() -> WorkflowContext:
+    """Get the current workflow context, raising an error if none exists.
+
+    Returns:
+        Current WorkflowContext
+    Raises:
+        GraflowRuntimeError: If no current workflow context exists.
+    """
+    ctx = _current_context.get()
+    if ctx is None:
+        raise GraflowRuntimeError("No current workflow context exists")
     return ctx
 
 def set_current_workflow_context(context: WorkflowContext) -> None:
