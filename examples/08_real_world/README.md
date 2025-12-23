@@ -34,7 +34,7 @@ Complete data pipeline with multiple sources, validation, transformation, and ag
 
 **Run**:
 ```bash
-python examples/07_real_world/data_pipeline.py
+python examples/08_real_world/data_pipeline.py
 ```
 
 **Expected Output**:
@@ -95,7 +95,7 @@ End-to-end ML pipeline including data preparation, training, evaluation, and dep
 
 **Run**:
 ```bash
-python examples/07_real_world/ml_training.py
+python examples/08_real_world/ml_training.py
 ```
 
 **Expected Output**:
@@ -153,7 +153,7 @@ Scalable batch processing workflow for handling large datasets by partitioning i
 
 **Run**:
 ```bash
-python examples/07_real_world/batch_processing.py
+python examples/08_real_world/batch_processing.py
 ```
 
 **Expected Output**:
@@ -213,7 +213,7 @@ Complete sales data analysis workflow with anomaly detection, reporting, and app
 
 **Run**:
 ```bash
-python examples/07_real_world/sales_analysis.py
+python examples/08_real_world/sales_analysis.py
 ```
 
 **Expected Output**:
@@ -270,26 +270,28 @@ Date range: 2024-10-09 to 2025-10-09
 Extract → Validate → Transform → Load pattern:
 
 ```python
+from graflow.core.context import ExecutionContext
+
 with workflow("etl") as ctx:
     @task(inject_context=True)
-    def extract(context):
+    def extract(context: ExecutionContext):
         data = fetch_from_sources()
         context.get_channel().set("raw_data", data)
 
     @task(inject_context=True)
-    def validate(context):
+    def validate(context: ExecutionContext):
         data = context.get_channel().get("raw_data")
         valid_data = validate_data(data)
         context.get_channel().set("valid_data", valid_data)
 
     @task(inject_context=True)
-    def transform(context):
+    def transform(context: ExecutionContext):
         data = context.get_channel().get("valid_data")
         transformed = apply_transformations(data)
         context.get_channel().set("transformed_data", transformed)
 
     @task(inject_context=True)
-    def load(context):
+    def load(context: ExecutionContext):
         data = context.get_channel().get("transformed_data")
         save_to_destination(data)
 
@@ -336,15 +338,17 @@ with workflow("ml_pipeline") as ctx:
 Partition → Process → Aggregate pattern:
 
 ```python
+from graflow.core.context import ExecutionContext
+
 with workflow("batch") as ctx:
     @task(inject_context=True)
-    def partition(context):
+    def partition(context: ExecutionContext):
         data = load_large_dataset()
         batches = create_batches(data, batch_size=1000)
         context.get_channel().set("batches", batches)
 
     @task(inject_context=True)
-    def process_batches(context):
+    def process_batches(context: ExecutionContext):
         batches = context.get_channel().get("batches")
         results = []
         for batch in batches:
@@ -353,7 +357,7 @@ with workflow("batch") as ctx:
         context.get_channel().set("batch_results", results)
 
     @task(inject_context=True)
-    def aggregate(context):
+    def aggregate(context: ExecutionContext):
         results = context.get_channel().get("batch_results")
         final_result = combine_results(results)
         return final_result
@@ -370,8 +374,10 @@ with workflow("batch") as ctx:
 Always validate data at pipeline boundaries:
 
 ```python
+from graflow.core.context import ExecutionContext
+
 @task(inject_context=True)
-def validate_input(context):
+def validate_input(context: ExecutionContext):
     data = context.get_channel().get("input_data")
 
     # Check for nulls
@@ -395,8 +401,10 @@ def validate_input(context):
 Implement robust error handling:
 
 ```python
+from graflow.core.context import ExecutionContext
+
 @task(inject_context=True)
-def process_with_retry(context, max_retries=3):
+def process_with_retry(context: ExecutionContext, max_retries=3):
     for attempt in range(max_retries):
         try:
             result = risky_operation()
@@ -415,8 +423,10 @@ def process_with_retry(context, max_retries=3):
 Track pipeline metrics:
 
 ```python
+from graflow.core.context import ExecutionContext
+
 @task(inject_context=True)
-def monitored_task(context):
+def monitored_task(context: ExecutionContext):
     start_time = time.time()
 
     try:
@@ -443,8 +453,10 @@ def monitored_task(context):
 Clean up resources properly:
 
 ```python
+from graflow.core.context import ExecutionContext
+
 @task(inject_context=True)
-def task_with_cleanup(context):
+def task_with_cleanup(context: ExecutionContext):
     connection = None
     try:
         connection = open_connection()
@@ -459,30 +471,27 @@ def task_with_cleanup(context):
 
 ## Scaling to Production
 
-### Distributed Execution
+### Parallel Execution with Redis
 
-Scale these examples across multiple workers using Redis:
+For CPU-intensive or I/O-bound tasks that can run in parallel, use the `|` operator with `.with_execution()` to distribute work across multiple Redis workers:
 
 ```python
 from graflow.queue.factory import QueueBackend
+from graflow.core.workflow import workflow
 
-# For distributed execution:
 with workflow("distributed_pipeline") as ctx:
-    # Define tasks as usual
-    extract >> transform >> load
-
-    # Execute with Redis backend
-    exec_context = ExecutionContext.create(
-        ctx.graph,
-        "extract",
+    # Define parallel tasks using | operator
+    parallel = (process_batch_1 | process_batch_2 | process_batch_3).with_execution(
         queue_backend=QueueBackend.REDIS,
         channel_backend="redis",
         config={"redis_client": redis_client}
     )
 
-    engine = WorkflowEngine()
-    engine.execute(exec_context)
+    # Workers pull tasks from Redis queue and process them concurrently
+    ctx.execute()
 ```
+
+**Note**: Redis-based distributed execution is specifically for `ParallelGroup` tasks (created with `|` operator). Sequential workflows (`task_a >> task_b`) execute locally.
 
 ### Performance Optimization
 
@@ -514,8 +523,10 @@ with workflow("parallel") as ctx:
 #### 3. Caching
 
 ```python
+from graflow.core.context import ExecutionContext
+
 @task(inject_context=True)
-def cached_lookup(context, key):
+def cached_lookup(context: ExecutionContext, key):
     channel = context.get_channel()
 
     # Check cache
@@ -646,13 +657,14 @@ Set up monitoring and alerting:
 ```python
 import logging
 from prometheus_client import Counter, Histogram
+from graflow.core.context import ExecutionContext
 
 # Metrics
 tasks_processed = Counter('tasks_processed', 'Total tasks processed')
 task_duration = Histogram('task_duration', 'Task duration in seconds')
 
 @task(inject_context=True)
-def monitored_task(context):
+def monitored_task(context: ExecutionContext):
     with task_duration.time():
         result = process()
         tasks_processed.inc()
