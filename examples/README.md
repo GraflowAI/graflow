@@ -25,7 +25,7 @@ All examples include detailed documentation, real-world use cases, and hands-on 
 ```bash
 # Install Graflow
 cd /path/to/graflow
-pip install -e .
+uv sync --dev
 
 # Run your first example
 python examples/01_basics/hello_world.py
@@ -304,25 +304,18 @@ For a quick overview, follow this fast-track:
 
 **Option 1: Using uv (recommended)**
 ```bash
-# Create virtual environment
-uv venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install Graflow
-uv pip install -e .
+# Install Graflow with development dependencies
+uv sync --dev
 
 # Install example-specific dependencies (e.g., for LLM integration)
 cd examples/12_llm_integration
 uv pip install -r requirements.txt
 ```
 
-**Option 2: Using pip**
+**Option 2: Install with all extras**
 ```bash
-# Install Graflow
-pip install -e .
-
-# Install optional dependencies as needed
-pip install redis docker litellm google-adk
+# Install Graflow with all optional dependencies
+uv sync --dev --all-extras
 ```
 
 ### Optional Dependencies
@@ -477,7 +470,7 @@ ModuleNotFoundError: No module named 'graflow'
 **Solution**: Install Graflow in development mode:
 ```bash
 cd /path/to/graflow
-pip install -e .
+uv sync --dev
 ```
 
 ### Redis Connection Errors
@@ -543,9 +536,34 @@ The **45 examples** provide comprehensive coverage from basic concepts to AI-pow
 
 Additional examples may be added based on community feedback and emerging use cases.
 
+## Tutorial Tests
+
+All examples from the Tasks and Workflows Guide are also implemented as comprehensive unit tests in [`tests/tutorial/`](../tests/tutorial/):
+
+- **63 tests** with **100% pass rate**
+- **test_tasks_and_workflows_guide.py** - Core workflow features (34 tests)
+- **test_llm_integration.py** - LLM client and agent injection (11 tests)
+- **test_hitl.py** - Human-in-the-Loop feedback (18 tests)
+
+These tests serve as both verification of functionality and practical code examples. They demonstrate proper usage patterns, mocking strategies, and best practices.
+
+📋 **[View tutorial tests documentation →](../tests/tutorial/README.md)**
+
+### Running Tutorial Tests
+
+```bash
+# Run all tutorial tests
+uv run pytest tests/tutorial/ -v
+
+# Run specific test file
+uv run pytest tests/tutorial/test_tasks_and_workflows_guide.py -v
+uv run pytest tests/tutorial/test_llm_integration.py -v
+uv run pytest tests/tutorial/test_hitl.py -v
+```
+
 ## API Notes
 
-**Important**: The examples in this directory use stable, tested API patterns. All 41 examples are fully functional and production-ready. See [docs/examples_api_issues.md](../docs/examples_api_issues.md) for historical notes on API evolution.
+**Important**: The examples in this directory use stable, tested API patterns. All 45 examples are fully functional and production-ready. See [docs/examples_api_issues.md](../docs/examples_api_issues.md) for historical notes on API evolution.
 
 ## Getting Help
 
