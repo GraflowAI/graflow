@@ -88,7 +88,7 @@ def scenario_1_global_context():
 
     # Execute global tasks
     print("\nExecuting global tasks:")
-    global_context.execute("global_task_a")
+    global_context.execute()
 
 
 def scenario_2_isolated_context():
@@ -116,7 +116,7 @@ def scenario_2_isolated_context():
         isolated.show_info()
 
         print("\nExecuting isolated context:")
-        isolated.execute("context_task_a")
+        isolated.execute()
 
 
 def scenario_3_accessing_current_context():
@@ -142,8 +142,11 @@ def scenario_3_accessing_current_context():
 
         _ = task_with_context >> regular_task
 
+        print("Context access workflow:")
+        ctx.show_info()
+
         print("Executing context-aware tasks:")
-        ctx.execute("task_with_context")
+        ctx.execute()
 
 
 def scenario_4_mixed_contexts():
