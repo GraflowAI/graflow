@@ -351,7 +351,7 @@ class TestLevel4PassingParameters:
                 result = base * multiplier + offset
                 return result
 
-            task_inst = calculate(task_id="calc", base=10)
+            _task_inst = calculate(task_id="calc", base=10)
 
             # Specify start node since task instance creates a node
             _, ctx = wf.execute(
@@ -604,7 +604,7 @@ class TestLevel6ChannelsAndContext:
                 return value * multiplier
 
             # Bind value=10, multiplier from channel
-            task_inst = calculate(task_id="calc", value=10)
+            _task_inst = calculate(task_id="calc", value=10)
 
             result = wf.execute(start_node="calc", initial_channel={"value": 100, "multiplier": 5})
 
