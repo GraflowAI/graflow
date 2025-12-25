@@ -38,13 +38,8 @@ class TestDockerTaskHandler:
         context = ExecutionContext.create(graph, start_node="simple_task")
         simple_task.set_execution_context(context)
 
-        import os
-        cwd = os.getcwd()
-        handler = DockerTaskHandler(
-            image="python:3.11-slim",
-            volumes={cwd: {"bind": "/app", "mode": "ro"}},
-            environment={"PYTHONPATH": "/app"}
-        )
+        # Use auto-mount feature - graflow source will be auto-mounted to /graflow_src
+        handler = DockerTaskHandler(image="python:3.11-slim")
         result = handler.execute_task(simple_task, context)
 
         assert context.get_result("simple_task") == "hello from docker"
@@ -62,13 +57,8 @@ class TestDockerTaskHandler:
         context = ExecutionContext.create(graph, start_node="calc_task")
         calc_task.set_execution_context(context)
 
-        import os
-        cwd = os.getcwd()
-        handler = DockerTaskHandler(
-            image="python:3.11-slim",
-            volumes={cwd: {"bind": "/app", "mode": "ro"}},
-            environment={"PYTHONPATH": "/app"}
-        )
+        # Use auto-mount feature - graflow source will be auto-mounted to /graflow_src
+        handler = DockerTaskHandler(image="python:3.11-slim")
         result = handler.execute_task(calc_task, context)
 
         assert context.get_result("calc_task") == 4950
