@@ -42,7 +42,7 @@ class DockerTaskHandler(TaskHandler):
 
     def __init__(
         self,
-        image: str = "python:3.11",
+        image: str = "python:3.11-slim",
         auto_remove: bool = True,
         environment: Optional[dict[str, str]] = None,
         volumes: Optional[dict[str, dict[str, str]]] = None,
