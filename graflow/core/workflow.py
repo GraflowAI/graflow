@@ -207,7 +207,8 @@ def get_current_workflow_context(create_if_not_exist: bool = False) -> Optional[
     """
     ctx = _current_context.get()
     if ctx is None and create_if_not_exist:
-        ctx = WorkflowContext(uuid.uuid4().hex)
+        name = uuid.uuid4().hex
+        ctx = WorkflowContext(name)
         _current_context.set(ctx)
     return ctx
 
