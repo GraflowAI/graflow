@@ -69,8 +69,14 @@ class DockerTaskHandler(TaskHandler):
 
         # Auto-detect and mount graflow source if running from source
         self.volumes = volumes or {}
-        if auto_mount_graflow and "/graflow_src" not in self.volumes.values():
-            self._auto_mount_graflow_source()
+        if auto_mount_graflow:
+            # Check if /graflow_src is already bound in any volume
+            has_graflow_mount = any(
+                vol_config.get("bind") == "/graflow_src"
+                for vol_config in self.volumes.values()
+            )
+            if not has_graflow_mount:
+                self._auto_mount_graflow_source()
 
     def _auto_mount_graflow_source(self) -> None:
         """Auto-detect if graflow is running from source and mount it.
@@ -85,9 +91,27 @@ class DockerTaskHandler(TaskHandler):
         is_source = (graflow_path / ".git").exists() or (graflow_path / "pyproject.toml").exists()
 
         if is_source:
-            logger.info(f"[DockerTaskHandler] Detected source install - mounting {graflow_path}")
-            print(f"📂 [DockerTaskHandler] Mounting graflow source: {graflow_path}", flush=True)
-            self.volumes[str(graflow_path)] = {"bind": "/graflow_src", "mode": "ro"}
+            graflow_path_str = str(graflow_path)
+
+            # Check if user already mounted this source path somewhere
+            existing_mount = self.volumes.get(graflow_path_str)
+            if existing_mount:
+                # User already mounted the graflow source - use their mount
+                # The template will install dependencies when it finds graflow is importable
+                container_path = existing_mount.get("bind", "unknown")
+                logger.info(
+                    f"[DockerTaskHandler] Graflow source already mounted by user to {container_path}, "
+                    "will install dependencies in container"
+                )
+                print(
+                    f"📂 [DockerTaskHandler] Using user-provided graflow mount: {graflow_path} -> {container_path}",
+                    flush=True
+                )
+            else:
+                # Add our own mount to /graflow_src
+                logger.info(f"[DockerTaskHandler] Detected source install - mounting {graflow_path}")
+                print(f"📂 [DockerTaskHandler] Mounting graflow source: {graflow_path}", flush=True)
+                self.volumes[graflow_path_str] = {"bind": "/graflow_src", "mode": "ro"}
         else:
             logger.info(f"[DockerTaskHandler] Detected pip install - will install graflow=={graflow_version} from PyPI")
             print(f"📦 [DockerTaskHandler] Will install graflow=={graflow_version} from PyPI in container", flush=True)
