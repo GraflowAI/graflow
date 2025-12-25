@@ -1,44 +1,140 @@
-"""Docker task runner script.
+"""Docker task runner script - Self-contained execution environment.
 
-This script runs inside a Docker container to execute a task.
-Variables are substituted by Jinja2 template engine.
+This script runs inside a Docker container to execute a serialized task.
+It has NO dependencies on graflow being installed in the container.
+
+Variables are substituted by Jinja2 template engine from the host.
 """
 import base64
-import pickle
 import sys
 
-# Initialize variables to None for exception handling
+
+def ensure_cloudpickle():
+    """Ensure cloudpickle is available (auto-install if missing)."""
+    try:
+        import cloudpickle
+        return cloudpickle
+    except ImportError:
+        # Cloudpickle not installed - install it automatically
+        import subprocess
+
+        print("\n[DockerTaskRunner] Installing cloudpickle...", file=sys.stderr, flush=True)
+        try:
+            subprocess.check_call(
+                [sys.executable, "-m", "pip", "install", "--quiet", "cloudpickle"],
+                stdout=sys.stderr,
+                stderr=sys.stderr
+            )
+            import cloudpickle
+            print("[DockerTaskRunner] ✅ cloudpickle installed successfully\n", file=sys.stderr, flush=True)
+            return cloudpickle
+        except Exception as e:
+            print(f"[DockerTaskRunner] ❌ Failed to install cloudpickle: {e}", file=sys.stderr, flush=True)
+            sys.exit(1)
+
+
+def ensure_graflow():
+    """Ensure graflow is available (required for ExecutionContext deserialization).
+
+    Tries to install from mounted source (/graflow_src) if available,
+    otherwise installs version-pinned package from PyPI.
+    """
+    try:
+        import graflow
+        return graflow
+    except ImportError:
+        # Graflow not installed - try to make it available
+        import os
+
+        if os.path.exists("/graflow_src"):
+            # Install graflow from mounted source with dependencies
+            import subprocess
+
+            print("[DockerTaskRunner] Installing graflow from mounted source...", file=sys.stderr, flush=True)
+            try:
+                # Use regular install (not editable -e) for immediate availability
+                subprocess.check_call(
+                    [sys.executable, "-m", "pip", "install", "--quiet", "/graflow_src"],
+                    stdout=sys.stderr,
+                    stderr=sys.stderr
+                )
+                import graflow
+                print("[DockerTaskRunner] ✅ graflow installed successfully from mounted source\n", file=sys.stderr, flush=True)
+                return graflow
+            except Exception as e:
+                import traceback
+                print(f"[DockerTaskRunner] ❌ Failed to install graflow from /graflow_src: {e}", file=sys.stderr, flush=True)
+                print(f"[DockerTaskRunner] Exception type: {type(e).__name__}", file=sys.stderr, flush=True)
+                traceback.print_exc(file=sys.stderr)
+                sys.exit(1)
+        else:
+            # Try to install from PyPI (if published)
+            import subprocess
+
+            graflow_version = "{{ graflow_version }}"
+            print(f"\n[DockerTaskRunner] Installing graflow=={graflow_version} from PyPI...", file=sys.stderr, flush=True)
+            try:
+                subprocess.check_call(
+                    [sys.executable, "-m", "pip", "install", "--quiet", f"graflow=={graflow_version}"],
+                    stdout=sys.stderr,
+                    stderr=sys.stderr
+                )
+                import graflow
+                print(f"[DockerTaskRunner] ✅ graflow=={graflow_version} installed successfully from PyPI\n", file=sys.stderr, flush=True)
+                return graflow
+            except Exception as e:
+                print(f"[DockerTaskRunner] ❌ Failed to install graflow: {e}", file=sys.stderr, flush=True)
+                print("[DockerTaskRunner] Hint: Mount graflow source to /graflow_src in container", file=sys.stderr, flush=True)
+                sys.exit(1)
+
+
+# Step 1: Ensure dependencies are available
+cloudpickle = ensure_cloudpickle()
+graflow = ensure_graflow()
+
+# Step 2: Define serialization functions (bundled from graflow.core.serialization)
+def dumps(obj):
+    """Serialize object using cloudpickle."""
+    return cloudpickle.dumps(obj)
+
+def loads(data):
+    """Deserialize object using cloudpickle."""
+    return cloudpickle.loads(data)
+
+# Step 3: Execute task in isolated environment
 context = None
 task_id = '{{ task_id }}'
 
 try:
-    # Deserialize task and context
+    # Deserialize task function and execution context
     task_data = base64.b64decode('{{ task_code }}')
-    task_func = pickle.loads(task_data)
+    task_func = loads(task_data)
 
     context_data = base64.b64decode('{{ context_code }}')
-    context = pickle.loads(context_data)
+    context = loads(context_data)
 
-    # Execute task
+    # Execute task function
     result = task_func()
 
     # Store result in context (inside container)
     context.set_result(task_id, result)
 
-    # Serialize updated context for return
-    updated_context = pickle.dumps(context)
+    # Serialize updated context for return to host
+    updated_context = dumps(context)
     encoded_context = base64.b64encode(updated_context).decode('utf-8')
     print(f"CONTEXT:{encoded_context}")
 
 except Exception as e:
-    # Store exception in context if context was successfully deserialized
+    # Handle execution errors
     if context is not None:
+        # Store exception in context if context was successfully deserialized
         context.set_result(task_id, e)
 
         # Serialize updated context with error
-        updated_context = pickle.dumps(context)
+        updated_context = dumps(context)
         encoded_context = base64.b64encode(updated_context).decode('utf-8')
         print(f"CONTEXT:{encoded_context}")
 
+    # Print error for host to parse
     print(f"ERROR:{str(e)}", file=sys.stderr)
     sys.exit(1)
