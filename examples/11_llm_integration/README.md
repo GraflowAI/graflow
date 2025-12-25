@@ -53,12 +53,40 @@ GOOGLE_API_KEY=...
 ```
 
 ### Optional: Tracing Setup
+
+**Option 1: Use Langfuse Cloud**
 ```bash
 # Set Langfuse credentials for tracing
 LANGFUSE_PUBLIC_KEY=pk-lf-...
 LANGFUSE_SECRET_KEY=sk-lf-...
 LANGFUSE_HOST=https://cloud.langfuse.com
 ```
+
+**Option 2: Run Langfuse Locally with Docker**
+
+For local development and testing, you can run your own Langfuse server:
+
+```bash
+# Get a copy of the latest Langfuse repository
+git clone https://github.com/langfuse/langfuse.git
+cd langfuse
+
+# Run the Langfuse docker compose
+docker compose up
+```
+
+Once running, configure your environment to use the local instance:
+```bash
+LANGFUSE_PUBLIC_KEY=<get-from-local-ui>
+LANGFUSE_SECRET_KEY=<get-from-local-ui>
+LANGFUSE_HOST=http://localhost:3000
+```
+
+**Note**: If your application runs inside Docker, use `LANGFUSE_HOST=http://host.docker.internal:3000` to access the Langfuse server running on your host machine.
+
+Visit `http://localhost:3000` to access the Langfuse UI and create your API keys.
+
+For more information about Langfuse, visit the [Langfuse GitHub repository](https://github.com/langfuse/langfuse).
 
 ## Examples
 
