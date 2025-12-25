@@ -174,25 +174,20 @@ class DockerTaskHandler(TaskHandler):
         return result
 
     def _serialize_task(self, task: Executable) -> str:
-        """Serialize task function for Docker execution using cloudpickle.
+        """Serialize entire task object for Docker execution using cloudpickle.
 
         Args:
             task: Task to serialize
 
         Returns:
-            Base64-encoded cloudpickle'd task function
+            Base64-encoded cloudpickle'd task object
 
         Note:
-            Uses cloudpickle for better support of lambdas and closures.
+            Serializes the entire task object (not just the function) to preserve
+            metadata like inject_context, inject_llm_client, etc.
         """
-        # Get the task function
-        if hasattr(task, "func"):
-            task_func = task.func  # type: ignore[attr-defined]
-        else:
-            raise ValueError(f"Task {task.task_id} does not have a callable function")
-
-        # Serialize using cloudpickle and encode
-        pickled = dumps(task_func)
+        # Serialize entire task object to preserve metadata
+        pickled = dumps(task)
         encoded = base64.b64encode(pickled).decode("utf-8")
 
         return encoded

@@ -106,15 +106,21 @@ context = None
 task_id = '{{ task_id }}'
 
 try:
-    # Deserialize task function and execution context
+    # Deserialize task object and execution context
     task_data = base64.b64decode('{{ task_code }}')
-    task_func = loads(task_data)
+    task = loads(task_data)
 
     context_data = base64.b64decode('{{ context_code }}')
     context = loads(context_data)
 
-    # Execute task function
-    result = task_func()
+    # Set execution context on the task
+    # This is needed for context injection and task execution
+    task.set_execution_context(context)
+
+    # Execute task using its run() method
+    # This properly handles inject_context, inject_llm_client, etc.
+    with context.executing_task(task):
+        result = task.run()
 
     # Store result in context (inside container)
     context.set_result(task_id, result)
