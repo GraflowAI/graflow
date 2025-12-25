@@ -18,13 +18,13 @@ From the repository root, install the example dependencies with `uv`:
 ```bash
 uv venv .venv
 source .venv/bin/activate
-uv pip install -r examples/12_llm_integration/requirements.txt
+uv pip install -r examples/11_llm_integration/requirements.txt
 ```
 
 Or run scripts directly with a temporary environment:
 
 ```bash
-uv run --with examples/12_llm_integration/requirements.txt python examples/12_llm_integration/your_script.py
+uv run --with examples/11_llm_integration/requirements.txt python examples/11_llm_integration/your_script.py
 ```
 
 > Replace `your_script.py` with any of the example files in this directory (e.g., `simple_llm_client.py`).
@@ -74,7 +74,7 @@ LANGFUSE_HOST=https://cloud.langfuse.com
 
 **Run**:
 ```bash
-uv run python examples/12_llm_integration/simple_llm_client.py
+uv run python examples/11_llm_integration/simple_llm_client.py
 ```
 
 **Key code**:
@@ -100,7 +100,7 @@ def my_task(llm_client):
 
 **Run**:
 ```bash
-uv run python examples/12_llm_integration/model_override.py
+uv run python examples/11_llm_integration/model_override.py
 ```
 
 **Key code**:
@@ -128,7 +128,7 @@ def complex_task(llm_client):
 
 **Run**:
 ```bash
-uv run python examples/12_llm_integration/llm_agent.py
+uv run python examples/11_llm_integration/llm_agent.py
 ```
 
 **Key code**:
@@ -173,7 +173,7 @@ def my_task(llm_agent):
 
 **Run**:
 ```bash
-uv run python examples/12_llm_integration/multi_agent_workflow.py
+uv run python examples/11_llm_integration/multi_agent_workflow.py
 ```
 
 **Key code**:
