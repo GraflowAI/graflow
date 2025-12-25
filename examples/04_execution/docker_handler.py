@@ -13,6 +13,9 @@ environments.
 - Docker SDK for Python: pip install docker
 - Python image available: python:3.11-slim
 
+Note: cloudpickle is automatically installed in the container at runtime.
+      For production, consider using a custom image with cloudpickle pre-installed.
+
 To check if Docker is available:
     docker --version
     docker ps
@@ -54,7 +57,8 @@ Execution completed after 3 steps
 === Summary ===
 ✅ DirectTaskHandler: Fast, in-process execution
 🐳 DockerTaskHandler: Isolated container execution
-   - Overhead: ~500-2000ms for container startup
+   - First run: ~3-5s overhead (auto-installs cloudpickle)
+   - Subsequent runs: ~500-1000ms overhead (container startup only)
    - Full process isolation
    - Use when isolation is needed
 """
@@ -141,11 +145,17 @@ def main():
             return {"local": local_result, "docker": docker_result}
 
         # Define workflow
-        task_local >> task_docker >> compare_results
+        _ = task_local >> task_docker >> compare_results
 
         # Register Docker handler with the engine
         engine = WorkflowEngine()
-        engine.register_handler("docker", DockerTaskHandler(image="python:3.11-slim"))
+
+        # DockerTaskHandler auto-detects if graflow is running from source
+        # and mounts it automatically. If graflow is pip-installed, it will
+        # install the same version from PyPI in the container.
+        engine.register_handler("docker", DockerTaskHandler(
+            image="python:3.11-slim"
+        ))
 
         # Create execution context
         from graflow.core.context import ExecutionContext
@@ -158,7 +168,8 @@ def main():
     print("=== Summary ===")
     print("✅ DirectTaskHandler: Fast, in-process execution")
     print("🐳 DockerTaskHandler: Isolated container execution")
-    print("   - Overhead: ~500-2000ms for container startup")
+    print("   - First run: ~3-5s overhead (auto-installs cloudpickle)")
+    print("   - Subsequent runs: ~500-1000ms overhead (container startup only)")
     print("   - Full process isolation")
     print("   - Use when isolation is needed")
 
