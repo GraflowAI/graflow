@@ -21,7 +21,7 @@ Demonstrates:
 - Handling approval/rejection
 
 ```bash
-python examples/12_hitl/01_basic_approval.py
+uv run python examples/12_hitl/01_basic_approval.py
 ```
 
 ### 02_timeout_checkpoint.py
@@ -34,7 +34,7 @@ Demonstrates:
 - Memory backend (in-process)
 
 ```bash
-python examples/12_hitl/02_timeout_checkpoint.py
+uv run python examples/12_hitl/02_timeout_checkpoint.py
 ```
 
 ### 03_channel_integration.py
@@ -46,7 +46,7 @@ Demonstrates:
 - Using `write_to_channel` parameter
 
 ```bash
-python examples/12_hitl/03_channel_integration.py
+uv run python examples/12_hitl/03_channel_integration.py
 ```
 
 ### 04_api_feedback.py
@@ -111,13 +111,13 @@ uv sync --all-extras
 **Using CLI (Recommended):**
 ```bash
 # Filesystem backend (local development)
-.venv/bin/python -m graflow.api --backend filesystem
+uv run python -m graflow.api --backend filesystem
 
 # Redis backend (distributed/production)
-.venv/bin/python -m graflow.api --backend redis --redis-host localhost --redis-port 6379
+uv run python -m graflow.api --backend redis --redis-host localhost --redis-port 6379
 
 # With custom configuration
-.venv/bin/python -m graflow.api \
+uv run python -m graflow.api \
   --backend redis \
   --redis-host localhost \
   --redis-port 6379 \

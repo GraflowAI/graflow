@@ -34,7 +34,7 @@ Complete data pipeline with multiple sources, validation, transformation, and ag
 
 **Run**:
 ```bash
-python examples/08_real_world/data_pipeline.py
+uv run python examples/08_real_world/data_pipeline.py
 ```
 
 **Expected Output**:
@@ -95,7 +95,7 @@ End-to-end ML pipeline including data preparation, training, evaluation, and dep
 
 **Run**:
 ```bash
-python examples/08_real_world/ml_training.py
+uv run python examples/08_real_world/ml_training.py
 ```
 
 **Expected Output**:
@@ -153,7 +153,7 @@ Scalable batch processing workflow for handling large datasets by partitioning i
 
 **Run**:
 ```bash
-python examples/08_real_world/batch_processing.py
+uv run python examples/08_real_world/batch_processing.py
 ```
 
 **Expected Output**:
@@ -213,7 +213,7 @@ Complete sales data analysis workflow with anomaly detection, reporting, and app
 
 **Run**:
 ```bash
-python examples/08_real_world/sales_analysis.py
+uv run python examples/08_real_world/sales_analysis.py
 ```
 
 **Expected Output**:

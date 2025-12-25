@@ -25,7 +25,7 @@ This section demonstrates **workflow orchestration** in Graflow - how to compose
 The "Hello World" of Graflow workflows. This is the absolute simplest example showing workflow basics.
 
 ```bash
-python examples/02_workflows/simple_pipeline.py
+uv run python examples/02_workflows/simple_pipeline.py
 ```
 
 **Key Concepts**:
@@ -53,7 +53,7 @@ End!
 Learn how to use the `workflow()` context manager to define and execute coordinated task workflows.
 
 ```bash
-python examples/02_workflows/workflow_decorator.py
+uv run python examples/02_workflows/workflow_decorator.py
 ```
 
 **Key Concepts**:
@@ -71,7 +71,7 @@ python examples/02_workflows/workflow_decorator.py
 Master the `>>` (sequential) and `|` (parallel) operators for building complex workflows.
 
 ```bash
-python examples/02_workflows/operators_demo.py
+uv run python examples/02_workflows/operators_demo.py
 ```
 
 **Key Concepts**:
@@ -89,7 +89,7 @@ python examples/02_workflows/operators_demo.py
 Learn how to access the execution context within tasks for advanced control and state management.
 
 ```bash
-python examples/02_workflows/context_injection.py
+uv run python examples/02_workflows/context_injection.py
 ```
 
 **Key Concepts**:

@@ -29,7 +29,7 @@ This section demonstrates **custom execution handlers** in Graflow - how to cont
 Understand the default DirectTaskHandler and when to use it.
 
 ```bash
-python examples/04_execution/direct_handler.py
+uv run python examples/04_execution/direct_handler.py
 ```
 
 **Key Concepts**:
@@ -47,7 +47,7 @@ python examples/04_execution/direct_handler.py
 Learn how to execute tasks in isolated Docker containers.
 
 ```bash
-python examples/04_execution/docker_handler.py
+uv run python examples/04_execution/docker_handler.py
 ```
 
 **Key Concepts**:
@@ -70,7 +70,7 @@ python examples/04_execution/docker_handler.py
 Build your own custom task handler for specialized execution needs.
 
 ```bash
-python examples/04_execution/custom_handler.py
+uv run python examples/04_execution/custom_handler.py
 ```
 
 **Key Concepts**:

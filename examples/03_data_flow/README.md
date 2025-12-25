@@ -25,7 +25,7 @@ This section demonstrates **data flow and inter-task communication** in Graflow 
 Learn how to use channels for sharing data between tasks without direct parameter passing.
 
 ```bash
-python examples/03_data_flow/channels_basic.py
+uv run python examples/03_data_flow/channels_basic.py
 ```
 
 **Key Concepts**:
@@ -44,7 +44,7 @@ python examples/03_data_flow/channels_basic.py
 Master TypedChannels for type-safe inter-task communication using TypedDict schemas.
 
 ```bash
-python examples/03_data_flow/typed_channels.py
+uv run python examples/03_data_flow/typed_channels.py
 ```
 
 **Key Concepts**:
@@ -63,7 +63,7 @@ python examples/03_data_flow/typed_channels.py
 Learn how to store task results and access them from dependent tasks.
 
 ```bash
-python examples/03_data_flow/results_storage.py
+uv run python examples/03_data_flow/results_storage.py
 ```
 
 **Key Concepts**:

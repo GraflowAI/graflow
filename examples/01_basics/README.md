@@ -18,7 +18,7 @@ The simplest possible Graflow task. Learn how to:
 - Understand the basic task execution model
 
 ```bash
-python examples/01_basics/hello_world.py
+uv run python examples/01_basics/hello_world.py
 ```
 
 ## Important: Start with 02_workflows/

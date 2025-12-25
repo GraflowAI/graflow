@@ -35,7 +35,7 @@ Demonstrates cloudpickle serialization for lambda functions and closures.
 
 **Run**:
 ```bash
-python examples/06_advanced/lambda_tasks.py
+uv run python examples/06_advanced/lambda_tasks.py
 ```
 
 **Expected Output**:
@@ -85,7 +85,7 @@ Explores cloudpickle's serialization capabilities for complex Python objects.
 
 **Run**:
 ```bash
-python examples/06_advanced/custom_serialization.py
+uv run python examples/06_advanced/custom_serialization.py
 ```
 
 **Expected Output**:
@@ -132,7 +132,7 @@ Demonstrates nested workflow contexts for hierarchical organization.
 
 **Run**:
 ```bash
-python examples/06_advanced/nested_workflow.py
+uv run python examples/06_advanced/nested_workflow.py
 ```
 
 **Expected Output**:
@@ -182,7 +182,7 @@ Explores global workflow context behavior and fallback mechanisms.
 
 **Run**:
 ```bash
-python examples/06_advanced/global_context.py
+uv run python examples/06_advanced/global_context.py
 ```
 
 **Expected Output**:

@@ -28,7 +28,7 @@ cd /path/to/graflow
 uv sync --dev
 
 # Run your first example
-python examples/01_basics/hello_world.py
+uv run python examples/01_basics/hello_world.py
 ```
 
 ## Example Categories
@@ -331,7 +331,7 @@ Some examples require additional packages:
 
 **Option 1: Direct execution**
 ```bash
-python examples/01_basics/hello_world.py
+uv run python examples/01_basics/hello_world.py
 ```
 
 **Option 2: Using uv run (with dependencies)**

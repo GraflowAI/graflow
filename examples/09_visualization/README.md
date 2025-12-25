@@ -34,7 +34,7 @@ Demonstrates how to visualize actual Graflow workflows extracted from TaskGraph 
 
 **Run**:
 ```bash
-python examples/09_visualization/workflow_visualization.py
+uv run python examples/09_visualization/workflow_visualization.py
 ```
 
 **Expected Output**:
@@ -91,7 +91,7 @@ Explores low-level graph visualization utilities for working directly with Netwo
 
 **Run**:
 ```bash
-python examples/09_visualization/graph_utilities.py
+uv run python examples/09_visualization/graph_utilities.py
 ```
 
 **Expected Output**:

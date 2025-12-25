@@ -33,7 +33,7 @@ Demonstrates compile-time dynamic task generation using loops and factories.
 
 **Run**:
 ```bash
-python examples/07_dynamic_tasks/dynamic_tasks.py
+uv run python examples/07_dynamic_tasks/dynamic_tasks.py
 ```
 
 **Expected Output**:
@@ -83,7 +83,7 @@ Comprehensive guide to runtime dynamic task generation using `next_task()` and `
 
 **Run**:
 ```bash
-python examples/07_dynamic_tasks/runtime_dynamic_tasks.py
+uv run python examples/07_dynamic_tasks/runtime_dynamic_tasks.py
 ```
 
 **Expected Output**:

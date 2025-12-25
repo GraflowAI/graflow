@@ -29,7 +29,7 @@ This section demonstrates **distributed execution** in Graflow - how to scale wo
 Learn how to create and manage worker processes that execute tasks from Redis queues.
 
 ```bash
-python examples/05_distributed/redis_worker.py
+uv run python examples/05_distributed/redis_worker.py
 ```
 
 **Key Concepts**:
@@ -47,7 +47,7 @@ python examples/05_distributed/redis_worker.py
 Build a complete ETL workflow that executes across multiple workers.
 
 ```bash
-python examples/05_distributed/distributed_workflow.py
+uv run python examples/05_distributed/distributed_workflow.py
 ```
 
 **Key Concepts**:
@@ -173,19 +173,19 @@ sudo service redis-server start
 In separate terminals:
 ```bash
 # Terminal 1
-python -m graflow.worker.main --worker-id worker-1
+uv run python -m graflow.worker.main --worker-id worker-1
 
 # Terminal 2
-python -m graflow.worker.main --worker-id worker-2
+uv run python -m graflow.worker.main --worker-id worker-2
 
 # Terminal 3
-python -m graflow.worker.main --worker-id worker-3
+uv run python -m graflow.worker.main --worker-id worker-3
 ```
 
 ### Step 3: Run Workflow
 
 ```bash
-python examples/05_distributed/distributed_workflow.py
+uv run python examples/05_distributed/distributed_workflow.py
 ```
 
 ## Distributed Patterns
