@@ -13,8 +13,10 @@ environments.
 - Docker SDK for Python: pip install docker
 - Python image available: python:3.11-slim
 
-Note: cloudpickle is automatically installed in the container at runtime.
-      For production, consider using a custom image with cloudpickle pre-installed.
+Note: Both cloudpickle and graflow are automatically installed in the container.
+      - If running from source: graflow source is auto-mounted and installed
+      - If pip-installed: graflow is installed from PyPI (version-matched)
+      For production, consider using a custom image with dependencies pre-installed.
 
 To check if Docker is available:
     docker --version
@@ -24,9 +26,11 @@ Concepts Covered:
 -----------------
 1. Docker handler specification
 2. Container execution and isolation
-3. Result retrieval from containers
-4. Performance overhead comparison
-5. When to use Docker vs Direct handler
+3. ExecutionContext serialization and deserialization
+4. Context injection in Docker tasks (inject_context=True)
+5. Result retrieval from containers
+6. Performance overhead comparison
+7. When to use Docker vs Direct handler
 
 Expected Output:
 ----------------
@@ -35,31 +39,34 @@ Expected Output:
 Checking Docker availability...
 ✅ Docker is available
 
-Starting execution from: task_local
+📂 [DockerTaskHandler] Mounting graflow source: /path/to/graflow
 ✅ Local Task (Direct Handler)
    Executing in main process
    Python version: 3.11.x
    Process ID: 12345
 
+[DockerTaskRunner] Installing cloudpickle...
+[DockerTaskRunner] ✅ cloudpickle installed successfully
+[DockerTaskRunner] Installing graflow from mounted source...
+[DockerTaskRunner] ✅ graflow installed successfully from mounted source
 🐳 Docker Task (Docker Handler)
-   [DockerTaskHandler] Executing task task_docker in Docker container
    Executing in Docker container
    Python version: 3.11.x
    Container process ID: 1
+   Previous task result (via context): local_result
 
 ✅ Compare Task
    Local task result: local_result
    Docker task result: docker_result
    Both handlers successfully executed!
 
-Execution completed after 3 steps
-
 === Summary ===
 ✅ DirectTaskHandler: Fast, in-process execution
 🐳 DockerTaskHandler: Isolated container execution
-   - First run: ~3-5s overhead (auto-installs cloudpickle)
+   - First run: ~3-5s overhead (auto-installs cloudpickle + graflow)
    - Subsequent runs: ~500-1000ms overhead (container startup only)
    - Full process isolation
+   - ExecutionContext works across container boundaries
    - Use when isolation is needed
 """
 
@@ -113,12 +120,14 @@ def main():
             print(f"   Process ID: {os.getpid()}\n")
             return "local_result"
 
-        @task(handler="docker")
-        def task_docker():
+        @task(handler="docker", inject_context=True)
+        def task_docker(context: TaskExecutionContext):
             """
             Execute in Docker container with DockerTaskHandler.
 
             This task runs in complete isolation from the main process.
+            It demonstrates that ExecutionContext is properly serialized,
+            deserialized, and functional inside the container.
             """
             import os
             import sys
@@ -126,7 +135,13 @@ def main():
             print("🐳 Docker Task (Docker Handler)")
             print("   Executing in Docker container")
             print(f"   Python version: {sys.version.split()[0]}")
-            print(f"   Container process ID: {os.getpid()}\n")
+            print(f"   Container process ID: {os.getpid()}")
+
+            # Demonstrate context access works in Docker
+            local_result = context.get_result("task_local")
+            print(f"   Previous task result (via context): {local_result}")
+            print()
+
             return "docker_result"
 
         @task(handler="direct", inject_context=True)
@@ -169,9 +184,10 @@ def main():
     print("=== Summary ===")
     print("✅ DirectTaskHandler: Fast, in-process execution")
     print("🐳 DockerTaskHandler: Isolated container execution")
-    print("   - First run: ~3-5s overhead (auto-installs cloudpickle)")
+    print("   - First run: ~3-5s overhead (auto-installs cloudpickle + graflow)")
     print("   - Subsequent runs: ~500-1000ms overhead (container startup only)")
     print("   - Full process isolation")
+    print("   - ExecutionContext works across container boundaries")
     print("   - Use when isolation is needed")
 
 
