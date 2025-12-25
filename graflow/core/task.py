@@ -208,8 +208,8 @@ class Executable(ABC):
 
     def _add_dependency_edge(self, to_task: Executable) -> None:
         """Add dependency edge from self to to_task in current context."""
-        from .workflow import require_workflow_context
-        current_context = require_workflow_context()
+        from .workflow import current_workflow_context
+        current_context = current_workflow_context()
         self._ensure_registered(current_context)
         to_task._ensure_registered(current_context)
         current_context.add_edge(self.task_id, to_task.task_id)
