@@ -6,6 +6,8 @@ It has NO dependencies on graflow being installed in the container.
 Variables are substituted by Jinja2 template engine from the host.
 """
 import base64
+import os
+import subprocess
 import sys
 
 
@@ -16,8 +18,6 @@ def ensure_cloudpickle():
         return cloudpickle
     except ImportError:
         # Cloudpickle not installed - install it automatically
-        import subprocess
-
         print("\n[DockerTaskRunner] Installing cloudpickle...", file=sys.stderr, flush=True)
         try:
             subprocess.check_call(
@@ -36,56 +36,53 @@ def ensure_cloudpickle():
 def ensure_graflow():
     """Ensure graflow is available (required for ExecutionContext deserialization).
 
-    Tries to install from mounted source (/graflow_src) if available,
-    otherwise installs version-pinned package from PyPI.
+    Strategy:
+    1. If import graflow works → use it directly
+    2. If /graflow_src is mounted → install from there
+    3. Otherwise → install from PyPI
     """
+
+    # Step 1: Try to import graflow
     try:
         import graflow
         return graflow
     except ImportError:
-        # Graflow not installed - try to make it available
-        import os
+        pass
 
-        if os.path.exists("/graflow_src"):
-            # Install graflow from mounted source with dependencies
-            import subprocess
-
-            print("[DockerTaskRunner] Installing graflow from mounted source...", file=sys.stderr, flush=True)
-            try:
-                # Use regular install (not editable -e) for immediate availability
-                subprocess.check_call(
-                    [sys.executable, "-m", "pip", "install", "--quiet", "/graflow_src"],
-                    stdout=sys.stderr,
-                    stderr=sys.stderr
-                )
-                import graflow
-                print("[DockerTaskRunner] ✅ graflow installed successfully from mounted source\n", file=sys.stderr, flush=True)
-                return graflow
-            except Exception as e:
-                import traceback
-                print(f"[DockerTaskRunner] ❌ Failed to install graflow from /graflow_src: {e}", file=sys.stderr, flush=True)
-                print(f"[DockerTaskRunner] Exception type: {type(e).__name__}", file=sys.stderr, flush=True)
-                traceback.print_exc(file=sys.stderr)
-                sys.exit(1)
-        else:
-            # Try to install from PyPI (if published)
-            import subprocess
-
-            graflow_version = "{{ graflow_version }}"
-            print(f"\n[DockerTaskRunner] Installing graflow=={graflow_version} from PyPI...", file=sys.stderr, flush=True)
-            try:
-                subprocess.check_call(
-                    [sys.executable, "-m", "pip", "install", "--quiet", f"graflow=={graflow_version}"],
-                    stdout=sys.stderr,
-                    stderr=sys.stderr
-                )
-                import graflow
-                print(f"[DockerTaskRunner] ✅ graflow=={graflow_version} installed successfully from PyPI\n", file=sys.stderr, flush=True)
-                return graflow
-            except Exception as e:
-                print(f"[DockerTaskRunner] ❌ Failed to install graflow: {e}", file=sys.stderr, flush=True)
-                print("[DockerTaskRunner] Hint: Mount graflow source to /graflow_src in container", file=sys.stderr, flush=True)
-                sys.exit(1)
+    if os.path.exists("/graflow_src"):
+        # Step 2-a: Install from /graflow_src if mounted
+        print("[DockerTaskRunner] Installing graflow from mounted source...", file=sys.stderr, flush=True)
+        try:
+            subprocess.check_call(
+                [sys.executable, "-m", "pip", "install", "--quiet", "/graflow_src"],
+                stdout=sys.stderr,
+                stderr=sys.stderr
+            )
+            import graflow
+            print("[DockerTaskRunner] ✅ graflow installed from mounted source\n", file=sys.stderr, flush=True)
+            return graflow
+        except Exception as e:
+            import traceback
+            print(f"[DockerTaskRunner] ❌ Failed to install from /graflow_src: {e}", file=sys.stderr, flush=True)
+            traceback.print_exc(file=sys.stderr)
+            sys.exit(1)
+    else:
+        # Step 2-b: Install from PyPI
+        graflow_version = "{{ graflow_version }}"
+        print(f"[DockerTaskRunner] Installing graflow=={graflow_version} from PyPI...", file=sys.stderr, flush=True)
+        try:
+            subprocess.check_call(
+                [sys.executable, "-m", "pip", "install", "--quiet", f"graflow=={graflow_version}"],
+                stdout=sys.stderr,
+                stderr=sys.stderr
+            )
+            import graflow
+            print(f"[DockerTaskRunner] ✅ graflow=={graflow_version} installed from PyPI\n", file=sys.stderr, flush=True)
+            return graflow
+        except Exception as e:
+            print(f"[DockerTaskRunner] ❌ Failed to install graflow: {e}", file=sys.stderr, flush=True)
+            print("[DockerTaskRunner] Hint: Mount graflow source to /graflow_src in container", file=sys.stderr, flush=True)
+            sys.exit(1)
 
 
 # Step 1: Ensure dependencies are available
