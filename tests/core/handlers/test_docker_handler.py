@@ -1,6 +1,5 @@
 """Tests for DockerTaskHandler."""
 
-import pytest
 from docker.types import DeviceRequest
 
 from graflow.core.context import ExecutionContext
@@ -27,7 +26,6 @@ DOCKER_AVAILABLE = is_docker_available()
 class TestDockerTaskHandler:
     """Test DockerTaskHandler."""
 
-    @pytest.mark.skip(reason="Docker environment setup issues (graflow module not found)")
     def test_docker_task_handler_simple(self):
         """Test simple task execution in Docker."""
 
@@ -52,7 +50,6 @@ class TestDockerTaskHandler:
         assert context.get_result("simple_task") == "hello from docker"
         assert result == "hello from docker"
 
-    @pytest.mark.skip(reason="Docker environment setup issues (graflow module not found)")
     def test_docker_task_handler_with_computation(self):
         """Test task with computation."""
 
@@ -104,7 +101,20 @@ class TestDockerTaskHandler:
         assert handler.image == "python:3.11"
         assert handler.auto_remove is False
         assert handler.environment == {"KEY": "value"}
-        assert handler.volumes == {
-            "/host/path": {"bind": "/container/path", "mode": "rw"}
-        }
+
+        # Verify user-provided volume is present
+        assert "/host/path" in handler.volumes
+        assert handler.volumes["/host/path"] == {"bind": "/container/path", "mode": "rw"}
+
+        # Verify graflow source is auto-mounted (appended to user volumes)
+        # Should have 2 volumes: user-provided + auto-mounted graflow
+        assert len(handler.volumes) == 2
+
+        # Find the graflow volume (the one that's not /host/path)
+        graflow_volumes = [
+            (path, config) for path, config in handler.volumes.items()
+            if config.get("bind") == "/graflow_src"
+        ]
+        assert len(graflow_volumes) == 1, "Should have exactly one graflow source mount"
+
         assert handler.device_requests == [device_req]
