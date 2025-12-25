@@ -78,8 +78,7 @@ def scenario_1_global_context():
         print("Global task B")
 
     # Build dependencies in global context
-    global_task_a >> global_task_b
-
+    _ = global_task_a >> global_task_b
     print("✅ Global tasks created\n")
 
     # Access the global context
@@ -111,7 +110,7 @@ def scenario_2_isolated_context():
             print("Context task B")
 
         # These dependencies are in the isolated context only
-        context_task_a >> context_task_b
+        _ = context_task_a >> context_task_b
 
         print("Isolated context workflow:")
         isolated.show_info()
@@ -141,7 +140,7 @@ def scenario_3_accessing_current_context():
             ctx = current_workflow_context()
             print(f"Regular task in workflow: {ctx.name}")
 
-        task_with_context >> regular_task
+        _ = task_with_context >> regular_task
 
         print("Executing context-aware tasks:")
         ctx.execute("task_with_context")
