@@ -96,6 +96,7 @@ def main():
     print("✅ Docker is available\n")
 
     # Import after checking Docker is available
+    from graflow.core.context import TaskExecutionContext
     from graflow.core.decorators import task
     from graflow.core.engine import WorkflowEngine
     from graflow.core.handlers.docker import DockerTaskHandler
@@ -129,7 +130,7 @@ def main():
             return "docker_result"
 
         @task(handler="direct", inject_context=True)
-        def compare_results(context):
+        def compare_results(context: TaskExecutionContext):
             """Compare results from both handlers."""
 
             print("✅ Compare Task")
