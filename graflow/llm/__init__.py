@@ -42,7 +42,7 @@ Agent example:
     # Create ADK agent
     adk_agent = LlmAgent(
         name="supervisor",
-        model="gemini-2.0-flash-exp",
+        model="gemini-2.5-flash",
         tools=[search_tool, calculator_tool]
     )
     agent = AdkLLMAgent(adk_agent, app_name=context.trace_id)

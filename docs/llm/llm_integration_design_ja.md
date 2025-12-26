@@ -302,7 +302,7 @@ from google.adk.agents import LlmAgent
 # ADK LlmAgent を作成
 adk_agent = LlmAgent(
     name="supervisor",
-    model="gemini-2.0-flash-exp",
+    model="gemini-2.5-flash",
     tools=[search_tool, calculator_tool],
     sub_agents=[analyst_agent, writer_agent]
 )
@@ -821,7 +821,7 @@ def setup_supervisor(ctx: ExecutionContext, llm: LLMClient) -> str:
     researcher = AdkLLMAgent(
         name="researcher",
         llm_client=llm,
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         description="Research specialist",
         instruction="You research topics thoroughly",
         tools=[web_search, extract_facts]  # 独立した関数
@@ -830,7 +830,7 @@ def setup_supervisor(ctx: ExecutionContext, llm: LLMClient) -> str:
     writer = AdkLLMAgent(
         name="writer",
         llm_client=llm,
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         description="Content writer",
         instruction="You write engaging content"
     )
@@ -839,7 +839,7 @@ def setup_supervisor(ctx: ExecutionContext, llm: LLMClient) -> str:
     supervisor = AdkLLMAgent(
         name="supervisor",
         llm_client=llm,
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         description="Coordinates research and writing",
         instruction="You coordinate between researcher and writer",
         sub_agents=[researcher, writer]  # サブエージェント

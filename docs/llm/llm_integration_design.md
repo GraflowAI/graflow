@@ -303,7 +303,7 @@ from google.adk.agents import LlmAgent
 # Create ADK LlmAgent
 adk_agent = LlmAgent(
     name="supervisor",
-    model="gemini-2.0-flash-exp",
+    model="gemini-2.5-flash",
     tools=[search_tool, calculator_tool],
     sub_agents=[analyst_agent, writer_agent]
 )

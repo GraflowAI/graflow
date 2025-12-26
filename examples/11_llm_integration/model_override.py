@@ -141,12 +141,12 @@ if __name__ == "__main__":
 #    Cheap/Fast:
 #      - gpt-5-mini (OpenAI)
 #      - claude-3-5-haiku (Anthropic)
-#      - gemini-2.0-flash-exp (Google)
+#      - gemini-2.5-flash (Google)
 #
 #    Powerful/Accurate:
 #      - gpt-4o (OpenAI)
 #      - claude-3-5-sonnet-20241022 (Anthropic)
-#      - gemini-2.0-flash-thinking-exp (Google)
+#      - gemini-2.5-flash (Google)
 #
 # 4. **Shared LLMClient Benefits**
 #    - Single client instance across workflow
@@ -185,7 +185,7 @@ if __name__ == "__main__":
 #    response = llm.completion(model="claude-3-5-sonnet-20241022", messages=[...])
 #
 #    # Task 3: Google for speed
-#    response = llm.completion(model="gemini-2.0-flash-exp", messages=[...])
+#    response = llm.completion(model="gemini-2.5-flash", messages=[...])
 #
 # 3. Implement cost tracking:
 #    @task(inject_llm_client=True)

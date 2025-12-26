@@ -50,7 +50,7 @@ def agent_to_yaml(agent: LlmAgent) -> str:  # type: ignore[valid-type]
 
         agent = LlmAgent(
             name="supervisor",
-            model="gemini-2.0-flash-exp",
+            model="gemini-2.5-flash",
             tools=[search_tool]
         )
 

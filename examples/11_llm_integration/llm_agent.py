@@ -88,7 +88,7 @@ def main():
             try:
                 adk_agent = LlmAgent(
                     name="research_agent",
-                    model="gemini-2.0-flash-exp",
+                    model="gemini-2.5-flash",
                     tools=[get_current_time, calculate]
                 )
 
@@ -171,7 +171,7 @@ if __name__ == "__main__":
 #    from graflow.llm.agents.adk_agent import AdkLLMAgent
 #
 #    # Create ADK agent with tools
-#    adk_agent = LlmAgent(name="my_agent", model="gemini-2.0-flash-exp", tools=[...])
+#    adk_agent = LlmAgent(name="my_agent", model="gemini-2.5-flash", tools=[...])
 #
 #    # Pattern 1: Pass LlmAgent with app_name (simpler)
 #    agent = AdkLLMAgent(adk_agent, app_name=exec_context.session_id)
@@ -220,16 +220,16 @@ if __name__ == "__main__":
 #
 #    adk_agent = LlmAgent(
 #        name="assistant",
-#        model="gemini-2.0-flash-exp",
+#        model="gemini-2.5-flash",
 #        tools=[search_database, send_email, ...]
 #    )
 #
 # 2. Use different models:
-#    # Fast model for simple tasks
-#    fast_agent = LlmAgent(name="fast", model="gemini-2.0-flash-exp", tools=[...])
+#    # Light model for simple tasks
+#    fast_agent = LlmAgent(name="fast", model="gemini-2.5-flash-lite", tools=[...])
 #
-#    # Thinking model for complex tasks
-#    thinking_agent = LlmAgent(name="thinker", model="gemini-2.0-flash-thinking-exp", tools=[...])
+#    # Balanced model for complex tasks
+#    thinking_agent = LlmAgent(name="thinker", model="gemini-2.5-flash", tools=[...])
 #
 # 3. Multi-turn conversations:
 #    @task(inject_llm_agent="assistant")

@@ -162,7 +162,7 @@ if __name__ == "__main__":
 #    # Then use the model:
 #    GRAFLOW_LLM_MODEL=claude-3-5-sonnet-20241022
 #    # or
-#    GRAFLOW_LLM_MODEL=gemini-2.0-flash-exp
+#    GRAFLOW_LLM_MODEL=gemini-2.5-flash
 #
 # 4. Chain LLM calls:
 #    @task(inject_llm_client=True)

@@ -509,7 +509,7 @@ tools=[
 # Meta-agent that coordinates researcher and editor
 coordinator_agent = LlmAgent(
     name="coordinator",
-    model="gemini-2.0-flash-exp",
+    model="gemini-2.5-flash",
     tools=[
         assign_research_task,
         review_article_status,
@@ -917,7 +917,7 @@ The agent workflow uses **two separate models**:
 
 **Requirements:**
 - Must be any LiteLLM-compatible chat model
-- Examples: `"gpt-4o-mini"`, `"gpt-4o"`, `"claude-3-5-sonnet-20241022"`, `"gemini-2.0-flash-exp"`
+- Examples: `"gpt-4o-mini"`, `"gpt-4o"`, `"claude-3-5-sonnet-20241022"`, `"gemini-2.5-flash"`
 
 **Configuration:**
 ```bash
@@ -969,7 +969,7 @@ export GRAFLOW_LLM_MODEL="claude-3-5-sonnet-20241022"
 - gpt-4o-mini: ~$0.01 per article
 - gpt-4o: ~$0.05 per article
 - claude-3-5-sonnet: ~$0.03 per article
-- gemini-2.0-flash-exp: ~$0.01 per article
+- gemini-2.5-flash: ~$0.01 per article
 
 **LLM Models (writing):**
 - gpt-4o-mini: ~$0.01 per article

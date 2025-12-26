@@ -172,7 +172,7 @@ from google.adk.apps import App
 from graflow.llm.agents.adk_agent import AdkLLMAgent
 
 # Pattern 1: Pass LlmAgent with app_name (simpler)
-adk_agent = LlmAgent(name="assistant", model="gemini-2.0-flash-exp", tools=[my_tool])
+adk_agent = LlmAgent(name="assistant", model="gemini-2.5-flash", tools=[my_tool])
 agent = AdkLLMAgent(adk_agent, app_name=exec_context.session_id)
 
 # Pattern 2: Create and pass App (recommended, more control)
@@ -275,7 +275,7 @@ def my_tool(input: str) -> str:
 
 with workflow("agent_workflow") as ctx:
     def create_agent(exec_context):
-        adk_agent = LlmAgent(name="assistant", model="gemini-2.0-flash-exp", tools=[my_tool])
+        adk_agent = LlmAgent(name="assistant", model="gemini-2.5-flash", tools=[my_tool])
 
         # Pattern 1: Pass LlmAgent with app_name
         return AdkLLMAgent(adk_agent, app_name=exec_context.session_id)
@@ -323,7 +323,7 @@ def reason(llm_client):
 # Google for speed
 @task(inject_llm_client=True)
 def quick_task(llm_client):
-    return llm_client.completion(model="gemini-2.0-flash-exp", messages=[...])
+    return llm_client.completion(model="gemini-2.5-flash", messages=[...])
 ```
 
 ### Pattern 3: Agent Specialization
@@ -347,15 +347,15 @@ research_task >> analysis_task >> writing_task
 ### For Cost-Conscious Workflows
 - **gpt-5-mini** (OpenAI): Fast, cheap, good for simple tasks
 - **claude-3-5-haiku** (Anthropic): Fast, affordable
-- **gemini-2.0-flash-exp** (Google): Very fast, free tier available
+- **gemini-2.5-flash** (Google): Very fast, free tier available
 
 ### For Quality-Critical Workflows
 - **gpt-4o** (OpenAI): Strong reasoning, code generation
 - **claude-3-5-sonnet-20241022** (Anthropic): Best reasoning, long context
-- **gemini-2.0-flash-thinking-exp** (Google): Extended thinking, complex reasoning
+- **gemini-2.5-flash** (Google): Extended thinking, complex reasoning
 
 ### For Agent-Based Workflows
-- **gemini-2.0-flash-exp** (Google): Best tool use, fast
+- **gemini-2.5-flash** (Google): Best tool use, fast
 - **gpt-4o** (OpenAI): Good function calling
 - **claude-3-5-sonnet-20241022** (Anthropic): Strong reasoning with tools
 

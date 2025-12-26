@@ -830,7 +830,7 @@ class ExecutionContext:
             # Create ADK agent
             adk_agent = BaseAgent(
                 name="supervisor",
-                model="gemini-2.0-flash-exp",
+                model="gemini-2.5-flash",
                 tools=[search_tool]
             )
             agent = AdkLLMAgent(adk_agent)

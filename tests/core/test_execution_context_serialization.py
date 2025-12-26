@@ -600,7 +600,7 @@ class TestExecutionContextLLMSerialization:
         # Create and register ADK agent
         adk_agent = LlmAgent(
             name="test_supervisor",
-            model="gemini-2.0-flash-exp"
+            model="gemini-2.5-flash"
         )
         agent = AdkLLMAgent(adk_agent, app_name=context.session_id)
 
@@ -630,7 +630,7 @@ class TestExecutionContextLLMSerialization:
             assert restored_agent is not None
             assert isinstance(restored_agent, AdkLLMAgent)
             assert restored_agent._adk_agent.name == "test_supervisor"
-            assert restored_agent._adk_agent.model == "gemini-2.0-flash-exp"
+            assert restored_agent._adk_agent.model == "gemini-2.5-flash"
 
             # Verify restored agent is cached
             assert "supervisor" in loaded_context._llm_agents
@@ -687,15 +687,15 @@ class TestExecutionContextLLMSerialization:
 
         # Register multiple agents
         agent1 = AdkLLMAgent(
-            LlmAgent(name="agent1", model="gemini-2.0-flash-exp"),
+            LlmAgent(name="agent1", model="gemini-2.5-flash"),
             app_name=context.session_id
         )
         agent2 = AdkLLMAgent(
-            LlmAgent(name="agent2", model="gemini-2.0-flash-exp"),
+            LlmAgent(name="agent2", model="gemini-2.5-flash"),
             app_name=context.session_id
         )
         agent3 = AdkLLMAgent(
-            LlmAgent(name="agent3", model="gemini-2.0-flash-exp"),
+            LlmAgent(name="agent3", model="gemini-2.5-flash"),
             app_name=context.session_id
         )
 
@@ -753,7 +753,7 @@ class TestExecutionContextLLMSerialization:
         )
 
         # Register agent
-        adk_agent = LlmAgent(name="supervisor", model="gemini-2.0-flash-exp")
+        adk_agent = LlmAgent(name="supervisor", model="gemini-2.5-flash")
         agent = AdkLLMAgent(adk_agent, app_name=context.session_id)
         context.register_llm_agent("supervisor", agent)
 
@@ -878,7 +878,7 @@ class TestExecutionContextLLMSerialization:
         # Create original ADK agent
         original_agent = LlmAgent(
             name="yaml_test_agent",
-            model="gemini-2.0-flash-exp"
+            model="gemini-2.5-flash"
         )
 
         # Serialize to YAML
@@ -886,7 +886,7 @@ class TestExecutionContextLLMSerialization:
         assert yaml_str is not None
         assert isinstance(yaml_str, str)
         assert "yaml_test_agent" in yaml_str
-        assert "gemini-2.0-flash-exp" in yaml_str
+        assert "gemini-2.5-flash" in yaml_str
 
         # Deserialize from YAML (roundtrip)
         restored_agent = yaml_to_agent(yaml_str)
@@ -895,7 +895,7 @@ class TestExecutionContextLLMSerialization:
         assert restored_agent is not None
         assert isinstance(restored_agent, LlmAgent)
         assert restored_agent.name == "yaml_test_agent"
-        assert restored_agent.model == "gemini-2.0-flash-exp"
+        assert restored_agent.model == "gemini-2.5-flash"
 
         # Verify it's a new instance (not the same object)
         assert restored_agent is not original_agent
@@ -904,4 +904,4 @@ class TestExecutionContextLLMSerialization:
         yaml_str2 = agent_to_yaml(restored_agent)
         restored_agent2 = yaml_to_agent(yaml_str2)
         assert restored_agent2.name == "yaml_test_agent"
-        assert restored_agent2.model == "gemini-2.0-flash-exp"
+        assert restored_agent2.model == "gemini-2.5-flash"

@@ -34,7 +34,7 @@ The workflow uses TWO separate model configurations:
 1. **Agent Model** (GPT_NEWSPAPER_MODEL):
    - Used by: Research Agent, Editorial Agent (via Google ADK + LiteLLM bridge)
    - Supports: Any LiteLLM-compatible chat model (OpenAI, Anthropic, Gemini via litellm, etc.)
-   - Examples: "gpt-4o-mini", "gpt-4o", "claude-3-5-sonnet-20241022", "gemini-2.0-flash-exp"
+   - Examples: "gpt-4o-mini", "gpt-4o", "claude-3-5-sonnet-20241022", "gemini-2.5-flash"
    - Default: "gpt-4o-mini"
 
 2. **LLM Model** (GRAFLOW_LLM_MODEL):

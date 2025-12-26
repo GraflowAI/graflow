@@ -96,13 +96,13 @@ LLMAgent (ABC)
                         │ LLM calls via Pydantic AI models
                         ▼
 ┌────────────────────────────────────────────────────────────────┐
-│ Pydantic AI Model Layer                                       │
+│ Pydantic AI Model Layer                                        │
 │                                                                │
-│  Model providers (via pydantic_ai.models)                     │
-│    ├─ OpenAI (openai:gpt-4o, openai:gpt-4o-mini)             │
-│    ├─ Anthropic (anthropic:claude-3-5-sonnet-20241022)       │
-│    ├─ Google (gemini-1.5-pro, gemini-2.0-flash-exp)          │
-│    └─ Others (Groq, Mistral, Bedrock, etc.)                  │
+│  Model providers (via pydantic_ai.models)                      │
+│    ├─ OpenAI (openai:gpt-4o, openai:gpt-4o-mini)               │
+│    ├─ Anthropic (anthropic:claude-3-5-sonnet-20241022)         │
+│    ├─ Google (gemini-3-pro-preview, gemini-2.5-flash)          │
+│    └─ Others (Groq, Mistral, Bedrock, etc.)                    │
 └────────────────────────────────────────────────────────────────┘
                         │
                         │ OpenTelemetry context propagation
@@ -1228,7 +1228,7 @@ def test_agent_in_workflow(openai_api_key):
 @pytest.mark.parametrize("model", [
     "openai:gpt-4o-mini",
     "anthropic:claude-3-5-sonnet-20241022",
-    "gemini-1.5-flash",
+    "gemini-2.5-flash",
 ])
 def test_multi_provider_support(model, api_keys):
     agent = Agent(model=model)
@@ -1318,7 +1318,7 @@ LANGFUSE_HOST=https://cloud.langfuse.com  # or https://us.cloud.langfuse.com
 ```python
 Agent('openai:gpt-4o')           # OpenAI
 Agent('anthropic:claude-3-5-sonnet-20241022')  # Anthropic
-Agent('gemini-1.5-pro')          # Google
+Agent('gemini-2.5-flash')          # Google
 ```
 
 **LiteLLM Syntax** (with `create_pydantic_ai_agent()` helper):
@@ -1326,7 +1326,7 @@ Agent('gemini-1.5-pro')          # Google
 # Helper uses LiteLLM backend with '/' separator
 create_pydantic_ai_agent('openai/gpt-4o')
 create_pydantic_ai_agent('anthropic/claude-3-5-sonnet-20241022')
-create_pydantic_ai_agent('gemini-1.5-pro')
+create_pydantic_ai_agent('gemini-2.5-flash')
 ```
 
 **Key Differences**:

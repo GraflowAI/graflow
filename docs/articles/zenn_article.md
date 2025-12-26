@@ -91,7 +91,7 @@ SuperAgentの実装にGoogle ADKを利用する際の利用イメージは以下
 from google.adk.agents import LlmAgent
 adk_agent = LlmAgent(
     name="supervisor",
-    model="gemini-2.0-flash-exp",
+    model="gemini-2.5-flash",
     tools=[search_tool, calculator_tool],
     sub_agents=[analyst_agent, writer_agent]
 )
