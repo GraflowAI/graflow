@@ -18,7 +18,9 @@ from graflow.llm.agents.types import AgentResult, AgentStep
 
 if TYPE_CHECKING:
     from google.adk.agents import LlmAgent
+    from google.adk.agents.context_cache_config import ContextCacheConfig
     from google.adk.apps import App
+    from google.adk.apps.app import EventsCompactionConfig
     from google.adk.runners import Runner as AdkRunner
     from google.adk.sessions import InMemorySessionService
     from google.genai import types as genai_types
@@ -27,7 +29,9 @@ logger = logging.getLogger(__name__)
 
 try:
     from google.adk.agents import LlmAgent
+    from google.adk.agents.context_cache_config import ContextCacheConfig
     from google.adk.apps import App
+    from google.adk.apps.app import EventsCompactionConfig
     from google.adk.runners import Runner as AdkRunner
     from google.adk.sessions import InMemorySessionService
     from google.genai import types as genai_types
@@ -316,7 +320,7 @@ def setup_adk_tracing() -> None:
 
         # Then use ADK agents in workflow
         from google.adk.agents import LlmAgent
-        adk_agent = LlmAgent(name="assistant", model="gemini-2.0-flash-exp")
+        adk_agent = LlmAgent(name="assistant", model="gemini-2.5-flash")
         agent = AdkLLMAgent(adk_agent, app_name=context.session_id)
         ```
 
@@ -427,7 +431,7 @@ class AdkLLMAgent(LLMAgent):
         # Create ADK agent with tools
         adk_agent = LlmAgent(
             name="supervisor",
-            model="gemini-2.0-flash-exp",
+            model="gemini-2.5-flash",
             tools=[search_tool, calculator_tool],
             sub_agents=[analyst_agent, writer_agent]
         )
@@ -493,7 +497,7 @@ class AdkLLMAgent(LLMAgent):
             from google.adk.agents import LlmAgent
 
             context = ExecutionContext.create(...)
-            adk_agent = LlmAgent(name="supervisor", model="gemini-2.0-flash-exp")
+            adk_agent = LlmAgent(name="supervisor", model="gemini-2.5-flash")
             agent = AdkLLMAgent(adk_agent, app_name=context.session_id)
             context.register_llm_agent("supervisor", agent)
             ```
@@ -508,7 +512,7 @@ class AdkLLMAgent(LLMAgent):
             from google.adk.apps import App
 
             context = ExecutionContext.create(...)
-            adk_agent = LlmAgent(name="supervisor", model="gemini-2.0-flash-exp")
+            adk_agent = LlmAgent(name="supervisor", model="gemini-2.5-flash")
             app = App(name=context.session_id, root_agent=adk_agent)
             agent = AdkLLMAgent(app, user_id="custom-user")
             context.register_llm_agent("supervisor", agent)
@@ -543,7 +547,16 @@ class AdkLLMAgent(LLMAgent):
             # Create App instance internally
             self._app = App(  # type: ignore
                 name=self._app_name,
-                root_agent=adk_agent_or_app
+                root_agent=adk_agent_or_app,
+                events_compaction_config=EventsCompactionConfig(
+                    compaction_interval=3,  # Trigger compaction every 3 new invocations.
+                    overlap_size=1          # Include last invocation from the previous window.
+                ),
+                context_cache_config=ContextCacheConfig(
+                    min_tokens=2048,    # Minimum tokens to trigger caching
+                    ttl_seconds=600,    # Store for up to 10 minutes
+                    cache_intervals=5,  # Refresh after 5 uses
+                ),
             )
         else:
             raise TypeError(
