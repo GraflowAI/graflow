@@ -103,12 +103,13 @@ def main():
         workflow_data = {}
 
         try:
-            from google.adk.types import LlmAgent  # type: ignore
+            from google.adk.agents import LlmAgent
 
             from graflow.llm.agents.adk_agent import AdkLLMAgent
-        except ImportError:
+        except ImportError as e:
             print("❌ Google ADK not installed. Install with: uv add google-adk")
             print("Skipping multi-agent demo...")
+            print(f"ImportError: {e}")
             return
 
         print("Registering specialized agents...")
@@ -117,7 +118,7 @@ def main():
             def factory(exec_context):
                 agent = LlmAgent(
                     name=agent_name,
-                    model="gemini-2.0-flash-exp",
+                    model="gemini-2.5-flash-lite",
                     tools=tools,
                 )
                 wrapped = AdkLLMAgent(agent, app_name=exec_context.session_id)
@@ -184,12 +185,12 @@ def main():
             return output
 
         @task(inject_llm_client=True)
-        def review_phase(llm: LLMClient):
+        def review_phase(llm_client: LLMClient):
             """Use LLMClient for final review (no tools needed)."""
             print("Task 4: Review phase (llm client)")
 
             report = workflow_data.get("report", "")
-            rating = llm.completion_text(
+            rating = llm_client.completion_text(
                 model="gpt-5-mini",  # Use cheap model for simple review
                 messages=[
                     {"role": "user", "content": f"Review this report and rate it (1-10): {report[:300]}..."}
