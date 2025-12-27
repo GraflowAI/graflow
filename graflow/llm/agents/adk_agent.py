@@ -468,6 +468,7 @@ class AdkLLMAgent(LLMAgent):
         app_name: Optional[str] = None,
         session_service: Optional[InMemorySessionService] = None,
         enable_tracing: bool = True,
+        enable_caching: bool = False,
         user_id: str = "graflow-user",
     ):
         """Initialize AdkLLMAgent.
@@ -483,6 +484,7 @@ class AdkLLMAgent(LLMAgent):
             session_service: Session service (defaults to InMemorySessionService)
             enable_tracing: If True, automatically setup ADK tracing (default: True).
                           Set to False if you want to manually control instrumentation.
+            enable_caching: If True, enables context caching in ADK App (default: False).
             user_id: Default user ID for ADK agent execution (defaults to "graflow-user")
 
         Raises:
@@ -545,6 +547,11 @@ class AdkLLMAgent(LLMAgent):
             self._adk_agent = adk_agent_or_app
             self._app_name = _sanitize_adk_app_name(app_name)
             # Create App instance internally
+            context_cache_config = ContextCacheConfig(
+                min_tokens=2048,    # Minimum tokens to trigger caching
+                ttl_seconds=600,    # Store for up to 10 minutes
+                cache_intervals=5,  # Refresh after 5 uses
+            ) if enable_caching else None
             self._app = App(  # type: ignore
                 name=self._app_name,
                 root_agent=adk_agent_or_app,
@@ -552,11 +559,7 @@ class AdkLLMAgent(LLMAgent):
                     compaction_interval=3,  # Trigger compaction every 3 new invocations.
                     overlap_size=1          # Include last invocation from the previous window.
                 ),
-                context_cache_config=ContextCacheConfig(
-                    min_tokens=2048,    # Minimum tokens to trigger caching
-                    ttl_seconds=600,    # Store for up to 10 minutes
-                    cache_intervals=5,  # Refresh after 5 uses
-                ),
+                context_cache_config=context_cache_config
             )
         else:
             raise TypeError(
