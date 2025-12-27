@@ -175,7 +175,7 @@ async def get_feedback(
 
 @router.post(
     "/{feedback_id}/respond",
-    response_model=MessageResponse,
+    response_model=FeedbackResponseDetails,
     summary="Provide feedback response",
     description="""
 Provide a response to a pending feedback request.
@@ -188,6 +188,8 @@ After providing feedback:
 2. The request status is updated to 'completed'
 3. A notification is published (for Redis backend)
 4. If channel integration is enabled, the response is written to the workflow channel
+
+Returns the complete feedback response with all details for confirmation.
     """,
     responses={
         200: {
@@ -195,8 +197,16 @@ After providing feedback:
             "content": {
                 "application/json": {
                     "example": {
-                        "message": "Feedback provided successfully",
-                        "feedback_id": "deploy_task_abc12345"
+                        "feedback_id": "deploy_task_abc12345",
+                        "response_type": "approval",
+                        "approved": True,
+                        "reason": "Approved via API",
+                        "text": None,
+                        "selected": None,
+                        "selected_multiple": None,
+                        "custom_data": None,
+                        "responded_at": "2025-12-27T10:30:00.123456",
+                        "responded_by": "user@example.com"
                     }
                 }
             }
@@ -223,7 +233,7 @@ async def respond_to_feedback(
     request: Request,
     feedback_id: str,
     body: FeedbackResponseRequest
-) -> MessageResponse:
+) -> FeedbackResponseDetails:
     """Provide feedback response.
 
     Args:
@@ -232,7 +242,7 @@ async def respond_to_feedback(
         body: Response data (approved, text, selected, etc.)
 
     Returns:
-        MessageResponse with success message
+        FeedbackResponseDetails with complete response information
 
     Raises:
         HTTPException: 404 if request not found, 400 if failed to provide feedback
@@ -268,10 +278,8 @@ async def respond_to_feedback(
             detail="Failed to provide feedback"
         )
 
-    return MessageResponse(
-        message="Feedback provided successfully",
-        feedback_id=feedback_id
-    )
+    # Return the complete response details for confirmation
+    return FeedbackResponseDetails(**response.to_dict())
 
 
 @router.delete(
