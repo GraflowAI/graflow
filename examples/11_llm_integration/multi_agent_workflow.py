@@ -104,6 +104,7 @@ def main():
 
         try:
             from google.adk.agents import LlmAgent
+            from google.genai import types as genai_types
 
             from graflow.llm.agents.adk_agent import AdkLLMAgent
         except ImportError as e:
@@ -120,6 +121,12 @@ def main():
                     name=agent_name,
                     model="gemini-2.5-flash-lite",
                     tools=tools,
+                    generate_content_config=genai_types.GenerateContentConfig(
+                        http_options=genai_types.HttpOptions(
+                            retry_options=genai_types.HttpRetryOptions(attempts=3, initial_delay=1.0, max_delay=60.0, exp_base=2.0, jitter=0.2),
+                        ),
+                    ),
+
                 )
                 wrapped = AdkLLMAgent(agent, app_name=exec_context.session_id)
                 print(f"✅ {agent_name.capitalize()} agent registered")
