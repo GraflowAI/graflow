@@ -172,8 +172,8 @@ def setup_langfuse_for_litellm() -> None:
     - LANGFUSE_SECRET_KEY: Langfuse secret API key
     - LANGFUSE_HOST: Langfuse host URL (optional, defaults to cloud.langfuse.com)
 
-    Raises:
-        ValueError: If Langfuse credentials are not found
+    Note:
+        If credentials are not found, logs a warning and returns without enabling tracing.
 
     Example:
         ```python
@@ -211,10 +211,12 @@ def setup_langfuse_for_litellm() -> None:
     secret_key = os.getenv("LANGFUSE_SECRET_KEY")
 
     if not public_key or not secret_key:
-        raise ValueError(
+        logger.warning(
             "Langfuse credentials not found. "
-            "Set LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY environment variables."
+            "Set LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY environment variables to enable tracing. "
+            "Skipping Langfuse integration."
         )
+        return
 
     # Enable Langfuse callback in LiteLLM
     # LiteLLM will automatically detect OpenTelemetry context set by LangFuseTracer
@@ -321,7 +323,6 @@ class LLMClient:
 
         Raises:
             RuntimeError: If litellm is not installed
-            ValueError: If enable_tracing=True but Langfuse credentials are not found
 
         Example:
             ```python
