@@ -219,8 +219,13 @@ class TestFeedbackAPI:
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["message"] == "Feedback provided successfully"
+        # API now returns complete feedback response details
         assert data["feedback_id"] == "test_task_abc123"
+        assert data["response_type"] == "approval"
+        assert data["approved"] is True
+        assert data["reason"] == "Approved by manager"
+        assert data["responded_by"] == "alice@example.com"
+        assert "responded_at" in data
 
         # Verify response was stored
         stored_response = feedback_manager.get_response("test_task_abc123")
@@ -251,6 +256,13 @@ class TestFeedbackAPI:
             }
         )
         assert response.status_code == 200
+        data = response.json()
+        # API now returns complete feedback response details
+        assert data["feedback_id"] == "test_task_def456"
+        assert data["response_type"] == "text"
+        assert data["text"] == "Please fix the typos in section 3"
+        assert data["responded_by"] == "bob@example.com"
+        assert "responded_at" in data
 
         # Verify response was stored
         stored_response = feedback_manager.get_response("test_task_def456")
@@ -281,6 +293,13 @@ class TestFeedbackAPI:
             }
         )
         assert response.status_code == 200
+        data = response.json()
+        # API now returns complete feedback response details
+        assert data["feedback_id"] == "test_task_ghi789"
+        assert data["response_type"] == "selection"
+        assert data["selected"] == "option_b"
+        assert data["responded_by"] == "charlie@example.com"
+        assert "responded_at" in data
 
         # Verify response was stored
         stored_response = feedback_manager.get_response("test_task_ghi789")
