@@ -69,7 +69,7 @@ uv sync --all-extras
    docker run -p 16379:6379 redis:7.2
    ```
 
-2. Start API server (Terminal 1):
+2. Start API server (Terminal 1) on port 8080:
    ```bash
    uv run python -m graflow.api --port 8080 --backend redis --redis-host localhost --redis-port 16379
    ```
@@ -89,20 +89,20 @@ uv sync --all-extras
 4. Provide feedback via API (Terminal 3):
    ```bash
    # List pending requests
-   curl http://localhost:8000/api/feedback
+   curl http://localhost:8080/api/feedback
 
    # Get request details
-   curl http://localhost:8000/api/feedback/{feedback_id}
+   curl http://localhost:8080/api/feedback/{feedback_id}
 
    # Provide approval
-   curl -X POST http://localhost:8000/api/feedback/{feedback_id}/respond \
+   curl -X POST http://localhost:8080/api/feedback/{feedback_id}/respond \
      -H "Content-Type: application/json" \
      -d '{"approved": true, "reason": "Approved via API"}'
    ```
 
 **API Documentation:**
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+- Swagger UI: http://localhost:8080/docs
+- ReDoc: http://localhost:8080/redoc
 
 ## API Usage
 
@@ -230,6 +230,7 @@ GET /api/feedback/{feedback_id}
 POST /api/feedback/{feedback_id}/respond
 Content-Type: application/json
 
+# Request body:
 {
   "approved": true,          # For approval type
   "reason": "Looks good",    # Optional reason
@@ -237,6 +238,20 @@ Content-Type: application/json
   "selected": "option_b",    # For selection type
   "selected_multiple": [...], # For multi_selection type
   "custom_data": {...},      # For custom type
+  "responded_by": "user@example.com"
+}
+
+# Response (200 OK):
+{
+  "feedback_id": "deploy_task_abc12345",
+  "response_type": "approval",
+  "approved": true,
+  "reason": "Looks good",
+  "text": null,
+  "selected": null,
+  "selected_multiple": null,
+  "custom_data": null,
+  "responded_at": "2025-12-27T10:30:00.123456",
   "responded_by": "user@example.com"
 }
 ```
