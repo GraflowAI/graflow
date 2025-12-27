@@ -112,6 +112,13 @@ async def submit_feedback(
 ):
     """Process submitted feedback form.
 
+    This is the web UI endpoint for form submissions. It differs from the REST API:
+    - Accepts form data (not JSON)
+    - Returns redirect to success page (not JSON response)
+    - Success page displays the complete feedback response
+
+    For REST API feedback submission, use POST /api/feedback/{feedback_id}/respond
+
     Args:
         request: FastAPI request object
         feedback_id: Feedback request ID
