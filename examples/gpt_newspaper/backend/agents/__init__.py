@@ -9,11 +9,11 @@ from .search import SearchAgent
 from .writer import WriterAgent
 
 __all__ = [
-    "SearchAgent",
-    "CuratorAgent",
-    "WriterAgent",
     "CritiqueAgent",
+    "CuratorAgent",
     "DesignerAgent",
     "EditorAgent",
     "PublisherAgent",
+    "SearchAgent",
+    "WriterAgent",
 ]
