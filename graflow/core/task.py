@@ -703,7 +703,7 @@ class TaskWrapper(Executable):
     def __init__(
         self,
         task_id: str,
-        func,
+        func: Callable,
         inject_context: bool = False,
         inject_llm_client: bool = False,
         inject_llm_agent: Optional[str] = None,
