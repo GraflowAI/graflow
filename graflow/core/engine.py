@@ -147,7 +147,7 @@ class WorkflowEngine:
             })
 
             # Update request in backend
-            feedback_manager.update_request(feedback_request)
+            feedback_manager.store_request(feedback_request)
 
             logger.info(
                 "Updated feedback request with checkpoint info",

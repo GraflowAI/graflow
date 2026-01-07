@@ -342,7 +342,7 @@ async def cancel_feedback(
 
     # Update status to cancelled
     feedback_request.status = "cancelled"
-    feedback_manager.update_request(feedback_request)
+    feedback_manager.store_request(feedback_request)
 
     return MessageResponse(
         message="Feedback request cancelled",

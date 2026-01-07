@@ -352,11 +352,13 @@ class FeedbackManager:
         """
         return self._backend.get_response(feedback_id)
 
-    def update_request(self, request: FeedbackRequest) -> None:
-        """Update feedback request in backend.
+    def store_request(self, request: FeedbackRequest) -> None:
+        """Store or update a feedback request in backend.
+
+        Used for both creating new requests and updating existing request status.
 
         Args:
-            request: FeedbackRequest to update
+            request: FeedbackRequest to store or update
         """
         self._backend.store_request(request)
 
