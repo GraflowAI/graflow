@@ -54,14 +54,14 @@ def build_graph(start_node: Executable, context: Optional[WorkflowContext] = Non
 
         # Handle ParallelGroup members - add all members to graph
         if isinstance(node, ParallelGroup):
-            for member in node.tasks:
-                member_id = member.task_id
+            for member_task in node.tasks:
+                member_id = member_task.task_id
                 # Add member node
-                new_graph.add_node(member_id, task=member)
+                new_graph.add_node(member_id, task=member_task)
                 # Add edge from ParallelGroup to member
                 new_graph.add_edge(node.task_id, member_id)
                 # Recursively build graph for member
-                _build_graph_recursive(member)
+                _build_graph_recursive(member_task)
 
         # Only traverse predecessors if node exists in cur_graph
         if node.task_id in cur_graph.nodes:

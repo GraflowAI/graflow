@@ -189,7 +189,7 @@ def check_redis() -> redis.Redis | None:
                 return None
         if "NOAUTH" in message:
             print("⚠️  Redis at localhost:6379 requires authentication; this example expects no auth.")
-            print("ℹ️  Set REDIS_PASSWORD for the example to use your existing Redis.")
+            print("ℹ️  Set REDIS_PASSWORD for the example to use your existing Redis.")  # noqa: RUF001
             return None
         print("⏳ Attempting to start Redis via Docker (no auth) on port 6379...")
 
