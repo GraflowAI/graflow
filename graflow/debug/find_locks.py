@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 LOCK_TYPES = (type(threading.Lock()), type(threading.RLock()))
 
 
-def _iter_children(obj: Any) -> Iterator[Tuple[str, Any]]:
+def _iter_children(obj: Any) -> Iterator[Tuple[str, Any]]:  # noqa: PLR0912
     """Iterate over child objects that should be recursively explored.
 
     Args:
