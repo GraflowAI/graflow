@@ -4,7 +4,7 @@ Welcome to the Graflow examples! This directory contains progressive examples to
 
 ## 🎉 What's Available
 
-**46 comprehensive, production-ready examples** covering:
+**47 comprehensive, production-ready examples** covering:
 - ✅ **Task Basics** - Define and execute tasks with parameters
 - ✅ **Workflow Orchestration** - Sequential and parallel task composition
 - ✅ **Data Flow** - Channels, typed communication, and result storage
@@ -203,6 +203,7 @@ Master workflow state persistence and fault tolerance:
 2. `workflow_decorator.py` - Using the workflow context manager (15 min)
 3. `operators_demo.py` - Sequential and parallel execution (15 min)
 4. `context_injection.py` - Accessing execution context (15 min)
+5. `task_graph_lowlevel_api.py` - Low-level TaskGraph API usage (20 min)
 
 ### Level 3: Communication 📡
 
@@ -287,7 +288,7 @@ Master workflow state persistence and fault tolerance:
 3. `03_periodic_checkpoint.py` - Periodic checkpoints for long tasks (20 min)
 4. `04_fault_recovery.py` - Fault tolerance with automatic retry (25 min)
 
-**Total Learning Time**: ~14 hours to complete all examples
+**Total Learning Time**: ~14.5 hours to complete all examples
 
 ### Quick Start Path (30 minutes)
 
@@ -363,7 +364,8 @@ examples/
 │   ├── simple_pipeline.py
 │   ├── workflow_decorator.py
 │   ├── operators_demo.py
-│   └── context_injection.py
+│   ├── context_injection.py
+│   └── task_graph_lowlevel_api.py
 │
 ├── 03_data_flow/        # Inter-task communication
 │   ├── README.md       # Category documentation
@@ -454,7 +456,7 @@ examples/
 | Phase | Status | Examples | Description |
 |-------|--------|----------|-------------|
 | 01_basics | ✅ Complete | 3/3 | Fundamental task concepts |
-| 02_workflows | ✅ Complete | 4/4 | Workflow orchestration |
+| 02_workflows | ✅ Complete | 5/5 | Workflow orchestration |
 | 03_data_flow | ✅ Complete | 3/3 | Inter-task communication |
 | 04_execution | ✅ Complete | 3/3 | Custom execution handlers |
 | 05_distributed | ✅ Complete | 3/3 | Redis-based distribution |
@@ -529,7 +531,7 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md) for details.
 
 All planned examples are now complete! 🎉
 
-The **46 examples** provide comprehensive coverage from basic concepts to AI-powered production applications. You can now:
+The **47 examples** provide comprehensive coverage from basic concepts to AI-powered production applications. You can now:
 
 1. **Build Production Workflows** - Use patterns from 08_real_world
 2. **Scale with Redis** - Deploy distributed workflows from 05_distributed
@@ -571,7 +573,7 @@ uv run pytest tests/tutorial/test_hitl.py -v
 
 ## API Notes
 
-**Important**: The examples in this directory use stable, tested API patterns. All 45 examples are fully functional and production-ready. See [docs/examples_api_issues.md](../docs/examples_api_issues.md) for historical notes on API evolution.
+**Important**: The examples in this directory use stable, tested API patterns. All 47 examples are fully functional and production-ready. See [docs/examples_api_issues.md](../docs/examples_api_issues.md) for historical notes on API evolution.
 
 ## Getting Help
 

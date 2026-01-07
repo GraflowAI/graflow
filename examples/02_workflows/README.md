@@ -100,6 +100,25 @@ uv run python examples/02_workflows/context_injection.py
 
 ---
 
+### 5. task_graph_lowlevel_api.py
+
+**Concept**: Low-level TaskGraph API usage
+
+Learn how to construct workflows using the low-level TaskGraph APIs directly, without the high-level `workflow()` context or operators (`>>`, `|`).
+
+```bash
+uv run python examples/02_workflows/task_graph_lowlevel_api.py
+```
+
+**Key Concepts**:
+- Direct TaskGraph manipulation with `add_node()` and `add_edge()`
+- Creating ExecutionContext manually with `ExecutionContext.create()`
+- Using `WorkflowEngine` for execution
+- Understanding the relationship between high-level and low-level APIs
+- When to use low-level APIs (dynamic workflows, custom tools, etc.)
+
+---
+
 ## Workflow Orchestration Patterns
 
 ### Pattern 1: Simple Sequential Pipeline
