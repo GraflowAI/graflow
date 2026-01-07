@@ -3,12 +3,12 @@
 # Format code using ruff
 format:
 	uvx ruff check --fix --select W293,W291,I001,F401,F541,W292,F541 --unsafe-fixes .
-#	uvx ruff format .
+	uvx ruff format .
 
 # Run linting
 lint:
 	uvx ruff check .
-	uvx mypy .
+#	uvx mypy graflow/
 
 # Type check only
 check:
