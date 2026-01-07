@@ -205,6 +205,54 @@ Global workflow context:
 
 ---
 
+### 5. modular_etl.py
+**Difficulty**: Advanced
+**Time**: 20 minutes
+
+Demonstrates organizing ETL tasks in separate files for better code organization and reusability.
+
+**Key Concepts**:
+- Task file separation by responsibility (Extract/Transform/Load)
+- Package-based task organization
+- Task reusability across workflows
+- Clean imports with `__init__.py`
+
+**What You'll Learn**:
+- How to organize tasks in separate files
+- Creating a task package with `__init__.py`
+- Importing and reusing tasks across workflows
+- Best practices for modular task organization
+
+**Run**:
+```bash
+uv run python examples/06_advanced/modular_etl.py
+```
+
+**Expected Output**:
+```
+=== Modular ETL Pattern ===
+
+Scenario 1: API → Normalize → Database
+📥 Extracted 100 records from API (posts)
+🔄 Normalized 100 records
+💾 Loading 100 records to database table 'posts'
+✅ Pipeline completed
+
+Scenario 2: CSV → Filter → CSV File
+📄 Extracted 3 records from CSV
+🗑️  Filtered: 3 valid / 0 invalid
+📄 Saved 3 records to /tmp/output.csv
+✅ Pipeline completed
+```
+
+**Real-World Applications**:
+- Multi-team development (different teams own different files)
+- Reusable task libraries
+- Clean separation of concerns
+- Easier testing and maintenance
+
+---
+
 ## Learning Path
 
 **Recommended Order**:
@@ -212,13 +260,14 @@ Global workflow context:
 2. Learn `custom_serialization.py` for deep understanding
 3. Explore `nested_workflow.py` for hierarchical organization
 4. Understand `global_context.py` for context management
+5. Practice `modular_etl.py` for real-world organization patterns
 
 **Prerequisites**:
 - Complete examples from 01-04
 - Understanding of Python closures
 - Familiarity with functional programming concepts
 
-**Total Time**: ~70 minutes (~1 hour)
+**Total Time**: ~90 minutes (~1.5 hours)
 
 ---
 

@@ -4,7 +4,7 @@ Welcome to the Graflow examples! This directory contains progressive examples to
 
 ## 🎉 What's Available
 
-**45 comprehensive, production-ready examples** covering:
+**46 comprehensive, production-ready examples** covering:
 - ✅ **Task Basics** - Define and execute tasks with parameters
 - ✅ **Workflow Orchestration** - Sequential and parallel task composition
 - ✅ **Data Flow** - Channels, typed communication, and result storage
@@ -93,6 +93,7 @@ Advanced workflow patterns:
 - Custom serialization with cloudpickle
 - Nested workflow composition
 - Global context management
+- Modular task organization (Extract/Transform/Load pattern)
 
 [View advanced examples →](06_advanced/)
 
@@ -231,6 +232,7 @@ Master workflow state persistence and fault tolerance:
 2. `custom_serialization.py` - Understanding cloudpickle (15 min)
 3. `nested_workflow.py` - Hierarchical workflow organization (20 min)
 4. `global_context.py` - Context management patterns (20 min)
+5. `modular_etl.py` - Modular task organization with separate files (20 min)
 
 ### Level 7: Dynamic Task Generation 🎯
 
@@ -285,7 +287,7 @@ Master workflow state persistence and fault tolerance:
 3. `03_periodic_checkpoint.py` - Periodic checkpoints for long tasks (20 min)
 4. `04_fault_recovery.py` - Fault tolerance with automatic retry (25 min)
 
-**Total Learning Time**: ~13.7 hours to complete all examples
+**Total Learning Time**: ~14 hours to complete all examples
 
 ### Quick Start Path (30 minutes)
 
@@ -386,7 +388,13 @@ examples/
 │   ├── lambda_tasks.py
 │   ├── custom_serialization.py
 │   ├── nested_workflow.py
-│   └── global_context.py
+│   ├── global_context.py
+│   ├── modular_etl.py
+│   └── modular_etl/    # Task organization package
+│       ├── __init__.py
+│       ├── extract_tasks.py
+│       ├── transform_tasks.py
+│       └── load_tasks.py
 │
 ├── 07_dynamic_tasks/    # Dynamic task generation
 │   ├── README.md       # Category documentation
@@ -450,7 +458,7 @@ examples/
 | 03_data_flow | ✅ Complete | 3/3 | Inter-task communication |
 | 04_execution | ✅ Complete | 3/3 | Custom execution handlers |
 | 05_distributed | ✅ Complete | 3/3 | Redis-based distribution |
-| 06_advanced | ✅ Complete | 4/4 | Advanced patterns |
+| 06_advanced | ✅ Complete | 5/5 | Advanced patterns |
 | 07_dynamic_tasks | ✅ Complete | 2/2 | Dynamic task generation |
 | 08_real_world | ✅ Complete | 4/4 | Production use cases |
 | 09_visualization | ✅ Complete | 2/2 | Workflow visualization |
@@ -521,7 +529,7 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md) for details.
 
 All planned examples are now complete! 🎉
 
-The **45 examples** provide comprehensive coverage from basic concepts to AI-powered production applications. You can now:
+The **46 examples** provide comprehensive coverage from basic concepts to AI-powered production applications. You can now:
 
 1. **Build Production Workflows** - Use patterns from 08_real_world
 2. **Scale with Redis** - Deploy distributed workflows from 05_distributed
