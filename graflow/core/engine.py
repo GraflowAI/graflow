@@ -184,7 +184,7 @@ class WorkflowEngine:
         context.last_checkpoint_path = checkpoint_path
         context.clear_checkpoint_request()
 
-    def execute(
+    def execute(  # noqa: PLR0912
         self,
         context: ExecutionContext,
         start_task_id: Optional[str] = None
