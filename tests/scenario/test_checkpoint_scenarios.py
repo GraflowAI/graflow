@@ -556,7 +556,7 @@ class TestComplexWorkflowCheckpointScenarios:
                         checkpoint_path = os.path.join(tmpdir, f"cycle_checkpoint_{i+1}")
                         checkpoint_metadata = context.checkpoint_request_metadata
                         assert checkpoint_metadata is not None
-                        pkl_path, metadata = CheckpointManager.create_checkpoint(
+                        _pkl_path, metadata = CheckpointManager.create_checkpoint(
                             context,
                             path=checkpoint_path,
                             metadata=checkpoint_metadata
@@ -768,13 +768,13 @@ class TestCheckpointMetadataScenarios:
             assert len(checkpoints) == 4
 
             # Verify each checkpoint has correct metadata
-            for i, (pkl_path, metadata) in enumerate(checkpoints):
+            for i, (_pkl_path, metadata) in enumerate(checkpoints):
                 expected_progress = (i + 1) * 25
                 assert metadata.user_metadata["progress"] == expected_progress
                 assert metadata.user_metadata["milestone"] == f"{expected_progress}%"
 
             # Resume from 50% checkpoint and continue
-            pkl_path_50, metadata_50 = checkpoints[1]  # 50% checkpoint
+            pkl_path_50, _metadata_50 = checkpoints[1]  # 50% checkpoint
 
             restored_context, restored_metadata = CheckpointManager.resume_from_checkpoint(
                 pkl_path_50
