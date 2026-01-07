@@ -80,7 +80,7 @@ def main():  # noqa: PLR0912
 
                     # Continue execution
                     engine = WorkflowEngine()
-                    final_result = engine.execute(restored_context)
+                    _final_result = engine.execute(restored_context)
                     final_context = restored_context
                 else:
                     # Execute from beginning
