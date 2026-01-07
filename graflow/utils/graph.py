@@ -502,7 +502,7 @@ def _transform_graph_with_start_end_nodes(graph: nx.DiGraph) -> tuple[nx.DiGraph
     return transformed, parallel_group_nodes
 
 
-def draw_ascii(graph: nx.DiGraph) -> str:
+def draw_ascii(graph: nx.DiGraph) -> str:  # noqa: PLR0912
     """Draw a NetworkX DiGraph in ASCII format.
 
     Args:
@@ -664,7 +664,7 @@ def _transform_graph_for_container_view(graph: nx.DiGraph) -> tuple[nx.DiGraph, 
             predecessors = list(graph.predecessors(node))
 
             # Classify successors
-            internal_tasks, external_tasks = _classify_parallel_group_edges(str(node), graph)
+            _internal_tasks, external_tasks = _classify_parallel_group_edges(str(node), graph)
 
             # Collect all tasks that should be inside the container
             # This includes direct child tasks and all reachable internal tasks
@@ -698,7 +698,7 @@ def _transform_graph_for_container_view(graph: nx.DiGraph) -> tuple[nx.DiGraph, 
     return transformed_graph, parallel_groups
 
 
-def draw_mermaid(
+def draw_mermaid(  # noqa: PLR0912
     graph: nx.DiGraph,
     title: str = "Graph",
     *,
@@ -923,7 +923,7 @@ def draw_mermaid(
 
 
 
-def create_agraph(
+def create_agraph(  # noqa: PLR0912
     graph: nx.DiGraph,
     node_labels: Optional[dict[Any, str]] = None,
     node_colors: Optional[dict[Any, str]] = None,
