@@ -196,7 +196,7 @@ def setup_langfuse_for_litellm() -> None:
         - LLMClient calls this automatically when enable_tracing=True (default)
         - Applies monkeypatches to LiteLLM's span naming methods for unique span names
     """
-    global _litellm_tracing_enabled
+    global _litellm_tracing_enabled  # noqa: PLW0603
 
     # Check if already enabled (idempotent)
     if _litellm_tracing_enabled:

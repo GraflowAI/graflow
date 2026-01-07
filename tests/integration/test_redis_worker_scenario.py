@@ -47,7 +47,7 @@ class RedisWorkflowTask(Executable):
 
 def _configure_redis_client(redis_client: Any) -> None:
     """Set the Redis client used by task helpers."""
-    global _redis_client
+    global _redis_client  # noqa: PLW0603
     _redis_client = redis_client
 
 

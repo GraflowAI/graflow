@@ -333,7 +333,7 @@ def setup_adk_tracing() -> None:
           2. Then: GoogleADKInstrumentor().instrument() (OpenInference sets up its tracer)
           3. Finally: _patch_adk_llm_call_span_name(), _patch_adk_execute_tool_span_name() (wrap OpenInference's tracers)
     """
-    global _adk_instrumented
+    global _adk_instrumented  # noqa: PLW0603
 
     if _adk_instrumented:
         logger.debug("Google ADK instrumentation already set up")
