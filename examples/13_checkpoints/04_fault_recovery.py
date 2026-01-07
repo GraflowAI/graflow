@@ -31,7 +31,7 @@ from graflow.core.workflow import workflow
 FAILURE_MODE = True  # Set to True to simulate failures
 
 
-def main():
+def main():  # noqa: PLR0912
     """Run fault recovery demonstration."""
     print("=" * 70)
     print("Fault Recovery with Checkpoints Example")
@@ -185,7 +185,7 @@ def main():
                         fetch_data >> validate_data >> expensive_processing >> finalize  # type: ignore
 
                         # Execute workflow
-                        final_result, final_context = wf.execute("fetch_data", ret_context=True)
+                        _final_result, final_context = wf.execute("fetch_data", ret_context=True)
 
                 # Workflow completed successfully
                 success = True
