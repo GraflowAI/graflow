@@ -62,7 +62,8 @@ def test_lambda_serialization():
     print("Test 1: Serializing Lambda Functions")
 
     # Create a lambda function
-    add_ten = lambda x: x + 10
+    def add_ten(x):
+        return x + 10
 
     # Try standard pickle (this would fail for lambdas in many cases)
     try:
@@ -237,7 +238,8 @@ def test_comparison_with_standard_pickle():
     print("Bonus: Cloudpickle vs Standard Pickle")
 
     # Lambda function
-    func = lambda x: x * 2
+    def func(x):
+        return x * 2
 
     # Cloudpickle works
     try:

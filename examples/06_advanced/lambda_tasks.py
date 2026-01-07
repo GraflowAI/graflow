@@ -91,7 +91,8 @@ def main():
     print("Step 1: Creating tasks from lambdas and closures")
 
     # Simple lambda task
-    lambda_func = lambda: 42
+    def lambda_func():
+        return 42
 
     # Closure that captures a value
     double_func = create_operation("double")
