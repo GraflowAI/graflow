@@ -198,7 +198,6 @@ def scenario_3_task_factory():
             @task(id=task_id)
             def calculator():
                 print(f"Unknown operation: {operation}")
-                return None
 
         return calculator
 
