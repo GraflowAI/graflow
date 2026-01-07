@@ -45,25 +45,30 @@ def build_graph(start_node: Executable, context: Optional[WorkflowContext] = Non
 
         from graflow.core.task import ParallelGroup  # local import to avoid cycles
 
-        for successor in cur_graph.successors(node.task_id):
-            successor_task = cur_graph.nodes[successor]["task"]
-            new_graph.add_edge(node.task_id, successor)
-            _build_graph_recursive(successor_task)
+        # Only traverse successors if node exists in cur_graph
+        if node.task_id in cur_graph.nodes:
+            for successor in cur_graph.successors(node.task_id):
+                successor_task = cur_graph.nodes[successor]["task"]
+                new_graph.add_edge(node.task_id, successor)
+                _build_graph_recursive(successor_task)
 
+        # Handle ParallelGroup members - add all members to graph
         if isinstance(node, ParallelGroup):
-            member_ids = [member.task_id for member in node.tasks]
-            for member_id in member_ids:
-                if member_id not in cur_graph.nodes:
-                    continue
-                member_task = cur_graph.nodes[member_id]["task"]
-                new_graph.add_node(member_id, task=member_task)
+            for member in node.tasks:
+                member_id = member.task_id
+                # Add member node
+                new_graph.add_node(member_id, task=member)
+                # Add edge from ParallelGroup to member
                 new_graph.add_edge(node.task_id, member_id)
-                _build_graph_recursive(member_task)
+                # Recursively build graph for member
+                _build_graph_recursive(member)
 
-        for predecessor in cur_graph.predecessors(node.task_id):
-            predecessor_task = cur_graph.nodes[predecessor]["task"]
-            new_graph.add_edge(predecessor, node.task_id)
-            _build_graph_recursive(predecessor_task)
+        # Only traverse predecessors if node exists in cur_graph
+        if node.task_id in cur_graph.nodes:
+            for predecessor in cur_graph.predecessors(node.task_id):
+                predecessor_task = cur_graph.nodes[predecessor]["task"]
+                new_graph.add_edge(predecessor, node.task_id)
+                _build_graph_recursive(predecessor_task)
 
     _build_graph_recursive(start_node)
     task_graph._graph = new_graph
