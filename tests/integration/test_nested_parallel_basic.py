@@ -220,7 +220,7 @@ def test_lru_cache_prevents_memory_leak(clean_redis):
 
         # Create unique task for each graph
         @task(f"task_{i}")
-        def unique_task():
+        def unique_task(i=i):
             return f"result_{i}"
 
         graph.add_node(unique_task)
