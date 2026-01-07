@@ -92,8 +92,8 @@ class TestConsoleTracerOutput:
         captured = capsys.readouterr()
         lines = captured.out.split("\n")
         # Child should have more indentation than parent
-        parent_line = [l for l in lines if "parent" in l and "child" not in l]
-        child_line = [l for l in lines if "child" in l]
+        parent_line = [line for line in lines if "parent" in line and "child" not in line]
+        child_line = [line for line in lines if "child" in line]
         if parent_line and child_line:
             # Simple check: child line should have more leading spaces
             parent_indent = len(parent_line[0]) - len(parent_line[0].lstrip())
