@@ -219,9 +219,7 @@ def main():
         initialize >> partition_data >> process_batches >> aggregate_results >> generate_report
 
         # Execute pipeline
-        start_time = time.time()
         ctx.execute("initialize")
-        end_time = time.time()
 
 
 if __name__ == "__main__":

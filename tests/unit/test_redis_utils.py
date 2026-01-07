@@ -156,7 +156,7 @@ class TestCreateRedisClient:
         }
 
         with patch.object(Redis, '__init__', return_value=None) as mock_init:
-            client = create_redis_client(config)
+            _client = create_redis_client(config)
 
             mock_init.assert_called_once_with(
                 host='localhost',
@@ -181,7 +181,7 @@ class TestCreateRedisClient:
         }
 
         with patch.object(Redis, '__init__', return_value=None) as mock_init:
-            client = create_redis_client(config)
+            create_redis_client(config)
 
             mock_init.assert_called_once_with(
                 host='localhost',
@@ -210,7 +210,7 @@ class TestCreateRedisClient:
         }
 
         with patch.object(Redis, '__init__', return_value=None) as mock_init:
-            client = create_redis_client(config)
+            create_redis_client(config)
 
             mock_init.assert_called_once_with(
                 host='redis.example.com',
@@ -233,7 +233,7 @@ class TestCreateRedisClient:
         config = {}  # Empty config
 
         with patch.object(Redis, '__init__', return_value=None) as mock_init:
-            client = create_redis_client(config)
+            create_redis_client(config)
 
             mock_init.assert_called_once_with(
                 host='localhost',
@@ -411,7 +411,7 @@ class TestRoundTrip:
 
         # Recreate client
         with patch.object(Redis, '__init__', return_value=None) as mock_init:
-            new_client = create_redis_client(config)
+            create_redis_client(config)
 
             # Verify same parameters used
             mock_init.assert_called_once_with(

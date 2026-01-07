@@ -84,7 +84,7 @@ def test_workflow_cancellation():
             engine.execute(exec_context)
 
         print("✗ Expected GraflowWorkflowCanceledError but workflow completed")
-        assert False, "Expected GraflowWorkflowCanceledError"
+        raise AssertionError("Expected GraflowWorkflowCanceledError")
     except GraflowWorkflowCanceledError as e:
         print(f"✓ Workflow canceled with error: {e}")
         print(f"  Executed tasks: {executed_tasks}")

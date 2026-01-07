@@ -304,7 +304,7 @@ class TestFaultToleranceScenarios:
             for _ in range(2):
                 next_task = context.task_queue.get_next_task()
                 if next_task:
-                    result = run_task(context, next_task)
+                    _result = run_task(context, next_task)
                     context.mark_task_completed(next_task)
                     context.increment_step()
 
@@ -549,7 +549,7 @@ class TestComplexWorkflowCheckpointScenarios:
                     context.increment_step()
 
                     # Track cycle count
-                    cycle_count = context.cycle_controller.get_cycle_count("cyclic_task")
+                    context.cycle_controller.get_cycle_count("cyclic_task")
 
                     # Create checkpoint if requested
                     if context.checkpoint_requested:
@@ -687,7 +687,7 @@ class TestCheckpointMetadataScenarios:
             # Execute task
             next_task = context.task_queue.get_next_task()
             assert next_task is not None
-            result = run_task(context, next_task)
+            run_task(context, next_task)
             context.mark_task_completed(next_task)
             context.increment_step()
 
@@ -748,7 +748,7 @@ class TestCheckpointMetadataScenarios:
             for i in range(4):
                 next_task = context.task_queue.get_next_task()
                 if next_task:
-                    result = run_task(context, next_task)
+                    run_task(context, next_task)
                     context.mark_task_completed(next_task)
                     context.increment_step()
 

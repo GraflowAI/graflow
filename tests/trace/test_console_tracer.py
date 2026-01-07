@@ -235,7 +235,7 @@ class TestConsoleTracerHooks:
 
         tracer = ConsoleTracer(enable_colors=False)
         graph = TaskGraph()
-        context = ExecutionContext(graph=graph, tracer=tracer)
+        _context = ExecutionContext(graph=graph, tracer=tracer)
 
         tracer.on_dynamic_task_added(
             task_id="dynamic_task",
