@@ -73,11 +73,20 @@ def test_cycle_detection():
 
 def test_a_a_b():
     """Test graph construction for flow: A >> A >> B."""
-    task_a1 = Task("A")
+    task_a = Task("A")
+    task_b = Task("B")
 
-    with pytest.raises(DuplicateTaskError):
-        task_a2 = Task("A")
-        assert task_a1.task_id == task_a2.task_id, "Duplicate task IDs should match"
+    flow = task_a >> task_a >> task_b
+    graph = build_graph(flow)
+
+    # draw_task_graph(graph, title="A_A_B Graph")
+
+    assert set(graph.nodes) == {"A", "B"}
+    expected_edges = {
+        ("A", "A"),
+        ("A", "B"),
+    }
+    assert set(graph.edges) == expected_edges
 
 def test_a_b_a():
     """Test graph construction for flow: A >> B >> A."""

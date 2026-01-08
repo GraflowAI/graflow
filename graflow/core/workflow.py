@@ -58,7 +58,7 @@ class WorkflowContext:
             _current_context.reset(self._token)
             self._token = None
 
-    def add_node(self, name: str, task: Executable, skip_if_exists: bool = True) -> None:
+    def add_node(self, name: str, task: Executable, skip_if_exists: bool = False) -> None:
         """Add a task node to this workflow's graph."""
         self.graph.add_node(task, name, skip_if_exists=skip_if_exists)
 

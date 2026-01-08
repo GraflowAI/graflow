@@ -226,7 +226,7 @@ class Executable(ABC):
         if current_context is None:
             self._pending_registration = True
             return
-        current_context.add_node(self.task_id, self)
+        current_context.add_node(self.task_id, self, skip_if_exists=False)
         self._pending_registration = False
 
 
