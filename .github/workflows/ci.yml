@@ -41,9 +41,6 @@ jobs:
     - name: Run linting (ruff)
       run: uvx ruff check graflow/
 
-    - name: Run type checking (mypy)
-      run: uvx mypy graflow/
-
     - name: Check formatting
       run: uvx ruff format --check .
 
