@@ -20,15 +20,14 @@ def test_execute_simple_flow():
     def end():
         executed.append("end")
 
-    # Check graph state
-
     context = current_workflow_context()  # Ensure context is initialized
 
+    start >> end  # type: ignore
+
+    # Check graph state (after >> operator triggers registration)
     graph = context.graph
     assert "start" in graph.nodes, f"start not in graph nodes: {list(graph.nodes)}"
     assert "end" in graph.nodes, f"end not in graph nodes: {list(graph.nodes)}"
-
-    start >> end # type: ignore
 
     # Execute the flow
     execute_with_cycles(graph, "start", max_steps=5)
