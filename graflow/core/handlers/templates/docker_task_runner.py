@@ -30,10 +30,18 @@ def ensure_cloudpickle():
             )
             import cloudpickle
 
-            print(f"[DockerTaskRunner] ✅ cloudpickle=={cloudpickle_version} installed successfully\n", file=sys.stderr, flush=True)
+            print(
+                f"[DockerTaskRunner] ✅ cloudpickle=={cloudpickle_version} installed successfully\n",
+                file=sys.stderr,
+                flush=True,
+            )
             return cloudpickle
         except Exception as e:
-            print(f"[DockerTaskRunner] ❌ Failed to install cloudpickle=={cloudpickle_version}: {e}", file=sys.stderr, flush=True)
+            print(
+                f"[DockerTaskRunner] ❌ Failed to install cloudpickle=={cloudpickle_version}: {e}",
+                file=sys.stderr,
+                flush=True,
+            )
             sys.exit(1)
 
 
