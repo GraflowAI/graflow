@@ -116,7 +116,7 @@ class BestEffortGroupPolicy(GroupExecutionPolicy):
         context: ExecutionContext,
     ) -> None:
         self._validate_group_results(group_id, tasks, results)
-        successful_tasks, failed_tasks = self._partition_group_results(results)
+        _successful_tasks, failed_tasks = self._partition_group_results(results)
 
         if failed_tasks:
             failed_ids = [task_id for task_id, _ in failed_tasks]
