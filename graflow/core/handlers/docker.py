@@ -5,6 +5,7 @@ import logging
 import pathlib
 from typing import Any, Optional
 
+from cloudpickle import __version__ as cloudpickle_version
 from docker.types import DeviceRequest
 
 import graflow
@@ -334,5 +335,9 @@ class DockerTaskHandler(TaskHandler):
 
         # Render with variables
         return template.render(
-            task_code=task_code, context_code=context_code, task_id=task_id, graflow_version=graflow_version
+            task_code=task_code,
+            context_code=context_code,
+            task_id=task_id,
+            graflow_version=graflow_version,
+            cloudpickle_version=cloudpickle_version,
         )

@@ -14,25 +14,26 @@ import sys
 
 def ensure_cloudpickle():
     """Ensure cloudpickle is available (auto-install if missing)."""
+    cloudpickle_version = "{{ cloudpickle_version }}"
     try:
         import cloudpickle
 
         return cloudpickle
     except ImportError:
         # Cloudpickle not installed - install it automatically
-        print("\n[DockerTaskRunner] Installing cloudpickle==3.12", file=sys.stderr, flush=True)
+        print(f"\n[DockerTaskRunner] Installing cloudpickle=={cloudpickle_version}", file=sys.stderr, flush=True)
         try:
             subprocess.check_call(
-                [sys.executable, "-m", "pip", "install", "--quiet", "cloudpickle==3.12"],
+                [sys.executable, "-m", "pip", "install", "--quiet", f"cloudpickle=={cloudpickle_version}"],
                 stdout=sys.stderr,
                 stderr=sys.stderr,
             )
             import cloudpickle
 
-            print("[DockerTaskRunner] ✅ cloudpickle==3.12 installed successfully\n", file=sys.stderr, flush=True)
+            print(f"[DockerTaskRunner] ✅ cloudpickle=={cloudpickle_version} installed successfully\n", file=sys.stderr, flush=True)
             return cloudpickle
         except Exception as e:
-            print(f"[DockerTaskRunner] ❌ Failed to install cloudpickle==3.12: {e}", file=sys.stderr, flush=True)
+            print(f"[DockerTaskRunner] ❌ Failed to install cloudpickle=={cloudpickle_version}: {e}", file=sys.stderr, flush=True)
             sys.exit(1)
 
 
