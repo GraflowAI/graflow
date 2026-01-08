@@ -11,6 +11,7 @@ from graflow.hitl.types import FeedbackRequest, FeedbackResponse, FeedbackType
 # Check if FastAPI is available
 try:
     from fastapi.testclient import TestClient  # noqa: F401
+
     HAS_FASTAPI = True
 except ImportError:
     HAS_FASTAPI = False
@@ -23,21 +24,14 @@ pytestmark = pytest.mark.skipif(not HAS_FASTAPI, reason="FastAPI not installed")
 @pytest.fixture
 def feedback_manager(tmp_path):
     """Create a FeedbackManager with filesystem backend in temp directory."""
-    return FeedbackManager(
-        backend="filesystem",
-        backend_config={"data_dir": str(tmp_path / "feedback_data")}
-    )
+    return FeedbackManager(backend="filesystem", backend_config={"data_dir": str(tmp_path / "feedback_data")})
 
 
 @pytest.fixture
 def api_app(feedback_manager):
     """Create FastAPI app with FeedbackManager."""
 
-    app = create_feedback_api(
-        feedback_backend=feedback_manager._backend,
-        title="Test Feedback API",
-        enable_cors=False
-    )
+    app = create_feedback_api(feedback_backend=feedback_manager._backend, title="Test Feedback API", enable_cors=False)
     return app
 
 
@@ -45,6 +39,7 @@ def api_app(feedback_manager):
 def client(api_app):
     """Create test client."""
     from fastapi.testclient import TestClient
+
     return TestClient(api_app)
 
 
@@ -87,7 +82,7 @@ class TestFeedbackAPI:
             feedback_type=FeedbackType.APPROVAL,
             prompt="Test approval?",
             status="pending",
-            timeout=180.0
+            timeout=180.0,
         )
         feedback_manager._backend.store_request(request)
 
@@ -110,7 +105,7 @@ class TestFeedbackAPI:
             feedback_type=FeedbackType.APPROVAL,
             prompt="Approval 1",
             status="pending",
-            timeout=180.0
+            timeout=180.0,
         )
         request2 = FeedbackRequest(
             feedback_id="task2_def",
@@ -119,7 +114,7 @@ class TestFeedbackAPI:
             feedback_type=FeedbackType.TEXT,
             prompt="Text input 2",
             status="pending",
-            timeout=180.0
+            timeout=180.0,
         )
         feedback_manager._backend.store_request(request1)
         feedback_manager._backend.store_request(request2)
@@ -152,7 +147,7 @@ class TestFeedbackAPI:
             feedback_type=FeedbackType.APPROVAL,
             prompt="Test approval?",
             status="pending",
-            timeout=180.0
+            timeout=180.0,
         )
         feedback_manager._backend.store_request(request)
 
@@ -174,13 +169,10 @@ class TestFeedbackAPI:
             feedback_type=FeedbackType.APPROVAL,
             prompt="Test approval?",
             status="completed",
-            timeout=180.0
+            timeout=180.0,
         )
         response_obj = FeedbackResponse(
-            feedback_id="test_task_abc123",
-            response_type=FeedbackType.APPROVAL,
-            approved=True,
-            reason="Looks good"
+            feedback_id="test_task_abc123", response_type=FeedbackType.APPROVAL, approved=True, reason="Looks good"
         )
         feedback_manager._backend.store_request(request)
         feedback_manager._backend.store_response(response_obj)
@@ -204,18 +196,14 @@ class TestFeedbackAPI:
             feedback_type=FeedbackType.APPROVAL,
             prompt="Test approval?",
             status="pending",
-            timeout=180.0
+            timeout=180.0,
         )
         feedback_manager._backend.store_request(request)
 
         # Provide approval response
         response = client.post(
             "/api/feedback/test_task_abc123/respond",
-            json={
-                "approved": True,
-                "reason": "Approved by manager",
-                "responded_by": "alice@example.com"
-            }
+            json={"approved": True, "reason": "Approved by manager", "responded_by": "alice@example.com"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -243,17 +231,14 @@ class TestFeedbackAPI:
             feedback_type=FeedbackType.TEXT,
             prompt="Enter your comments:",
             status="pending",
-            timeout=180.0
+            timeout=180.0,
         )
         feedback_manager._backend.store_request(request)
 
         # Provide text response
         response = client.post(
             "/api/feedback/test_task_def456/respond",
-            json={
-                "text": "Please fix the typos in section 3",
-                "responded_by": "bob@example.com"
-            }
+            json={"text": "Please fix the typos in section 3", "responded_by": "bob@example.com"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -280,17 +265,14 @@ class TestFeedbackAPI:
             prompt="Choose an option:",
             options=["option_a", "option_b", "option_c"],
             status="pending",
-            timeout=180.0
+            timeout=180.0,
         )
         feedback_manager._backend.store_request(request)
 
         # Provide selection response
         response = client.post(
             "/api/feedback/test_task_ghi789/respond",
-            json={
-                "selected": "option_b",
-                "responded_by": "charlie@example.com"
-            }
+            json={"selected": "option_b", "responded_by": "charlie@example.com"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -308,10 +290,7 @@ class TestFeedbackAPI:
 
     def test_respond_to_feedback_not_found(self, client):
         """Test responding to non-existent feedback request."""
-        response = client.post(
-            "/api/feedback/nonexistent_id/respond",
-            json={"approved": True}
-        )
+        response = client.post("/api/feedback/nonexistent_id/respond", json={"approved": True})
         assert response.status_code == 404
         assert "not found" in response.json()["detail"].lower()
 
@@ -325,7 +304,7 @@ class TestFeedbackAPI:
             feedback_type=FeedbackType.APPROVAL,
             prompt="Test approval?",
             status="pending",
-            timeout=180.0
+            timeout=180.0,
         )
         feedback_manager._backend.store_request(request)
 
@@ -363,8 +342,7 @@ class TestCreateFeedbackAPI:
     def test_create_with_filesystem_backend(self, tmp_path):
         """Test creating API with filesystem backend."""
         app = create_feedback_api(
-            feedback_backend="filesystem",
-            feedback_config={"data_dir": str(tmp_path / "feedback_data")}
+            feedback_backend="filesystem", feedback_config={"data_dir": str(tmp_path / "feedback_data")}
         )
         assert app is not None
         assert hasattr(app.state, "feedback_manager")
@@ -376,7 +354,7 @@ class TestCreateFeedbackAPI:
             feedback_backend="filesystem",
             feedback_config={"data_dir": str(tmp_path / "feedback_data")},
             enable_cors=True,
-            cors_origins=["http://localhost:3000"]
+            cors_origins=["http://localhost:3000"],
         )
         assert app is not None
 
@@ -387,7 +365,7 @@ class TestCreateFeedbackAPI:
             feedback_config={"data_dir": str(tmp_path / "feedback_data")},
             title="Custom API",
             description="Custom description",
-            version="2.0.0"
+            version="2.0.0",
         )
         assert app.title == "Custom API"
         assert app.description == "Custom description"
@@ -407,6 +385,7 @@ class TestAPIErrorHandling:
         app = FastAPI()
         app.include_router(router)
         from fastapi.testclient import TestClient
+
         client = TestClient(app)
 
         # Should return 500 error

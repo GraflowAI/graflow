@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 try:
     from litellm import completion
+
     LITELLM_AVAILABLE = True
 except ImportError:
     LITELLM_AVAILABLE = False
@@ -54,11 +55,7 @@ def _patch_litellm_get_span_name() -> None:
             generation_name = metadata.get("generation_name")
 
             # Use generation_name for the span if provided, otherwise fallback
-            span_name = str(
-                generation_name
-                if generation_name
-                else LITELLM_REQUEST_SPAN_NAME
-            )
+            span_name = str(generation_name if generation_name else LITELLM_REQUEST_SPAN_NAME)
 
             # Append current span_id to make span name unique
             current_span = get_span_id(trace.get_current_span())
@@ -74,10 +71,7 @@ def _patch_litellm_get_span_name() -> None:
         logger.info("Successfully patched LiteLLM's _get_span_name for unique span names")
 
     except ImportError as e:
-        logger.warning(
-            f"Could not patch LiteLLM's _get_span_name: {e}. "
-            "This is expected if litellm is not installed."
-        )
+        logger.warning(f"Could not patch LiteLLM's _get_span_name: {e}. This is expected if litellm is not installed.")
     except Exception as e:
         logger.error(f"Failed to patch LiteLLM's _get_span_name: {e}", exc_info=True)
 
@@ -104,12 +98,7 @@ def _patch_litellm_maybe_log_raw_request() -> None:
             return
 
         def _maybe_log_raw_request_patched(
-            self: OpenTelemetry,
-            kwargs: dict,
-            response_obj: Any,
-            start_time: Any,
-            end_time: Any,
-            parent_span: Any
+            self: OpenTelemetry, kwargs: dict, response_obj: Any, start_time: Any, end_time: Any, parent_span: Any
         ) -> None:
             """
             Patched version of _maybe_log_raw_request that adds span_id to raw span names.
@@ -150,8 +139,7 @@ def _patch_litellm_maybe_log_raw_request() -> None:
 
     except ImportError as e:
         logger.warning(
-            f"Could not patch LiteLLM's _maybe_log_raw_request: {e}. "
-            "This is expected if litellm is not installed."
+            f"Could not patch LiteLLM's _maybe_log_raw_request: {e}. This is expected if litellm is not installed."
         )
     except Exception as e:
         logger.error(f"Failed to patch LiteLLM's _maybe_log_raw_request: {e}", exc_info=True)
@@ -226,8 +214,8 @@ def setup_langfuse_for_litellm() -> None:
 
         # Apply monkeypatches for unique span names
         # These patches add span_id to span names to prevent grouping in Langfuse UI
-        _patch_litellm_get_span_name()           # Patch litellm_request spans
-        _patch_litellm_maybe_log_raw_request()   # Patch raw_gen_ai_request spans
+        _patch_litellm_get_span_name()  # Patch litellm_request spans
+        _patch_litellm_maybe_log_raw_request()  # Patch raw_gen_ai_request spans
 
         # Use langfuse_otel callback for Langfuse SDK v3+ compatibility
         # This uses OpenTelemetry integration and avoids the sdk_integration parameter issue
@@ -253,7 +241,7 @@ def extract_text(response: ModelResponse) -> str:
         if hasattr(response, "choices") and response.choices:
             choice = response.choices[0]
             if hasattr(choice, "message"):
-                return getattr(choice.message, "content", "") or "" # type: ignore
+                return getattr(choice.message, "content", "") or ""  # type: ignore
         return ""
     except Exception as e:
         logger.warning(f"Failed to extract text from response: {e}")
@@ -303,12 +291,7 @@ class LLMClient:
         ```
     """
 
-    def __init__(
-        self,
-        model: str,
-        enable_tracing: bool = True,
-        **default_params: Any
-    ):
+    def __init__(self, model: str, enable_tracing: bool = True, **default_params: Any):
         """Initialize LLMClient.
 
         Args:
@@ -359,7 +342,7 @@ class LLMClient:
         model: Optional[str] = None,
         generation_name: Optional[str] = None,
         tags: Optional[List[str]] = None,
-        **params: Any
+        **params: Any,
     ) -> ModelResponse:
         """Call LLM completion API.
 
@@ -420,18 +403,9 @@ class LLMClient:
         # Call LiteLLM completion
         # LiteLLM's Langfuse callback will automatically detect OpenTelemetry context
         # set by LangFuseTracer and create nested spans
-        return completion(
-            model=actual_model,
-            messages=messages,
-            stream=False,
-            **kwargs
-        ) # type: ignore
+        return completion(model=actual_model, messages=messages, stream=False, **kwargs)  # type: ignore
 
-    def completion_text(
-        self,
-        messages: List[Dict[str, str]],
-        **params: Any
-    ) -> str:
+    def completion_text(self, messages: List[Dict[str, str]], **params: Any) -> str:
         """Convenience method that returns text content directly.
 
         Args:

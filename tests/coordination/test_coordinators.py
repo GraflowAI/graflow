@@ -61,6 +61,7 @@ class TestThreadingCoordinator:
         def engine_factory():
             def execute(context, start_task_id):
                 engine_calls.append((context, start_task_id))
+
             return SimpleNamespace(execute=execute)
 
         mocker.patch("graflow.core.engine.WorkflowEngine", side_effect=engine_factory)
@@ -96,6 +97,7 @@ class TestThreadingCoordinator:
                 if start_task_id == "task_fail":
                     raise RuntimeError("boom")
                 completed.append(start_task_id)
+
             return SimpleNamespace(execute=execute)
 
         mocker.patch("graflow.core.engine.WorkflowEngine", side_effect=engine_factory)
@@ -175,9 +177,7 @@ class TestRedisCoordinator:
 
         assert result is True
         # Should subscribe first, then check counter
-        mock_pubsub.subscribe.assert_called_with(
-            f"{coordinator.task_queue.key_prefix}:barrier_done:test_barrier"
-        )
+        mock_pubsub.subscribe.assert_called_with(f"{coordinator.task_queue.key_prefix}:barrier_done:test_barrier")
         mock_redis.get.assert_called_with(f"{coordinator.task_queue.key_prefix}:barrier:test_barrier")
         mock_pubsub.close.assert_called_once()
 
@@ -190,15 +190,13 @@ class TestRedisCoordinator:
 
         mock_pubsub = mocker.MagicMock()
         # Mock get_message to return completion message
-        mock_pubsub.get_message.return_value = { "type": "message", "data": b"complete" }
+        mock_pubsub.get_message.return_value = {"type": "message", "data": b"complete"}
         mock_redis.pubsub.return_value = mock_pubsub
 
         result = coordinator.wait_barrier("test_barrier", timeout=1)
 
         assert result is True
-        mock_pubsub.subscribe.assert_called_with(
-            f"{coordinator.task_queue.key_prefix}:barrier_done:test_barrier"
-        )
+        mock_pubsub.subscribe.assert_called_with(f"{coordinator.task_queue.key_prefix}:barrier_done:test_barrier")
         mock_pubsub.close.assert_called_once()
 
     def test_wait_barrier_timeout(self, coordinator, mock_redis, mocker):
@@ -311,7 +309,7 @@ class TestRedisCoordinator:
 
         expected_calls = [
             call(f"{coordinator.task_queue.key_prefix}:barrier:cleanup_barrier"),
-            call(f"{coordinator.task_queue.key_prefix}:barrier:cleanup_barrier:expected")
+            call(f"{coordinator.task_queue.key_prefix}:barrier:cleanup_barrier:expected"),
         ]
         mock_redis.delete.assert_has_calls(expected_calls, any_order=True)
         assert "cleanup_barrier" not in coordinator.active_barriers

@@ -123,8 +123,6 @@ def test_context_access_patterns():
         result = analyze_context.func(task_ctx)
         print(f"Analysis result: {result}")
 
-
-
     # Test iteration pattern
     print("\n2. Testing iteration pattern:")
     with context.executing_task(iteration_example) as task_ctx:
@@ -143,4 +141,5 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"❌ Test failed: {e}")
         import traceback
+
         traceback.print_exc()

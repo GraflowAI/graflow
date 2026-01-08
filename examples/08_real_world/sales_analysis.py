@@ -93,6 +93,7 @@ import pandas as pd
 try:
     import numpy as np
     import pandas as pd
+
     DEPS_AVAILABLE = True
 except ImportError:
     DEPS_AVAILABLE = False
@@ -113,7 +114,7 @@ def check_dependencies():
     return True
 
 
-def generate_sample_sales_data(num_records: int = 1000) -> 'pd.DataFrame':
+def generate_sample_sales_data(num_records: int = 1000) -> "pd.DataFrame":
     """Generate sample sales data for demonstration."""
     start_date = datetime.now() - timedelta(days=365)
 
@@ -130,92 +131,83 @@ def generate_sample_sales_data(num_records: int = 1000) -> 'pd.DataFrame':
         else:
             amount = base_amount * (1 + random.gauss(0, 0.2))  # Normal variation
 
-        data.append({
-            'date': date.strftime('%Y-%m-%d'),
-            'amount': max(0, amount),
-            'customer_id': f'CUST_{random.randint(1, 100):03d}',
-            'product_category': random.choice(['Electronics', 'Clothing', 'Books', 'Home']),
-            'region': random.choice(['North', 'South', 'East', 'West'])
-        })
+        data.append(
+            {
+                "date": date.strftime("%Y-%m-%d"),
+                "amount": max(0, amount),
+                "customer_id": f"CUST_{random.randint(1, 100):03d}",
+                "product_category": random.choice(["Electronics", "Clothing", "Books", "Home"]),
+                "region": random.choice(["North", "South", "East", "West"]),
+            }
+        )
 
     return pd.DataFrame(data)
 
 
-def detect_anomalies(df: 'pd.DataFrame') -> Dict[str, Any]:
+def detect_anomalies(df: "pd.DataFrame") -> Dict[str, Any]:
     """Detect anomalies in sales data using statistical methods."""
-    anomalies = {
-        'outliers': [],
-        'suspicious_patterns': [],
-        'summary': {}
-    }
+    anomalies = {"outliers": [], "suspicious_patterns": [], "summary": {}}
 
     # Calculate statistics
-    mean_amount = df['amount'].mean()
-    std_amount = df['amount'].std()
+    mean_amount = df["amount"].mean()
+    std_amount = df["amount"].std()
     threshold = mean_amount + 3 * std_amount
 
     # Find outliers (amounts more than 3 standard deviations from mean)
-    outliers = df[df['amount'] > threshold]
-    anomalies['outliers'] = outliers.to_dict('records')
+    outliers = df[df["amount"] > threshold]
+    anomalies["outliers"] = outliers.to_dict("records")
 
     # Check for suspicious patterns
-    daily_sales = df.groupby('date')['amount'].sum()
+    daily_sales = df.groupby("date")["amount"].sum()
     daily_mean = daily_sales.mean()
     daily_std = daily_sales.std()
 
     suspicious_days = daily_sales[daily_sales > daily_mean + 2 * daily_std]
-    anomalies['suspicious_patterns'] = [
-        {
-            'date': date,
-            'total_amount': float(amount),
-            'deviation': float(amount - daily_mean)
-        }
+    anomalies["suspicious_patterns"] = [
+        {"date": date, "total_amount": float(amount), "deviation": float(amount - daily_mean)}
         for date, amount in suspicious_days.items()
     ]
 
     # Summary statistics
-    anomalies['summary'] = {
-        'total_records': len(df),
-        'outlier_count': len(outliers),
-        'suspicious_days': len(suspicious_days),
-        'mean_amount': float(mean_amount),
-        'std_amount': float(std_amount),
-        'threshold': float(threshold)
+    anomalies["summary"] = {
+        "total_records": len(df),
+        "outlier_count": len(outliers),
+        "suspicious_days": len(suspicious_days),
+        "mean_amount": float(mean_amount),
+        "std_amount": float(std_amount),
+        "threshold": float(threshold),
     }
 
     return anomalies
 
 
-def generate_detailed_report(df: 'pd.DataFrame', anomalies: Dict[str, Any]) -> Dict[str, Any]:
+def generate_detailed_report(df: "pd.DataFrame", anomalies: Dict[str, Any]) -> Dict[str, Any]:
     """Generate a detailed analysis report."""
     report = {
-        'timestamp': datetime.now().isoformat(),
-        'data_summary': {
-            'total_records': len(df),
-            'date_range': {
-                'start': df['date'].min(),
-                'end': df['date'].max()
-            },
-            'total_sales': float(df['amount'].sum()),
-            'average_sale': float(df['amount'].mean())
+        "timestamp": datetime.now().isoformat(),
+        "data_summary": {
+            "total_records": len(df),
+            "date_range": {"start": df["date"].min(), "end": df["date"].max()},
+            "total_sales": float(df["amount"].sum()),
+            "average_sale": float(df["amount"].mean()),
         },
-        'anomaly_analysis': anomalies,
-        'recommendations': []
+        "anomaly_analysis": anomalies,
+        "recommendations": [],
     }
 
     # Generate recommendations based on findings
-    if anomalies['summary']['outlier_count'] > 0:
-        report['recommendations'].append(
+    if anomalies["summary"]["outlier_count"] > 0:
+        report["recommendations"].append(
             f"Review {anomalies['summary']['outlier_count']} outlier transactions for potential errors or fraud"
         )
 
-    if anomalies['summary']['suspicious_days'] > 0:
-        report['recommendations'].append(
+    if anomalies["summary"]["suspicious_days"] > 0:
+        report["recommendations"].append(
             f"Investigate {anomalies['summary']['suspicious_days']} days with unusually high sales"
         )
 
-    if anomalies['summary']['outlier_count'] == 0 and anomalies['summary']['suspicious_days'] == 0:
-        report['recommendations'].append("No significant anomalies detected. Data appears normal.")
+    if anomalies["summary"]["outlier_count"] == 0 and anomalies["summary"]["suspicious_days"] == 0:
+        report["recommendations"].append("No significant anomalies detected. Data appears normal.")
 
     return report
 
@@ -229,7 +221,7 @@ def request_approval(report: Dict[str, Any]) -> bool:
     print(f"Suspicious patterns: {report['anomaly_analysis']['summary']['suspicious_days']}")
 
     print("\nRecommendations:")
-    for i, rec in enumerate(report['recommendations'], 1):
+    for i, rec in enumerate(report["recommendations"], 1):
         print(f"{i}. {rec}")
 
     # Auto-approve for demo (in real scenario, this would be human input)
@@ -244,22 +236,22 @@ def generate_final_report(detailed_report: Dict[str, Any], approved: bool) -> st
 
     summary = f"""
 SALES ANALYSIS EXECUTIVE SUMMARY
-Generated: {detailed_report['timestamp']}
+Generated: {detailed_report["timestamp"]}
 
 DATA OVERVIEW:
-- Total Records: {detailed_report['data_summary']['total_records']:,}
-- Date Range: {detailed_report['data_summary']['date_range']['start']} to {detailed_report['data_summary']['date_range']['end']}
-- Total Sales: ${detailed_report['data_summary']['total_sales']:,.2f}
-- Average Sale: ${detailed_report['data_summary']['average_sale']:.2f}
+- Total Records: {detailed_report["data_summary"]["total_records"]:,}
+- Date Range: {detailed_report["data_summary"]["date_range"]["start"]} to {detailed_report["data_summary"]["date_range"]["end"]}
+- Total Sales: ${detailed_report["data_summary"]["total_sales"]:,.2f}
+- Average Sale: ${detailed_report["data_summary"]["average_sale"]:.2f}
 
 ANOMALY DETECTION RESULTS:
-- Outlier Transactions: {detailed_report['anomaly_analysis']['summary']['outlier_count']}
-- Suspicious Days: {detailed_report['anomaly_analysis']['summary']['suspicious_days']}
+- Outlier Transactions: {detailed_report["anomaly_analysis"]["summary"]["outlier_count"]}
+- Suspicious Days: {detailed_report["anomaly_analysis"]["summary"]["suspicious_days"]}
 
 RECOMMENDED ACTIONS:
 """
 
-    for i, rec in enumerate(detailed_report['recommendations'], 1):
+    for i, rec in enumerate(detailed_report["recommendations"], 1):
         summary += f"{i}. {rec}\n"
 
     summary += "\nStatus: APPROVED\nNext Review: Quarterly"
@@ -285,7 +277,7 @@ def main():
 
             # Store in channel
             channel = context.get_channel()
-            channel.set('sales_data', df)
+            channel.set("sales_data", df)
 
             print(f"✅ Loaded {len(df)} sales records")
             print(f"Date range: {df['date'].min()} to {df['date'].max()}")
@@ -297,9 +289,9 @@ def main():
             print("\n🔍 Detecting anomalies...")
 
             channel = context.get_channel()
-            df = channel.get('sales_data')
+            df = channel.get("sales_data")
             anomalies = detect_anomalies(df)
-            channel.set('anomalies', anomalies)
+            channel.set("anomalies", anomalies)
 
             print("✅ Analysis complete:")
             print(f"  - Outliers detected: {anomalies['summary']['outlier_count']}")
@@ -312,19 +304,19 @@ def main():
             print("\n📋 Generating detailed report...")
 
             channel = context.get_channel()
-            df = channel.get('sales_data')
-            anomalies = channel.get('anomalies')
+            df = channel.get("sales_data")
+            anomalies = channel.get("anomalies")
 
             report = generate_detailed_report(df, anomalies)
-            channel.set('detailed_report', report)
+            channel.set("detailed_report", report)
 
             print("✅ Detailed report generated")
 
             # Show some key findings
-            if report['anomaly_analysis']['summary']['outlier_count'] > 0:
+            if report["anomaly_analysis"]["summary"]["outlier_count"] > 0:
                 print(f"⚠️  Found {report['anomaly_analysis']['summary']['outlier_count']} outlier transactions")
 
-            if report['anomaly_analysis']['summary']['suspicious_days'] > 0:
+            if report["anomaly_analysis"]["summary"]["suspicious_days"] > 0:
                 print(f"⚠️  Found {report['anomaly_analysis']['summary']['suspicious_days']} suspicious days")
 
         @task(inject_context=True)
@@ -333,9 +325,9 @@ def main():
             print("\n✋ Requesting approval...")
 
             channel = context.get_channel()
-            report = channel.get('detailed_report')
+            report = channel.get("detailed_report")
             approved = request_approval(report)
-            channel.set('approved', approved)
+            channel.set("approved", approved)
 
             if approved:
                 print("✅ Report approved - proceeding to final generation")
@@ -348,19 +340,25 @@ def main():
             print("\n📄 Generating executive summary...")
 
             channel = context.get_channel()
-            report = channel.get('detailed_report')
-            approved = channel.get('approved')
+            report = channel.get("detailed_report")
+            approved = channel.get("approved")
 
             final_report = generate_final_report(report, approved)
-            channel.set('final_report', final_report)
+            channel.set("final_report", final_report)
 
             print("✅ Executive summary generated")
-            print("\n" + "="*60)
+            print("\n" + "=" * 60)
             print(final_report)
-            print("="*60)
+            print("=" * 60)
 
         # Build the workflow pipeline
-        load_sales_data >> detect_data_anomalies >> create_detailed_report >> approval_process >> generate_executive_summary
+        (
+            load_sales_data
+            >> detect_data_anomalies
+            >> create_detailed_report
+            >> approval_process
+            >> generate_executive_summary
+        )
 
         # Show workflow structure
         print("Workflow structure:")

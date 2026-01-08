@@ -14,9 +14,7 @@ class DesignerAgent:
 
     def load_html_template(self) -> str:
         """Load the article HTML template."""
-        template_path = os.path.join(
-            os.path.dirname(__file__), "..", "templates", "article", "index.html"
-        )
+        template_path = os.path.join(os.path.dirname(__file__), "..", "templates", "article", "index.html")
         with open(template_path) as f:
             return f.read()
 

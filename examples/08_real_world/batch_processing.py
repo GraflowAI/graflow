@@ -108,12 +108,7 @@ def main():
             for i in range(num_batches):
                 start_idx = i * batch_size
                 end_idx = start_idx + batch_size - 1
-                batch_info = {
-                    "batch_id": i,
-                    "start": start_idx,
-                    "end": end_idx,
-                    "size": batch_size
-                }
+                batch_info = {"batch_id": i, "start": start_idx, "end": end_idx, "size": batch_size}
                 batches.append(batch_info)
                 print(f"   ✅ Batch {i}: items {start_idx}-{end_idx}")
 
@@ -154,7 +149,7 @@ def main():
                     "processed": batch_size,
                     "success": success_count,
                     "failed": failed_count,
-                    "elapsed": elapsed
+                    "elapsed": elapsed,
                 }
                 results.append(batch_result)
 

@@ -32,9 +32,7 @@ class LiteLLMClient:
         try:
             self._litellm = importlib.import_module("litellm")
         except ImportError as exc:  # pragma: no cover - import guard
-            raise RuntimeError(
-                "liteLLM is not installed. Install it with 'pip install litellm'."
-            ) from exc
+            raise RuntimeError("liteLLM is not installed. Install it with 'pip install litellm'.") from exc
 
         self.model = model
         self.default_params = default_params

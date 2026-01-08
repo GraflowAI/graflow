@@ -72,9 +72,7 @@ class TestDockerTaskHandler:
 
     def test_docker_task_handler_with_environment(self):
         """Test with custom environment variables."""
-        handler = DockerTaskHandler(
-            image="python:3.11-slim", environment={"MY_VAR": "test_value"}
-        )
+        handler = DockerTaskHandler(image="python:3.11-slim", environment={"MY_VAR": "test_value"})
         assert handler.environment == {"MY_VAR": "test_value"}
 
     def test_docker_task_handler_initialization(self):
@@ -102,8 +100,7 @@ class TestDockerTaskHandler:
 
         # Find the graflow volume (the one that's not /host/path)
         graflow_volumes = [
-            (path, config) for path, config in handler.volumes.items()
-            if config.get("bind") == "/graflow_src"
+            (path, config) for path, config in handler.volumes.items() if config.get("bind") == "/graflow_src"
         ]
         assert len(graflow_volumes) == 1, "Should have exactly one graflow source mount"
 

@@ -35,8 +35,8 @@ class TestGraphStore(unittest.TestCase):
         args, kwargs = self.redis_mock.set.call_args
         self.assertEqual(args[0], f"test_prefix:graph:{expected_hash}")
         self.assertEqual(args[1], expected_compressed)
-        self.assertIs(kwargs['nx'], True)
-        self.assertEqual(kwargs['ex'], GraphStore.DEFAULT_TTL)
+        self.assertIs(kwargs["nx"], True)
+        self.assertEqual(kwargs["ex"], GraphStore.DEFAULT_TTL)
 
         # Verify local cache
         self.assertIn(graph_hash, self.graph_store._local_cache)
@@ -68,9 +68,7 @@ class TestGraphStore(unittest.TestCase):
         self.assertIsInstance(loaded_graph, TaskGraph)
 
         # Verify Redis interaction
-        self.redis_mock.getex.assert_called_once_with(
-            f"test_prefix:graph:{graph_hash}", ex=GraphStore.DEFAULT_TTL
-        )
+        self.redis_mock.getex.assert_called_once_with(f"test_prefix:graph:{graph_hash}", ex=GraphStore.DEFAULT_TTL)
 
         # Verify local cache update
         self.assertIn(graph_hash, self.graph_store._local_cache)
@@ -96,5 +94,6 @@ class TestGraphStore(unittest.TestCase):
 
         self.assertIn("Graph snapshot not found", str(cm.exception))
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

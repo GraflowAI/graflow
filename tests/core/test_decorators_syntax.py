@@ -15,7 +15,7 @@ def setup_workflow_context():
     from graflow.core.workflow import WorkflowContext
 
     # Create a new context var and workflow context
-    context_var = ContextVar('test_workflow_context')
+    context_var = ContextVar("test_workflow_context")
     workflow_context = WorkflowContext("test_workflow")
     context_var.set(workflow_context)
     original_context_var = workflow_module._current_context
@@ -29,6 +29,7 @@ def setup_workflow_context():
 
 def test_task_decorator_without_parentheses():
     """Test @task syntax without parentheses."""
+
     @task
     def my_function():
         return "test"
@@ -40,6 +41,7 @@ def test_task_decorator_without_parentheses():
 
 def test_task_decorator_with_empty_parentheses():
     """Test @task() syntax with empty parentheses."""
+
     @task()
     def my_function():
         return "test"
@@ -51,6 +53,7 @@ def test_task_decorator_with_empty_parentheses():
 
 def test_task_decorator_with_string_id():
     """Test @task('task_id') syntax."""
+
     @task("custom_task_id")
     def my_function():
         return "test"
@@ -62,6 +65,7 @@ def test_task_decorator_with_string_id():
 
 def test_task_decorator_with_keyword_id():
     """Test @task(id='task_id') syntax."""
+
     @task(id="custom_task_id")
     def my_function():
         return "test"
@@ -73,6 +77,7 @@ def test_task_decorator_with_keyword_id():
 
 def test_task_decorator_with_inject_context():
     """Test @task(inject_context=True) syntax."""
+
     @task(inject_context=True)
     def my_function():
         return "test"
@@ -84,6 +89,7 @@ def test_task_decorator_with_inject_context():
 
 def test_task_decorator_with_string_and_inject_context():
     """Test @task('task_id') with inject_context."""
+
     @task("custom_id")
     def my_function():
         return "test"
@@ -96,6 +102,7 @@ def test_task_decorator_with_string_and_inject_context():
 
 def test_task_decorator_mixed_syntax_equivalence():
     """Test that @task('id') and @task(id='id') produce equivalent results."""
+
     @task("test_id_1")
     def func1():
         return "test1"
@@ -114,6 +121,7 @@ def test_task_decorator_mixed_syntax_equivalence():
 
 def test_task_decorator_with_string_and_inject_context_keyword():
     """Test @task('task_id', inject_context=True) syntax."""
+
     @task("custom_id_with_context", inject_context=True)
     def my_function():
         return "test"

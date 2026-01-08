@@ -5,6 +5,7 @@ from __future__ import annotations
 # Optional dotenv import
 try:
     from dotenv import load_dotenv as _load_dotenv  # type: ignore[import-not-found]
+
     DOTENV_AVAILABLE = True
 except ImportError:
     DOTENV_AVAILABLE = False

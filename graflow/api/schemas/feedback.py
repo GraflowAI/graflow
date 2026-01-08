@@ -33,16 +33,10 @@ class FeedbackResponseRequest(BaseModel):
                 {
                     "approved": True,
                     "reason": "Approved by manager - deployment looks good",
-                    "responded_by": "alice@example.com"
+                    "responded_by": "alice@example.com",
                 },
-                {
-                    "text": "Please fix the typos in section 3 before proceeding",
-                    "responded_by": "bob@example.com"
-                },
-                {
-                    "selected": "option_b",
-                    "responded_by": "charlie@example.com"
-                }
+                {"text": "Please fix the typos in section 3 before proceeding", "responded_by": "bob@example.com"},
+                {"selected": "option_b", "responded_by": "charlie@example.com"},
             ]
         }
     }
@@ -78,7 +72,7 @@ class FeedbackRequestResponse(BaseModel):
                 "timeout": 180.0,
                 "metadata": {"environment": "production"},
                 "channel_key": None,
-                "write_to_channel": False
+                "write_to_channel": False,
             }
         }
     }
@@ -110,7 +104,7 @@ class FeedbackResponseDetails(BaseModel):
                 "selected_multiple": None,
                 "custom_data": None,
                 "responded_at": "2025-01-28T10:02:30Z",
-                "responded_by": "alice@example.com"
+                "responded_by": "alice@example.com",
             }
         }
     }
@@ -137,7 +131,7 @@ class FeedbackDetailResponse(BaseModel):
                     "timeout": 180.0,
                     "metadata": {},
                     "channel_key": None,
-                    "write_to_channel": False
+                    "write_to_channel": False,
                 },
                 "response": {
                     "feedback_id": "deploy_task_abc12345",
@@ -149,8 +143,8 @@ class FeedbackDetailResponse(BaseModel):
                     "selected_multiple": None,
                     "custom_data": None,
                     "responded_at": "2025-01-28T10:02:30Z",
-                    "responded_by": "alice@example.com"
-                }
+                    "responded_by": "alice@example.com",
+                },
             }
         }
     }
@@ -166,7 +160,7 @@ class MessageResponse(BaseModel):
         "json_schema_extra": {
             "examples": [
                 {"message": "Feedback provided successfully", "feedback_id": "deploy_task_abc12345"},
-                {"message": "Feedback request cancelled", "feedback_id": "deploy_task_abc12345"}
+                {"message": "Feedback request cancelled", "feedback_id": "deploy_task_abc12345"},
             ]
         }
     }
@@ -195,9 +189,9 @@ class PendingFeedbackListResponse(BaseModel):
                         "timeout": 180.0,
                         "metadata": {},
                         "channel_key": None,
-                        "write_to_channel": False
+                        "write_to_channel": False,
                     }
-                ]
+                ],
             }
         }
     }

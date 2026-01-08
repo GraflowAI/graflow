@@ -66,7 +66,7 @@ def example_1_sequential():
 
         # Sequential: step_1 then step_2 then step_3
         # Each step waits for the previous one to complete
-        step_1 >> step_2 >> step_3 # type: ignore
+        step_1 >> step_2 >> step_3  # type: ignore
 
         ctx.execute("step_1")
 
@@ -97,7 +97,7 @@ def example_2_parallel():
 
         # Parallel: task_a, task_b, and task_c can run concurrently
         # Then combine runs after all three complete
-        (task_a | task_b | task_c).set_group_name("parallel_tasks") >> combine # type: ignore
+        (task_a | task_b | task_c).set_group_name("parallel_tasks") >> combine  # type: ignore
 
         ctx.execute("parallel_tasks")
 
@@ -134,7 +134,7 @@ def example_3_mixed():
         # 1. fetch runs first
         # 2. transform_a and transform_b run in parallel (fan-out)
         # 3. store runs after both transforms complete (fan-in)
-        fetch >> (transform_a | transform_b) >> store # type: ignore
+        fetch >> (transform_a | transform_b) >> store  # type: ignore
         print(f"Graph:\n {ctx.graph}")
 
         ctx.execute("fetch")

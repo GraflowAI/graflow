@@ -40,21 +40,13 @@ def feedback_manager_filesystem(tmp_path):
     feedback_dir = tmp_path / "feedback_data"
     feedback_dir.mkdir()
 
-    return FeedbackManager(
-        backend="filesystem",
-        backend_config={"data_dir": str(feedback_dir)}
-    )
+    return FeedbackManager(backend="filesystem", backend_config={"data_dir": str(feedback_dir)})
 
 
 class TestFeedbackCheckpointScenario:
     """Scenario tests for HITL feedback with checkpoint resume."""
 
-    def test_timeout_checkpoint_api_feedback_resume(
-        self,
-        tmp_path,
-        temp_checkpoint_dir,
-        feedback_manager_filesystem
-    ):
+    def test_timeout_checkpoint_api_feedback_resume(self, tmp_path, temp_checkpoint_dir, feedback_manager_filesystem):
         """Complete scenario: timeout -> checkpoint -> API feedback -> resume.
 
         This test simulates the real-world HITL workflow:
@@ -70,6 +62,7 @@ class TestFeedbackCheckpointScenario:
 
         # Step 1: Define workflow with feedback request
         with workflow("deployment_approval") as wf:
+
             @task(inject_context=True)
             def request_deployment_approval(context):
                 """Request deployment approval with short timeout."""
@@ -97,12 +90,7 @@ class TestFeedbackCheckpointScenario:
             assert len(start_nodes) == 1
             start_node = start_nodes[0]
 
-            exec_context = ExecutionContext.create(
-                wf.graph,
-                start_node=start_node,
-                channel_backend="memory",
-                config={}
-            )
+            exec_context = ExecutionContext.create(wf.graph, start_node=start_node, channel_backend="memory", config={})
 
             # Inject feedback manager
             exec_context.feedback_manager = feedback_manager_filesystem
@@ -138,14 +126,11 @@ class TestFeedbackCheckpointScenario:
             approved=True,
             reason="Approved by DevOps team",
             responded_at=time.strftime("%Y-%m-%dT%H:%M:%S"),
-            responded_by="devops@example.com"
+            responded_by="devops@example.com",
         )
 
         # Submit feedback via FeedbackManager (simulates API endpoint behavior)
-        success = feedback_manager_filesystem.provide_feedback(
-            feedback_id,
-            feedback_response
-        )
+        success = feedback_manager_filesystem.provide_feedback(feedback_id, feedback_response)
         assert success is True
         print("[Test] Feedback submitted successfully")
 
@@ -168,12 +153,7 @@ class TestFeedbackCheckpointScenario:
         # Cleanup
         os.remove(checkpoint_path)
 
-    def test_timeout_checkpoint_rejection_resume(
-        self,
-        tmp_path,
-        temp_checkpoint_dir,
-        feedback_manager_filesystem
-    ):
+    def test_timeout_checkpoint_rejection_resume(self, tmp_path, temp_checkpoint_dir, feedback_manager_filesystem):
         """Scenario: timeout -> checkpoint -> reject via API -> resume -> cancelled.
 
         This tests the rejection path of the approval workflow.
@@ -183,6 +163,7 @@ class TestFeedbackCheckpointScenario:
 
         # Define workflow
         with workflow("deployment_with_rejection") as wf:
+
             @task(inject_context=True)
             def request_approval(context):
                 """Request approval."""
@@ -200,7 +181,7 @@ class TestFeedbackCheckpointScenario:
                 approved = channel.get("request_approval.__result__")
                 return "EXECUTED" if approved else "SKIPPED"
 
-            _ =request_approval >> execute_if_approved
+            _ = request_approval >> execute_if_approved
 
             # Create context
             # Find start node from graph
@@ -208,12 +189,7 @@ class TestFeedbackCheckpointScenario:
             assert len(start_nodes) == 1
             start_node = start_nodes[0]
 
-            exec_context = ExecutionContext.create(
-                wf.graph,
-                start_node=start_node,
-                channel_backend="memory",
-                config={}
-            )
+            exec_context = ExecutionContext.create(wf.graph, start_node=start_node, channel_backend="memory", config={})
             exec_context.feedback_manager = feedback_manager_filesystem
 
             # Execute and expect timeout
@@ -241,13 +217,10 @@ class TestFeedbackCheckpointScenario:
             approved=False,  # REJECTED
             reason="Too risky, need more testing",
             responded_at=time.strftime("%Y-%m-%dT%H:%M:%S"),
-            responded_by="security@example.com"
+            responded_by="security@example.com",
         )
 
-        success = feedback_manager_filesystem.provide_feedback(
-            feedback_id,
-            feedback_response
-        )
+        success = feedback_manager_filesystem.provide_feedback(feedback_id, feedback_response)
         assert success is True
 
         # Resume from checkpoint
@@ -263,12 +236,7 @@ class TestFeedbackCheckpointScenario:
         # Cleanup
         os.remove(checkpoint_path)
 
-    def test_timeout_checkpoint_text_feedback_resume(
-        self,
-        tmp_path,
-        temp_checkpoint_dir,
-        feedback_manager_filesystem
-    ):
+    def test_timeout_checkpoint_text_feedback_resume(self, tmp_path, temp_checkpoint_dir, feedback_manager_filesystem):
         """Scenario: text feedback timeout -> API response -> resume.
 
         Tests non-approval feedback type (text input).
@@ -278,6 +246,7 @@ class TestFeedbackCheckpointScenario:
 
         # Define workflow with text feedback
         with workflow("code_review") as wf:
+
             @task(inject_context=True)
             def request_review_comment(context):
                 """Request code review comment."""
@@ -303,12 +272,7 @@ class TestFeedbackCheckpointScenario:
             assert len(start_nodes) == 1
             start_node = start_nodes[0]
 
-            exec_context = ExecutionContext.create(
-                wf.graph,
-                start_node=start_node,
-                channel_backend="memory",
-                config={}
-            )
+            exec_context = ExecutionContext.create(wf.graph, start_node=start_node, channel_backend="memory", config={})
             exec_context.feedback_manager = feedback_manager_filesystem
 
             # Execute and expect timeout
@@ -335,13 +299,10 @@ class TestFeedbackCheckpointScenario:
             response_type=FeedbackType.TEXT,
             text="Code looks good, but please add more unit tests for edge cases.",
             responded_at=time.strftime("%Y-%m-%dT%H:%M:%S"),
-            responded_by="reviewer@example.com"
+            responded_by="reviewer@example.com",
         )
 
-        success = feedback_manager_filesystem.provide_feedback(
-            feedback_id,
-            feedback_response
-        )
+        success = feedback_manager_filesystem.provide_feedback(feedback_id, feedback_response)
         assert success is True
 
         # Resume from checkpoint

@@ -54,9 +54,7 @@ class CriticalLimitedFailuresPolicy(GroupExecutionPolicy):
         task_ids = {task.task_id for task in tasks}
         missing = self._critical_task_ids - task_ids
         if missing:
-            raise ValueError(
-                f"Critical task ids {sorted(missing)} are not part of group {group_id}"
-            )
+            raise ValueError(f"Critical task ids {sorted(missing)} are not part of group {group_id}")
 
         successful_tasks, failed_tasks = self._partition_group_results(results)
 
@@ -123,12 +121,7 @@ def example_custom_policy():
             print("  [warm_feature_flags] Warming feature flags ...")
             return "flags_ready"
 
-        deployment = (
-            provision_database
-            | seed_reference_data
-            | invalidate_cache
-            | warm_feature_flags
-        ).with_execution(
+        deployment = (provision_database | seed_reference_data | invalidate_cache | warm_feature_flags).with_execution(
             backend=CoordinationBackend.THREADING,
             policy=CriticalLimitedFailuresPolicy(
                 critical_task_ids=["provision_database"],

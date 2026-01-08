@@ -24,17 +24,13 @@ class LocalTaskQueue(TaskQueue):
                 start_task = execution_context.graph.get_node(start_node)
 
                 if start_task:
-                    task_spec = TaskSpec(
-                        executable=start_task,
-                        execution_context=execution_context
-                    )
+                    task_spec = TaskSpec(executable=start_task, execution_context=execution_context)
                     self._queue.append(task_spec)
                     self._task_specs[start_node] = task_spec
                 else:
                     available_nodes = list(execution_context.graph.nodes.keys())
                     self._logger.warning(
-                        f"Start node '{start_node}' not found in graph. "
-                        f"Available nodes: {available_nodes}"
+                        f"Start node '{start_node}' not found in graph. Available nodes: {available_nodes}"
                     )
             except (AttributeError, KeyError) as e:
                 # Graph might not be fully deserialized yet during unpickling
@@ -50,7 +46,7 @@ class LocalTaskQueue(TaskQueue):
         self._task_specs[task_spec.task_id] = task_spec
 
         if self.enable_metrics:
-            self.metrics['enqueued'] += 1
+            self.metrics["enqueued"] += 1
 
         return True
 
@@ -61,7 +57,7 @@ class LocalTaskQueue(TaskQueue):
             task_spec.status = TaskStatus.RUNNING
 
             if self.enable_metrics:
-                self.metrics['dequeued'] += 1
+                self.metrics["dequeued"] += 1
 
             return task_spec
         return None

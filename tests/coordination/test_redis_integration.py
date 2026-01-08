@@ -13,7 +13,9 @@ from graflow.core.task import TaskWrapper
 from graflow.queue.distributed import DistributedTaskQueue
 
 
-def create_coordinator(redis_client, key_prefix: str = "test") -> tuple[RedisCoordinator, ExecutionContext, DistributedTaskQueue]:
+def create_coordinator(
+    redis_client, key_prefix: str = "test"
+) -> tuple[RedisCoordinator, ExecutionContext, DistributedTaskQueue]:
     """Helper to create coordinator with backing queue/context."""
     graph = TaskGraph()
     context = ExecutionContext(graph)
@@ -53,12 +55,8 @@ class TestRedisCoordinatorIntegration:
         time.sleep(0.1)
 
         # Simulate workers completing tasks
-        record_task_completion(
-            clean_redis, queue.key_prefix, "task_1", barrier_id, True
-        )
-        record_task_completion(
-            clean_redis, queue.key_prefix, "task_2", barrier_id, True
-        )
+        record_task_completion(clean_redis, queue.key_prefix, "task_1", barrier_id, True)
+        record_task_completion(clean_redis, queue.key_prefix, "task_2", barrier_id, True)
 
         producer_thread.join()
 
@@ -203,9 +201,7 @@ class TestRedisCoordinatorIntegration:
         # Simulate 3 workers completing tasks concurrently
         def worker(worker_id):
             time.sleep(0.1)  # Simulate some work
-            record_task_completion(
-                clean_redis, queue.key_prefix, f"task_{worker_id}", "concurrent_test", True
-            )
+            record_task_completion(clean_redis, queue.key_prefix, f"task_{worker_id}", "concurrent_test", True)
 
         worker_threads = []
         for i in range(3):
@@ -239,12 +235,8 @@ class TestRedisCoordinatorIntegration:
         coordinator.create_barrier(barrier_id, 2)
 
         # Workers complete IMMEDIATELY (before producer waits)
-        record_task_completion(
-            clean_redis, queue.key_prefix, "task_1", barrier_id, True
-        )
-        record_task_completion(
-            clean_redis, queue.key_prefix, "task_2", barrier_id, True
-        )
+        record_task_completion(clean_redis, queue.key_prefix, "task_1", barrier_id, True)
+        record_task_completion(clean_redis, queue.key_prefix, "task_2", barrier_id, True)
 
         # Now producer waits (should detect completion immediately)
         result = coordinator.wait_barrier(barrier_id, timeout=5)

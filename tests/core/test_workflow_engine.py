@@ -21,9 +21,9 @@ class TestWorkflowEngine:
         engine = WorkflowEngine()
 
         # Check that handlers dict exists
-        assert hasattr(engine, '_handlers')
-        assert 'direct' in engine._handlers
-        assert isinstance(engine._handlers['direct'], DirectTaskHandler)
+        assert hasattr(engine, "_handlers")
+        assert "direct" in engine._handlers
+        assert isinstance(engine._handlers["direct"], DirectTaskHandler)
 
     def test_register_handler(self):
         """Test registering custom handler."""
@@ -33,11 +33,11 @@ class TestWorkflowEngine:
         mock_handler = Mock(spec=TaskHandler)
 
         # Register handler
-        engine.register_handler('custom', mock_handler)
+        engine.register_handler("custom", mock_handler)
 
         # Verify registration
-        assert 'custom' in engine._handlers
-        assert engine._handlers['custom'] is mock_handler
+        assert "custom" in engine._handlers
+        assert engine._handlers["custom"] is mock_handler
 
     def test_get_handler_default(self):
         """Test getting default handler for task without handler_type."""
@@ -45,7 +45,7 @@ class TestWorkflowEngine:
 
         # Create task without explicit handler_type
         mock_task = Mock()
-        mock_task.handler_type = 'direct'
+        mock_task.handler_type = "direct"
 
         handler = engine._get_handler(mock_task)
 
@@ -57,7 +57,7 @@ class TestWorkflowEngine:
 
         # Create task with unknown handler type
         mock_task = Mock()
-        mock_task.handler_type = 'nonexistent'
+        mock_task.handler_type = "nonexistent"
 
         with pytest.raises(ValueError, match="Unknown handler type: nonexistent"):
             engine._get_handler(mock_task)
@@ -69,10 +69,10 @@ class TestWorkflowEngine:
 
         @task
         def simple_task():
-            return 'test_result'
+            return "test_result"
 
         # Add task to graph
-        graph.add_node(simple_task, 'simple_task')
+        graph.add_node(simple_task, "simple_task")
 
         # Create context
         context = ExecutionContext.create(graph)
@@ -86,9 +86,9 @@ class TestWorkflowEngine:
         engine.execute(context)
 
         # Verify result
-        result = context.get_result('simple_task')
-        assert result == 'test_result'
-        assert simple_task.handler_type == 'direct'
+        result = context.get_result("simple_task")
+        assert result == "test_result"
+        assert simple_task.handler_type == "direct"
 
     def test_execute_task_with_custom_handler_type(self):
         """Test task with custom handler_type attribute."""
@@ -97,17 +97,17 @@ class TestWorkflowEngine:
 
         # Create engine and register handler
         engine = WorkflowEngine()
-        engine.register_handler('custom', mock_handler)
+        engine.register_handler("custom", mock_handler)
 
         # Create graph and context
         graph = TaskGraph()
 
-        @task(handler='custom')
+        @task(handler="custom")
         def custom_task():
-            return 'custom_result'
+            return "custom_result"
 
         # Add task to graph
-        graph.add_node(custom_task, 'custom_task')
+        graph.add_node(custom_task, "custom_task")
 
         # Create context
         context = ExecutionContext.create(graph)
@@ -121,7 +121,7 @@ class TestWorkflowEngine:
 
         # Verify mock handler was called
         mock_handler.execute_task.assert_called_once_with(custom_task, context)
-        assert custom_task.handler_type == 'custom'
+        assert custom_task.handler_type == "custom"
 
     def test_execute_workflow_with_multiple_tasks(self):
         """Test executing workflow with multiple tasks."""
@@ -130,16 +130,16 @@ class TestWorkflowEngine:
 
         @task
         def task_a():
-            return 'A_result'
+            return "A_result"
 
         @task
         def task_b():
-            return 'B_result'
+            return "B_result"
 
         # Add tasks to graph
-        graph.add_node(task_a, 'task_a')
-        graph.add_node(task_b, 'task_b')
-        graph.add_edge('task_a', 'task_b')
+        graph.add_node(task_a, "task_a")
+        graph.add_node(task_b, "task_b")
+        graph.add_edge("task_a", "task_b")
 
         # Create context
         context = ExecutionContext.create(graph)
@@ -154,8 +154,8 @@ class TestWorkflowEngine:
         engine.execute(context)
 
         # Verify results
-        assert context.get_result('task_a') == 'A_result'
-        assert context.get_result('task_b') == 'B_result'
+        assert context.get_result("task_a") == "A_result"
+        assert context.get_result("task_b") == "B_result"
 
     def test_execute_task_with_exception(self):
         """Test handling exceptions during task execution."""
@@ -167,7 +167,7 @@ class TestWorkflowEngine:
             raise ValueError("Task failed")
 
         # Add task to graph
-        graph.add_node(failing_task, 'failing_task')
+        graph.add_node(failing_task, "failing_task")
 
         # Create context
         context = ExecutionContext.create(graph)
@@ -187,6 +187,6 @@ class TestWorkflowEngine:
         assert str(exc_info.value.cause) == "Task failed"
 
         # Verify exception was stored
-        result = context.get_result('failing_task')
+        result = context.get_result("failing_task")
         assert isinstance(result, ValueError)
         assert str(result) == "Task failed"

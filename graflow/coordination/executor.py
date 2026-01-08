@@ -43,9 +43,7 @@ class GroupExecutor:
 
     @staticmethod
     def _create_coordinator(
-        backend: CoordinationBackend,
-        config: Dict[str, Any],
-        exec_context: ExecutionContext
+        backend: CoordinationBackend, config: Dict[str, Any], exec_context: ExecutionContext
     ) -> TaskCoordinator:
         """Create appropriate coordinator based on backend."""
         if backend == CoordinationBackend.REDIS:
@@ -54,16 +52,13 @@ class GroupExecutor:
 
             # Ensure decode_responses=True for DistributedTaskQueue
             # (only set if not already specified)
-            if 'decode_responses' not in config:
-                config = {**config, 'decode_responses': True}
+            if "decode_responses" not in config:
+                config = {**config, "decode_responses": True}
 
             try:
                 redis_client = create_redis_client(config)
                 key_prefix = config.get("key_prefix", "graflow")
-                task_queue = DistributedTaskQueue(
-                    redis_client=redis_client,
-                    key_prefix=key_prefix
-                )
+                task_queue = DistributedTaskQueue(redis_client=redis_client, key_prefix=key_prefix)
             except ImportError as e:
                 raise ImportError("Redis backend requires 'redis' package") from e
 
@@ -102,10 +97,11 @@ class GroupExecutor:
 
         # Merge context config with backend config
         # backend_config takes precedence over context config
-        context_config = getattr(exec_context, 'config', {})
+        context_config = getattr(exec_context, "config", {})
         config = {**context_config, **(backend_config or {})}
 
         from graflow.core.handlers.group_policy import resolve_group_policy
+
         policy_instance = resolve_group_policy(policy)
 
         if resolved_backend == CoordinationBackend.DIRECT:
@@ -119,7 +115,7 @@ class GroupExecutor:
         group_id: str,
         tasks: List[Executable],
         execution_context: ExecutionContext,
-        policy_instance: GroupExecutionPolicy
+        policy_instance: GroupExecutionPolicy,
     ) -> None:
         """Execute tasks using unified WorkflowEngine for consistency."""
         from graflow.core.handler import TaskResult
@@ -129,7 +125,7 @@ class GroupExecutor:
             "Running parallel group: %s with %d tasks",
             group_id,
             len(tasks),
-            extra={"group_id": group_id, "task_ids": task_ids}
+            extra={"group_id": group_id, "task_ids": task_ids},
         )
         logger.debug("Direct tasks: %s", task_ids)
 
@@ -152,7 +148,7 @@ class GroupExecutor:
                     "Task failed in parallel group: %s",
                     task.task_id,
                     exc_info=True,
-                    extra={"group_id": group_id, "error": str(e)}
+                    extra={"group_id": group_id, "error": str(e)},
                 )
                 success = False
                 error_message = str(e)
@@ -162,7 +158,7 @@ class GroupExecutor:
                 success=success,
                 error_message=error_message,
                 duration=time.time() - start_time,
-                timestamp=time.time()
+                timestamp=time.time(),
             )
 
         logger.info(
@@ -171,8 +167,8 @@ class GroupExecutor:
             extra={
                 "group_id": group_id,
                 "task_count": len(tasks),
-                "success_count": sum(1 for r in results.values() if r.success)
-            }
+                "success_count": sum(1 for r in results.values() if r.success),
+            },
         )
 
         # Use GroupExecutionPolicy directly instead of handler

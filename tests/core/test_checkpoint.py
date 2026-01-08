@@ -37,7 +37,7 @@ class TestCheckpointMetadata:
             steps=5,
             start_node="task_a",
             backend={"channel": "memory"},
-            user_metadata={"project": "test_project", "version": "1.0"}
+            user_metadata={"project": "test_project", "version": "1.0"},
         )
 
         assert metadata.checkpoint_id == "test_checkpoint_123"
@@ -56,7 +56,7 @@ class TestCheckpointMetadata:
             steps=3,
             start_node="start",
             backend={"channel": "redis"},
-            user_metadata={"env": "test"}
+            user_metadata={"env": "test"},
         )
 
         metadata_dict = metadata.to_dict()
@@ -79,7 +79,7 @@ class TestCheckpointMetadata:
             "steps": 7,
             "start_node": "initial_task",
             "backend": {"channel": "redis"},
-            "user_metadata": {"owner": "alice"}
+            "user_metadata": {"owner": "alice"},
         }
 
         metadata = CheckpointMetadata.from_dict(data)
@@ -100,7 +100,7 @@ class TestCheckpointMetadata:
             steps=10,
             start_node="node_x",
             backend={"channel": "memory"},
-            user_metadata={"test": "roundtrip"}
+            user_metadata={"test": "roundtrip"},
         )
 
         # Convert to dict and back
@@ -199,10 +199,7 @@ class TestCheckpointCreation:
             checkpoint_path = os.path.join(tmpdir, "test_checkpoint")
 
             # Create checkpoint
-            pkl_path, metadata = CheckpointManager.create_checkpoint(
-                context,
-                path=checkpoint_path
-            )
+            pkl_path, metadata = CheckpointManager.create_checkpoint(context, path=checkpoint_path)
 
             # Verify checkpoint files exist
             assert os.path.exists(pkl_path)
@@ -236,10 +233,7 @@ class TestCheckpointCreation:
         with tempfile.TemporaryDirectory() as tmpdir:
             checkpoint_path = os.path.join(tmpdir, "checkpoint_with_state")
 
-            pkl_path, metadata = CheckpointManager.create_checkpoint(
-                context,
-                path=checkpoint_path
-            )
+            pkl_path, metadata = CheckpointManager.create_checkpoint(context, path=checkpoint_path)
 
             # Verify state file contains execution state
             with open(f"{checkpoint_path}.state.json") as f:
@@ -259,16 +253,14 @@ class TestCheckpointCreation:
             "project": "workflow_project",
             "version": "2.0",
             "author": "test_user",
-            "tags": ["production", "critical"]
+            "tags": ["production", "critical"],
         }
 
         with tempfile.TemporaryDirectory() as tmpdir:
             checkpoint_path = os.path.join(tmpdir, "checkpoint_metadata")
 
             pkl_path, metadata = CheckpointManager.create_checkpoint(
-                context,
-                path=checkpoint_path,
-                metadata=user_metadata
+                context, path=checkpoint_path, metadata=user_metadata
             )
 
             # Verify user metadata in metadata file
@@ -299,10 +291,7 @@ class TestCheckpointCreation:
             checkpoint_path = os.path.join(tmpdir, "checkpoint_pending")
 
             # Create checkpoint before execution
-            pkl_path, metadata = CheckpointManager.create_checkpoint(
-                context,
-                path=checkpoint_path
-            )
+            pkl_path, metadata = CheckpointManager.create_checkpoint(context, path=checkpoint_path)
 
             # Verify pending tasks in state file
             with open(f"{checkpoint_path}.state.json") as f:
@@ -324,9 +313,7 @@ class TestCheckpointCreation:
             checkpoint_path = os.path.join(tmpdir, "checkpoint_current")
 
             pkl_path, metadata = CheckpointManager.create_checkpoint(
-                context,
-                path=checkpoint_path,
-                resuming_task_id="running_task"
+                context, path=checkpoint_path, resuming_task_id="running_task"
             )
 
             # Verify resuming_task_id is stored in state
@@ -371,10 +358,7 @@ class TestCheckpointCreation:
         with tempfile.TemporaryDirectory() as tmpdir:
             checkpoint_path = os.path.join(tmpdir, "checkpoint_context")
 
-            pkl_path, metadata = CheckpointManager.create_checkpoint(
-                context,
-                path=checkpoint_path
-            )
+            pkl_path, metadata = CheckpointManager.create_checkpoint(context, path=checkpoint_path)
 
             # Verify context was updated with checkpoint info
             assert context.last_checkpoint_path == pkl_path
@@ -404,10 +388,7 @@ class TestCheckpointRestoration:
             checkpoint_path = os.path.join(tmpdir, "resume_test")
 
             # Create checkpoint
-            pkl_path, _ = CheckpointManager.create_checkpoint(
-                original_context,
-                path=checkpoint_path
-            )
+            pkl_path, _ = CheckpointManager.create_checkpoint(original_context, path=checkpoint_path)
 
             # Resume from checkpoint
             restored_context, metadata = CheckpointManager.resume_from_checkpoint(pkl_path)
@@ -445,10 +426,7 @@ class TestCheckpointRestoration:
         with tempfile.TemporaryDirectory() as tmpdir:
             checkpoint_path = os.path.join(tmpdir, "state_test")
 
-            pkl_path, _ = CheckpointManager.create_checkpoint(
-                original_context,
-                path=checkpoint_path
-            )
+            pkl_path, _ = CheckpointManager.create_checkpoint(original_context, path=checkpoint_path)
 
             restored_context, metadata = CheckpointManager.resume_from_checkpoint(pkl_path)
 
@@ -481,10 +459,7 @@ class TestCheckpointRestoration:
             checkpoint_path = os.path.join(tmpdir, "pending_test")
 
             # Create checkpoint before execution
-            pkl_path, _ = CheckpointManager.create_checkpoint(
-                original_context,
-                path=checkpoint_path
-            )
+            pkl_path, _ = CheckpointManager.create_checkpoint(original_context, path=checkpoint_path)
 
             # Resume and verify queue is restored
             restored_context, metadata = CheckpointManager.resume_from_checkpoint(pkl_path)
@@ -505,9 +480,7 @@ class TestCheckpointRestoration:
             checkpoint_path = os.path.join(tmpdir, "metadata_test")
 
             pkl_path, original_metadata = CheckpointManager.create_checkpoint(
-                original_context,
-                path=checkpoint_path,
-                metadata=user_metadata
+                original_context, path=checkpoint_path, metadata=user_metadata
             )
 
             restored_context, restored_metadata = CheckpointManager.resume_from_checkpoint(pkl_path)
@@ -529,10 +502,7 @@ class TestCheckpointRestoration:
         with tempfile.TemporaryDirectory() as tmpdir:
             checkpoint_path = os.path.join(tmpdir, "clear_test")
 
-            pkl_path, _ = CheckpointManager.create_checkpoint(
-                original_context,
-                path=checkpoint_path
-            )
+            pkl_path, _ = CheckpointManager.create_checkpoint(original_context, path=checkpoint_path)
 
             # Resume should clear checkpoint request
             restored_context, _ = CheckpointManager.resume_from_checkpoint(pkl_path)
@@ -585,10 +555,7 @@ class TestCheckpointErrorHandling:
             checkpoint_path = os.path.join(tmpdir, "corrupted")
 
             # Create valid checkpoint
-            pkl_path, _ = CheckpointManager.create_checkpoint(
-                context,
-                path=checkpoint_path
-            )
+            pkl_path, _ = CheckpointManager.create_checkpoint(context, path=checkpoint_path)
 
             # Corrupt the state file
             state_path = f"{checkpoint_path}.state.json"
@@ -608,10 +575,7 @@ class TestCheckpointErrorHandling:
             checkpoint_path = os.path.join(tmpdir, "corrupted_meta")
 
             # Create valid checkpoint
-            pkl_path, _ = CheckpointManager.create_checkpoint(
-                context,
-                path=checkpoint_path
-            )
+            pkl_path, _ = CheckpointManager.create_checkpoint(context, path=checkpoint_path)
 
             # Corrupt the metadata file
             meta_path = f"{checkpoint_path}.meta.json"
@@ -665,10 +629,7 @@ class TestCheckpointIntegration:
             checkpoint_path = os.path.join(tmpdir, "workflow_checkpoint")
 
             # Create checkpoint after first step
-            pkl_path, metadata = CheckpointManager.create_checkpoint(
-                context,
-                path=checkpoint_path
-            )
+            pkl_path, metadata = CheckpointManager.create_checkpoint(context, path=checkpoint_path)
 
             # Resume from checkpoint
             restored_context, restored_metadata = CheckpointManager.resume_from_checkpoint(pkl_path)
@@ -771,7 +732,7 @@ class TestCheckpointIntegration:
 
         @task("task_c")
         def task_c_func(x: int) -> int:
-            return x ** 2
+            return x**2
 
         # Add tasks to graph with dependencies
         graph.add_node(task_a_func, "task_a")
@@ -793,10 +754,7 @@ class TestCheckpointIntegration:
             checkpoint_path = os.path.join(tmpdir, "graph_checkpoint")
 
             # Create checkpoint
-            pkl_path, _ = CheckpointManager.create_checkpoint(
-                context,
-                path=checkpoint_path
-            )
+            pkl_path, _ = CheckpointManager.create_checkpoint(context, path=checkpoint_path)
 
             # Resume from checkpoint
             restored_context, _ = CheckpointManager.resume_from_checkpoint(pkl_path)
@@ -827,10 +785,7 @@ class TestCheckpointIntegration:
             serialized = CheckpointManager._serialize_task_spec(task_spec)
 
             # Deserialize using restored context (should retrieve from graph)
-            deserialized = CheckpointManager._deserialize_task_spec(
-                serialized,
-                restored_context
-            )
+            deserialized = CheckpointManager._deserialize_task_spec(serialized, restored_context)
 
             # Verify deserialized task is from the graph
             graph_task = restored_context.graph.get_node("task_a")

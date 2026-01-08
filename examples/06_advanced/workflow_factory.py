@@ -72,6 +72,7 @@ def create_etl_pipeline(name: str, source: str = "default") -> WorkflowContext:
     ctx = workflow(name)
 
     with ctx:
+
         @task
         def load():
             """Load data from source."""
@@ -96,11 +97,7 @@ def create_etl_pipeline(name: str, source: str = "default") -> WorkflowContext:
     return ctx
 
 
-def create_ml_pipeline(
-    name: str,
-    model_type: str = "linear",
-    epochs: int = 10
-) -> WorkflowContext:
+def create_ml_pipeline(name: str, model_type: str = "linear", epochs: int = 10) -> WorkflowContext:
     """Factory function for creating ML training workflows.
 
     Args:
@@ -114,6 +111,7 @@ def create_ml_pipeline(
     ctx = workflow(name)
 
     with ctx:
+
         @task
         def prepare_data():
             """Prepare training data."""
@@ -144,10 +142,7 @@ def create_ml_pipeline(
     return ctx
 
 
-def create_data_validation_pipeline(
-    name: str,
-    rules: Optional[list] = None
-) -> WorkflowContext:
+def create_data_validation_pipeline(name: str, rules: Optional[list] = None) -> WorkflowContext:
     """Factory for data validation workflows.
 
     Args:
@@ -163,6 +158,7 @@ def create_data_validation_pipeline(
     ctx = workflow(name)
 
     with ctx:
+
         @task
         def load_data():
             """Load data to validate."""
@@ -241,14 +237,10 @@ def scenario_3_validation_factory():
     print("Creating validation workflows...\n")
 
     # Create validation workflows with different rules
-    basic_validation = create_data_validation_pipeline(
-        "basic_validation",
-        rules=["not_null", "format_check"]
-    )
+    basic_validation = create_data_validation_pipeline("basic_validation", rules=["not_null", "format_check"])
 
     advanced_validation = create_data_validation_pipeline(
-        "advanced_validation",
-        rules=["not_null", "format_check", "range_check", "business_rules"]
+        "advanced_validation", rules=["not_null", "format_check", "range_check", "business_rules"]
     )
 
     print("Basic Validation:")
@@ -282,10 +274,7 @@ def scenario_4_workflow_composition():
         def run_validation():
             """Run validation sub-workflow."""
             print("Master: Running validation")
-            validation = create_data_validation_pipeline(
-                "validation_step",
-                rules=["not_null", "format_check"]
-            )
+            validation = create_data_validation_pipeline("validation_step", rules=["not_null", "format_check"])
             validation.execute("load_data")
 
         @task

@@ -123,10 +123,11 @@ def main():
                     tools=tools,
                     generate_content_config=genai_types.GenerateContentConfig(
                         http_options=genai_types.HttpOptions(
-                            retry_options=genai_types.HttpRetryOptions(attempts=3, initial_delay=1.0, max_delay=60.0, exp_base=2.0, jitter=0.2),
+                            retry_options=genai_types.HttpRetryOptions(
+                                attempts=3, initial_delay=1.0, max_delay=60.0, exp_base=2.0, jitter=0.2
+                            ),
                         ),
                     ),
-
                 )
                 wrapped = AdkLLMAgent(agent, app_name=exec_context.session_id)
                 print(f"✅ {agent_name.capitalize()} agent registered")
@@ -199,10 +200,8 @@ def main():
             report = workflow_data.get("report", "")
             rating = llm_client.completion_text(
                 model="gpt-5-mini",  # Use cheap model for simple review
-                messages=[
-                    {"role": "user", "content": f"Review this report and rate it (1-10): {report[:300]}..."}
-                ],
-                max_tokens=50
+                messages=[{"role": "user", "content": f"Review this report and rate it (1-10): {report[:300]}..."}],
+                max_tokens=50,
             )
 
             print(f"Review: {rating}\n")

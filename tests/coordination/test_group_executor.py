@@ -148,7 +148,7 @@ class TestGroupExecutor:
             graph.add_node(t)
 
         coordinator_mock = mocker.Mock(spec=TaskCoordinator)
-        mocker.patch('graflow.coordination.executor.ThreadingCoordinator', return_value=coordinator_mock)
+        mocker.patch("graflow.coordination.executor.ThreadingCoordinator", return_value=coordinator_mock)
 
         # Execute should not raise and should delegate to coordinator
         executor.execute_parallel_group("test_group", tasks, exec_context, backend="threading")
@@ -177,15 +177,15 @@ class TestGroupExecutor:
         queue_mock = mocker.Mock()
         coordinator_mock = mocker.Mock(spec=TaskCoordinator)
 
-        mocker.patch('graflow.coordination.executor.DistributedTaskQueue', return_value=queue_mock)
-        mocker.patch('graflow.coordination.executor.RedisCoordinator', return_value=coordinator_mock)
+        mocker.patch("graflow.coordination.executor.DistributedTaskQueue", return_value=queue_mock)
+        mocker.patch("graflow.coordination.executor.RedisCoordinator", return_value=coordinator_mock)
 
         executor.execute_parallel_group(
             "test_group",
             tasks,
             exec_context,
             backend="redis",
-            backend_config={"host": "test-host", "port": 1234, "db": 2, "key_prefix": "prefix"}
+            backend_config={"host": "test-host", "port": 1234, "db": 2, "key_prefix": "prefix"},
         )
 
         coordinator_mock.execute_group.assert_called_once_with("test_group", tasks, exec_context, mocker.ANY)
@@ -207,9 +207,7 @@ class TestGroupExecutorIntegration:
         exec_context = ExecutionContext(graph)
 
         coordinator = GroupExecutor._create_coordinator(
-            CoordinationBackend.THREADING,
-            {"thread_count": 4},
-            exec_context
+            CoordinationBackend.THREADING, {"thread_count": 4}, exec_context
         )
 
         assert isinstance(coordinator, TaskCoordinator)
@@ -220,7 +218,7 @@ class TestGroupExecutorIntegration:
         from graflow.core.task import Executable
 
         # Mock DistributedTaskQueue to simulate import error
-        mocker.patch('graflow.coordination.executor.DistributedTaskQueue', side_effect=ImportError("redis missing"))
+        mocker.patch("graflow.coordination.executor.DistributedTaskQueue", side_effect=ImportError("redis missing"))
 
         executor = GroupExecutor()
         graph = TaskGraph()

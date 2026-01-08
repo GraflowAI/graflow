@@ -24,13 +24,7 @@ class TestTaskResult:
 
     def test_task_result_creation(self):
         """Test creating a TaskResult."""
-        result = TaskResult(
-            task_id="test_task",
-            success=True,
-            error_message=None,
-            duration=1.5,
-            timestamp=1234567890.0
-        )
+        result = TaskResult(task_id="test_task", success=True, error_message=None, duration=1.5, timestamp=1234567890.0)
 
         assert result.task_id == "test_task"
         assert result.success is True
@@ -45,7 +39,7 @@ class TestTaskResult:
             success=False,
             error_message="Task failed: division by zero",
             duration=0.5,
-            timestamp=1234567890.0
+            timestamp=1234567890.0,
         )
 
         assert result.task_id == "failed_task"
@@ -62,7 +56,7 @@ class TestParallelGroupError:
             message="Parallel group failed",
             group_id="group_1",
             failed_tasks=[("task_a", "Error message")],
-            successful_tasks=["task_b", "task_c"]
+            successful_tasks=["task_b", "task_c"],
         )
 
         assert str(error) == "Parallel group failed"
@@ -74,12 +68,7 @@ class TestParallelGroupError:
         """Test that ParallelGroupError is a subclass of GraflowRuntimeError."""
         from graflow.exceptions import GraflowRuntimeError
 
-        error = ParallelGroupError(
-            message="Test error",
-            group_id="group_1",
-            failed_tasks=[],
-            successful_tasks=[]
-        )
+        error = ParallelGroupError(message="Test error", group_id="group_1", failed_tasks=[], successful_tasks=[])
 
         assert isinstance(error, GraflowRuntimeError)
 
@@ -101,6 +90,7 @@ class TestPolicyHandlers:
         handler = StrictGroupPolicy()
 
         with workflow("test") as wf:
+
             @task
             def task_a():
                 return "a"
@@ -112,17 +102,20 @@ class TestPolicyHandlers:
             tasks = [task_a, task_b]
             results = {
                 "task_a": TaskResult(task_id="task_a", success=True),
-                "task_b": TaskResult(task_id="task_b", success=False, error_message="Task B failed!")
+                "task_b": TaskResult(task_id="task_b", success=False, error_message="Task B failed!"),
             }
 
             with pytest.raises(ParallelGroupError):
-                handler.on_group_finished("group_1", tasks, results, ExecutionContext.create(wf.graph, start_node="task_a"))
+                handler.on_group_finished(
+                    "group_1", tasks, results, ExecutionContext.create(wf.graph, start_node="task_a")
+                )
 
     def test_best_effort_handler(self):
         """Best-effort handler should not raise when tasks fail."""
         handler = BestEffortGroupPolicy()
 
         with workflow("test") as wf:
+
             @task
             def task_a():
                 return "a"
@@ -134,7 +127,7 @@ class TestPolicyHandlers:
             tasks = [task_a, task_b]
             results = {
                 "task_a": TaskResult(task_id="task_a", success=True),
-                "task_b": TaskResult(task_id="task_b", success=False, error_message="Task B failed!")
+                "task_b": TaskResult(task_id="task_b", success=False, error_message="Task B failed!"),
             }
 
             handler.on_group_finished("group_1", tasks, results, ExecutionContext.create(wf.graph, start_node="task_a"))
@@ -145,6 +138,7 @@ class TestPolicyHandlers:
         handler = AtLeastNGroupPolicy(min_success=2)
 
         with workflow("test") as wf:
+
             @task
             def task_a():
                 return "a"
@@ -166,7 +160,7 @@ class TestPolicyHandlers:
                 "task_a": TaskResult(task_id="task_a", success=True),
                 "task_b": TaskResult(task_id="task_b", success=True),
                 "task_c": TaskResult(task_id="task_c", success=True),
-                "task_d": TaskResult(task_id="task_d", success=False, error_message="Task D failed!")
+                "task_d": TaskResult(task_id="task_d", success=False, error_message="Task D failed!"),
             }
 
             handler.on_group_finished("group_1", tasks, results, ExecutionContext.create(wf.graph, start_node="task_a"))
@@ -174,6 +168,7 @@ class TestPolicyHandlers:
         handler2 = AtLeastNGroupPolicy(min_success=2)
 
         with workflow("test2") as wf2:
+
             @task
             def task_e():
                 return "e"
@@ -195,11 +190,13 @@ class TestPolicyHandlers:
                 "task_e": TaskResult(task_id="task_e", success=True),
                 "task_f": TaskResult(task_id="task_f", success=False, error_message="Task F failed!"),
                 "task_g": TaskResult(task_id="task_g", success=False, error_message="Task G failed!"),
-                "task_h": TaskResult(task_id="task_h", success=False, error_message="Task H failed!")
+                "task_h": TaskResult(task_id="task_h", success=False, error_message="Task H failed!"),
             }
 
             with pytest.raises(ParallelGroupError) as exc_info:
-                handler2.on_group_finished("group_2", tasks2, results2, ExecutionContext.create(wf2.graph, start_node="task_e"))
+                handler2.on_group_finished(
+                    "group_2", tasks2, results2, ExecutionContext.create(wf2.graph, start_node="task_e")
+                )
 
             error = exc_info.value
             assert "1/2" in str(error)
@@ -211,6 +208,7 @@ class TestPolicyHandlers:
         handler = CriticalGroupPolicy(critical_task_ids=["critical_task"])
 
         with workflow("test") as wf:
+
             @task
             def critical_task():
                 return "critical success"
@@ -222,14 +220,19 @@ class TestPolicyHandlers:
             tasks = [critical_task, optional_task]
             results = {
                 "critical_task": TaskResult(task_id="critical_task", success=True),
-                "optional_task": TaskResult(task_id="optional_task", success=False, error_message="Optional task failed!")
+                "optional_task": TaskResult(
+                    task_id="optional_task", success=False, error_message="Optional task failed!"
+                ),
             }
 
-            handler.on_group_finished("group_1", tasks, results, ExecutionContext.create(wf.graph, start_node="critical_task"))
+            handler.on_group_finished(
+                "group_1", tasks, results, ExecutionContext.create(wf.graph, start_node="critical_task")
+            )
 
         handler_failure = CriticalGroupPolicy(critical_task_ids=["critical_task_fail"])
 
         with workflow("test_failure") as wf_failure:
+
             @task
             def critical_task_fail():
                 raise Exception("Critical task failed!")
@@ -240,7 +243,9 @@ class TestPolicyHandlers:
 
             tasks_failure = [critical_task_fail, optional_task_success]
             results_failure = {
-                "critical_task_fail": TaskResult(task_id="critical_task_fail", success=False, error_message="Critical task failed!"),
+                "critical_task_fail": TaskResult(
+                    task_id="critical_task_fail", success=False, error_message="Critical task failed!"
+                ),
                 "optional_task_success": TaskResult(task_id="optional_task_success", success=True),
             }
 

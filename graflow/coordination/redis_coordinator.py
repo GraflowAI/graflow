@@ -43,20 +43,13 @@ class RedisCoordinator(TaskCoordinator):
             self.graph_store = self.task_queue.graph_store
         else:
             logger.debug("Creating new GraphStore instance")
-            self.graph_store = GraphStore(
-                self.redis,
-                self.task_queue.key_prefix
-            )
+            self.graph_store = GraphStore(self.redis, self.task_queue.key_prefix)
             self.task_queue.graph_store = self.graph_store
 
         logger.info("RedisCoordinator initialized successfully")
 
     def execute_group(
-        self,
-        group_id: str,
-        tasks: List[Executable],
-        execution_context: ExecutionContext,
-        policy: GroupExecutionPolicy
+        self, group_id: str, tasks: List[Executable], execution_context: ExecutionContext, policy: GroupExecutionPolicy
     ) -> None:
         """Execute parallel group with barrier synchronization.
 
@@ -104,7 +97,7 @@ class RedisCoordinator(TaskCoordinator):
                     task_id=task_id,
                     success=success,
                     error_message=result_data.get("error_message"),
-                    timestamp=result_data.get("timestamp", 0.0)
+                    timestamp=result_data.get("timestamp", 0.0),
                 )
                 if not success:
                     failed_tasks.append(task_id)
@@ -142,7 +135,7 @@ class RedisCoordinator(TaskCoordinator):
                 "key": barrier_key,
                 "channel": completion_channel,
                 "expected": participant_count,
-                "current": 0
+                "current": 0,
             }
 
         logger.debug("Barrier '%s' created successfully (channel: %s)", barrier_id, completion_channel)
@@ -163,8 +156,9 @@ class RedisCoordinator(TaskCoordinator):
             return False
 
         barrier_info = self.active_barriers[barrier_id]
-        logger.info("Waiting for barrier '%s' (expected: %d, timeout: %ds)",
-                    barrier_id, barrier_info["expected"], timeout)
+        logger.info(
+            "Waiting for barrier '%s' (expected: %d, timeout: %ds)", barrier_id, barrier_info["expected"], timeout
+        )
 
         # Subscribe to completion channel FIRST (before checking counter)
         # This prevents race condition where workers complete before we subscribe
@@ -207,8 +201,7 @@ class RedisCoordinator(TaskCoordinator):
                     current_count = int(current_count_bytes)  # type: ignore[arg-type]
                     if current_count >= barrier_info["expected"]:
                         logger.info(
-                            "Barrier '%s' completed via counter check after %.2fs "
-                            "(%d/%d tasks)",
+                            "Barrier '%s' completed via counter check after %.2fs (%d/%d tasks)",
                             barrier_id,
                             elapsed,
                             current_count,
@@ -234,7 +227,7 @@ class RedisCoordinator(TaskCoordinator):
         context = executable.get_execution_context()
 
         # graph_hash is set in execution_context by execute_group
-        graph_hash = getattr(context, 'graph_hash', None)
+        graph_hash = getattr(context, "graph_hash", None)
         if graph_hash is None:
             logger.error("graph_hash not set in ExecutionContext for task '%s'", executable.task_id)
             raise ValueError("graph_hash not set in ExecutionContext")
@@ -246,17 +239,18 @@ class RedisCoordinator(TaskCoordinator):
             trace_id=context.trace_id,
             parent_span_id=context.tracer.get_current_span_id() if context.tracer else None,
             group_id=group_id,
-            created_at=time.time()
+            created_at=time.time(),
         )
 
-        logger.debug("Pushing task '%s' to queue (session: %s, graph: %s)",
-                    executable.task_id, context.session_id, graph_hash[:8])
+        logger.debug(
+            "Pushing task '%s' to queue (session: %s, graph: %s)",
+            executable.task_id,
+            context.session_id,
+            graph_hash[:8],
+        )
 
         # Push directly to Redis queue bypassing RedisTaskQueue.enqueue()
-        self.task_queue.redis_client.lpush(
-            self.task_queue.queue_key,
-            record.to_json()
-        )
+        self.task_queue.redis_client.lpush(self.task_queue.queue_key, record.to_json())
         logger.debug("Task '%s' successfully dispatched to Redis queue", executable.task_id)
 
     def _get_completion_results(self, group_id: str) -> List[Dict[str, Any]]:
@@ -280,11 +274,13 @@ class RedisCoordinator(TaskCoordinator):
                 # Ensure task_id is in the data
                 data["task_id"] = task_id.decode() if isinstance(task_id, bytes) else task_id
                 results.append(data)
-                logger.debug("Retrieved completion record for task '%s' (success: %s)",
-                           data["task_id"], data.get("success", "unknown"))
+                logger.debug(
+                    "Retrieved completion record for task '%s' (success: %s)",
+                    data["task_id"],
+                    data.get("success", "unknown"),
+                )
             except json.JSONDecodeError:
-                logger.warning("Failed to decode completion record for task_id=%s in group '%s'",
-                             task_id, group_id)
+                logger.warning("Failed to decode completion record for task_id=%s in group '%s'", task_id, group_id)
                 continue
 
         logger.debug("Retrieved %d completion results for group '%s'", len(results), group_id)
@@ -319,12 +315,7 @@ class RedisCoordinator(TaskCoordinator):
 
 
 def record_task_completion(
-    redis_client,
-    key_prefix: str,
-    task_id: str,
-    group_id: str,
-    success: bool,
-    error_message: Optional[str] = None
+    redis_client, key_prefix: str, task_id: str, group_id: str, success: bool, error_message: Optional[str] = None
 ):
     """Record task completion in Redis for barrier tracking.
 
@@ -343,19 +334,10 @@ def record_task_completion(
     logger.debug("Recording completion for task '%s' in group '%s' (success: %s)", task_id, group_id, success)
     completion_key = f"{key_prefix}:completions:{group_id}"
 
-    completion_data = {
-        "task_id": task_id,
-        "success": success,
-        "timestamp": time.time(),
-        "error_message": error_message
-    }
+    completion_data = {"task_id": task_id, "success": success, "timestamp": time.time(), "error_message": error_message}
 
     # Store in hash with task_id as key (prevents duplicates/overwrites)
-    redis_client.hset(
-        completion_key,
-        task_id,
-        json.dumps(completion_data)
-    )
+    redis_client.hset(completion_key, task_id, json.dumps(completion_data))
     logger.debug("Stored completion record for task '%s' at key: %s", task_id, completion_key)
 
     # Trigger barrier signaling using existing pub/sub mechanism
@@ -377,8 +359,11 @@ def record_task_completion(
     if current_count >= expected_int:
         # All tasks completed - publish barrier completion
         completion_channel = f"{key_prefix}:barrier_done:{group_id}"
-        logger.info("All tasks completed for group '%s' (%d/%d), publishing completion signal",
-                   group_id, current_count, expected_int)
+        logger.info(
+            "All tasks completed for group '%s' (%d/%d), publishing completion signal",
+            group_id,
+            current_count,
+            expected_int,
+        )
         result = redis_client.publish(completion_channel, "complete")
-        logger.debug("Published barrier completion to channel '%s' (subscribers: %d)",
-                   completion_channel, result)
+        logger.debug("Published barrier completion to channel '%s' (subscribers: %d)", completion_channel, result)

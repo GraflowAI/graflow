@@ -71,10 +71,7 @@ class DockerTaskHandler(TaskHandler):
         self.volumes = volumes or {}
         if auto_mount_graflow:
             # Check if /graflow_src is already bound in any volume
-            has_graflow_mount = any(
-                vol_config.get("bind") == "/graflow_src"
-                for vol_config in self.volumes.values()
-            )
+            has_graflow_mount = any(vol_config.get("bind") == "/graflow_src" for vol_config in self.volumes.values())
             if not has_graflow_mount:
                 self._auto_mount_graflow_source()
 
@@ -105,7 +102,7 @@ class DockerTaskHandler(TaskHandler):
                 )
                 print(
                     f"📂 [DockerTaskHandler] Using user-provided graflow mount: {graflow_path} -> {container_path}",
-                    flush=True
+                    flush=True,
                 )
             else:
                 # Add our own mount to /graflow_src

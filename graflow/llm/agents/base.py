@@ -33,11 +33,7 @@ class LLMAgent(ABC):
     """
 
     @abstractmethod
-    def run(
-        self,
-        input_text: str,
-        **kwargs: Any
-    ) -> AgentResult:
+    def run(self, input_text: str, **kwargs: Any) -> AgentResult:
         """Run the agent synchronously with the given input.
 
         Args:
@@ -68,11 +64,7 @@ class LLMAgent(ABC):
         """
         pass
 
-    async def run_async(
-        self,
-        input_text: str,
-        **kwargs: Any
-    ) -> AsyncIterator[Any]:
+    async def run_async(self, input_text: str, **kwargs: Any) -> AsyncIterator[Any]:
         """Run the agent asynchronously with streaming events.
 
         This method provides async execution with event streaming, mirroring
@@ -106,8 +98,7 @@ class LLMAgent(ABC):
             should override this method if async execution is supported.
         """
         raise NotImplementedError(
-            f"{self.__class__.__name__} does not support async execution. "
-            "Use run() for synchronous execution."
+            f"{self.__class__.__name__} does not support async execution. Use run() for synchronous execution."
         )
         # Make this an async generator to satisfy type hints
         yield  # type: ignore[misc]

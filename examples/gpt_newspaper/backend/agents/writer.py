@@ -80,8 +80,7 @@ class WriterAgent:
         except json.JSONDecodeError as exc:
             preview = cleaned.strip().replace("\n", " ")[:200]
             raise RuntimeError(
-                f"{context}: expected JSON response from model '{self.model}', "
-                f"but received: '{preview}...'"
+                f"{context}: expected JSON response from model '{self.model}', but received: '{preview}...'"
             ) from exc
 
     def write_article(self, query: str, sources: list) -> Dict:
@@ -95,7 +94,7 @@ class WriterAgent:
         Returns:
             Article dict with title, date, paragraphs, summary
         """
-        prompt = f"""Today's date is {datetime.now().strftime('%d/%m/%Y')}.
+        prompt = f"""Today's date is {datetime.now().strftime("%d/%m/%Y")}.
 
 Query or Topic: {query}
 

@@ -38,10 +38,7 @@ class TestRedisExecution(unittest.TestCase):
         self.task2.set_execution_context(self.context)
 
         # Setup RedisTaskQueue with mock
-        self.queue = DistributedTaskQueue(
-            redis_client=self.redis_mock,
-            key_prefix="test"
-        )
+        self.queue = DistributedTaskQueue(redis_client=self.redis_mock, key_prefix="test")
 
         self.coordinator = RedisCoordinator(self.queue)
 
@@ -61,12 +58,12 @@ class TestRedisExecution(unittest.TestCase):
         # But wait_barrier calls incr.
 
         # Let's mock wait_barrier to avoid complex redis mocking
-        with patch.object(self.coordinator, 'wait_barrier', return_value=True) as _wait_mock:
+        with patch.object(self.coordinator, "wait_barrier", return_value=True) as _wait_mock:
             # Mock _get_completion_results
-            with patch.object(self.coordinator, '_get_completion_results') as results_mock:
+            with patch.object(self.coordinator, "_get_completion_results") as results_mock:
                 results_mock.return_value = [
                     {"task_id": "task1", "success": True},
-                    {"task_id": "task2", "success": True}
+                    {"task_id": "task2", "success": True},
                 ]
 
                 self.coordinator.execute_group(group_id, tasks, self.context, handler)
@@ -87,14 +84,12 @@ class TestRedisExecution(unittest.TestCase):
                     key, value = args
                     self.assertEqual(key, "test:queue")
                     record_data = json.loads(value)
-                    self.assertEqual(record_data['graph_hash'], self.context.graph_hash)
-                    self.assertIn(record_data['task_id'], ["task1", "task2"])
-                    self.assertEqual(record_data['group_id'], group_id)
+                    self.assertEqual(record_data["graph_hash"], self.context.graph_hash)
+                    self.assertIn(record_data["task_id"], ["task1", "task2"])
+                    self.assertEqual(record_data["group_id"], group_id)
 
                 # Verify Barrier Created
-                self.redis_mock.set.assert_any_call(
-                    f"{self.queue.key_prefix}:barrier:{group_id}:expected", 2
-                )
+                self.redis_mock.set.assert_any_call(f"{self.queue.key_prefix}:barrier:{group_id}:expected", 2)
 
                 # Verify Handler Called
                 handler.on_group_finished.assert_called_once()
@@ -103,11 +98,7 @@ class TestRedisExecution(unittest.TestCase):
         """Test worker dequeuing a SerializedTaskRecord."""
         # Setup a record
         record = SerializedTaskRecord(
-            task_id="task1",
-            session_id="sess1",
-            graph_hash="hash1",
-            trace_id="trace1",
-            created_at=time.time()
+            task_id="task1", session_id="sess1", graph_hash="hash1", trace_id="trace1", created_at=time.time()
         )
 
         # Mock Redis lpop to return the record
@@ -122,7 +113,7 @@ class TestRedisExecution(unittest.TestCase):
         mock_context = ExecutionContext(self.graph, session_id="sess1", trace_id="trace1")
         mock_context.graph_hash = "hash1"
 
-        with patch('graflow.worker.context_factory.ExecutionContextFactory') as factory_mock:
+        with patch("graflow.worker.context_factory.ExecutionContextFactory") as factory_mock:
             factory_mock.create_from_record.return_value = (mock_context, self.task1)
 
             # Dequeue
@@ -138,5 +129,6 @@ class TestRedisExecution(unittest.TestCase):
             # Verify factory was called with the record
             factory_mock.create_from_record.assert_called_once()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

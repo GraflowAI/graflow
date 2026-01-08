@@ -70,6 +70,7 @@ from graflow.core.workflow import workflow
 # Custom Handler Implementations
 # ============================================================================
 
+
 class LoggingHandler(TaskHandler):
     """Custom handler that logs detailed execution information.
 
@@ -167,6 +168,7 @@ class TimingHandler(TaskHandler):
 # Demo Workflow
 # ============================================================================
 
+
 def main():
     """Demonstrate custom handler usage."""
     print("=== Custom Handler Demo ===\n")
@@ -209,11 +211,7 @@ def main():
             print(f"   Custom task result: {custom_result}")
             print(f"   Timed task result: {timed_result}\n")
 
-            return {
-                "normal": normal_result,
-                "custom": custom_result,
-                "timed": timed_result
-            }
+            return {"normal": normal_result, "custom": custom_result, "timed": timed_result}
 
         # Define workflow
         normal_task >> custom_task >> timed_task >> results_task

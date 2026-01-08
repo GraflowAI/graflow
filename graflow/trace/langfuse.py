@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 # Optional imports
 try:
     from langfuse import Langfuse  # type: ignore[import-not-found]
+
     LANGFUSE_AVAILABLE = True
 except ImportError:
     LANGFUSE_AVAILABLE = False
@@ -33,6 +34,7 @@ try:
     from opentelemetry import context as otel_context
     from opentelemetry import trace
     from opentelemetry.trace import NonRecordingSpan, SpanContext, TraceFlags
+
     OTEL_AVAILABLE = True
 except ImportError:
     OTEL_AVAILABLE = False
@@ -76,7 +78,7 @@ class LangFuseTracer(Tracer):
         secret_key: Optional[str] = None,
         host: Optional[str] = None,
         enable_runtime_graph: bool = True,
-        enabled: bool = True
+        enabled: bool = True,
     ):
         """Initialize LangFuseTracer.
 
@@ -94,17 +96,14 @@ class LangFuseTracer(Tracer):
         super().__init__(enable_runtime_graph=enable_runtime_graph)
 
         if not LANGFUSE_AVAILABLE:
-            raise ImportError(
-                "langfuse package is required for LangFuseTracer. "
-                "Install with: pip install langfuse"
-            )
+            raise ImportError("langfuse package is required for LangFuseTracer. Install with: pip install langfuse")
 
         self.enabled = enabled
 
         # Initialize attributes with type hints
-        self.client: Optional[Langfuse] = None # type: ignore
-        self._root_span: Optional[LangfuseSpan] = None # type: ignore
-        self._span_stack: List[LangfuseSpan] = [] # type: ignore
+        self.client: Optional[Langfuse] = None  # type: ignore
+        self._root_span: Optional[LangfuseSpan] = None  # type: ignore
+        self._span_stack: List[LangfuseSpan] = []  # type: ignore
         self._otel_context_tokens: List[Any] = []  # OpenTelemetry context tokens for cleanup
 
         if not enabled:
@@ -131,16 +130,11 @@ class LangFuseTracer(Tracer):
             public_key=final_public_key,
             secret_key=final_secret_key,
             host=final_host,
-        ) # type: ignore
+        )  # type: ignore
 
     # === Output methods (implement LangFuse output) ===
 
-    def _output_trace_start(
-        self,
-        name: str,
-        trace_id: Optional[str],
-        metadata: Optional[Dict[str, Any]]
-    ) -> None:
+    def _output_trace_start(self, name: str, trace_id: Optional[str], metadata: Optional[Dict[str, Any]]) -> None:
         """Output trace start to LangFuse."""
         if not self.enabled or not self.client:
             return
@@ -153,31 +147,19 @@ class LangFuseTracer(Tracer):
                 trace_context = {"trace_id": trace_id}
 
             # Create root span (represents the trace)
-            self._root_span = self.client.start_span(
-                trace_context=trace_context,
-                name=name,
-                metadata=metadata or {}
-            )
+            self._root_span = self.client.start_span(trace_context=trace_context, name=name, metadata=metadata or {})
         except Exception as e:
             logger.warning(f"Failed to start LangFuse trace '{name}': {e}")
             self._root_span = None
 
-    def _output_trace_end(
-        self,
-        name: str,
-        output: Optional[Any],
-        metadata: Optional[Dict[str, Any]]
-    ) -> None:
+    def _output_trace_end(self, name: str, output: Optional[Any], metadata: Optional[Dict[str, Any]]) -> None:
         """Output trace end to LangFuse."""
         if not self.enabled or not self._root_span:
             return
 
         try:
             # Update root span with output and metadata, then end it
-            self._root_span.update(
-                output=output,
-                metadata=metadata or {}
-            )
+            self._root_span.update(output=output, metadata=metadata or {})
             self._root_span.end()
 
             # Flush to ensure data is sent
@@ -188,12 +170,7 @@ class LangFuseTracer(Tracer):
         finally:
             self._root_span = None
 
-    def _output_span_start(
-        self,
-        name: str,
-        parent_name: Optional[str],
-        metadata: Optional[Dict[str, Any]]
-    ) -> None:
+    def _output_span_start(self, name: str, parent_name: Optional[str], metadata: Optional[Dict[str, Any]]) -> None:
         """Output span start to LangFuse and set OpenTelemetry context.
 
         This method creates a Langfuse span and sets OpenTelemetry context
@@ -208,25 +185,19 @@ class LangFuseTracer(Tracer):
             if self._span_stack:
                 # Nested span - create child from current span
                 parent_span = self._span_stack[-1]
-                span = parent_span.start_span(
-                    name=name,
-                    metadata=metadata or {}
-                )
+                span = parent_span.start_span(name=name, metadata=metadata or {})
             else:
                 # Top-level span under root (or first span in worker process)
                 # If parent_span_id is set (from attach_to_trace), we need to
                 # connect this span to the parent task in distributed tracing
                 # Note: In v3, this is handled via trace_context in attach_to_trace
-                span = self._root_span.start_span(
-                    name=name,
-                    metadata=metadata or {}
-                )
+                span = self._root_span.start_span(name=name, metadata=metadata or {})
 
             # Push to stack
             self._span_stack.append(span)
 
             # Set OpenTelemetry context for LiteLLM/ADK automatic propagation
-            if OTEL_AVAILABLE and hasattr(span, 'trace_id') and hasattr(span, 'id'):
+            if OTEL_AVAILABLE and hasattr(span, "trace_id") and hasattr(span, "id"):
                 try:
                     # Convert Langfuse hex IDs to OpenTelemetry int IDs
                     # Langfuse v3: trace_id is 32-char hex, span.id is 16-char hex
@@ -238,7 +209,7 @@ class LangFuseTracer(Tracer):
                         trace_id=trace_id_int,
                         span_id=span_id_int,
                         is_remote=False,
-                        trace_flags=TraceFlags(0x01)  # Sampled
+                        trace_flags=TraceFlags(0x01),  # Sampled
                     )
 
                     # Set as current context (for LiteLLM/ADK to detect)
@@ -256,12 +227,7 @@ class LangFuseTracer(Tracer):
         except Exception as e:
             logger.warning(f"Failed to start LangFuse span '{name}': {e}")
 
-    def _output_span_end(
-        self,
-        name: str,
-        output: Optional[Any],
-        metadata: Optional[Dict[str, Any]]
-    ) -> None:
+    def _output_span_end(self, name: str, output: Optional[Any], metadata: Optional[Dict[str, Any]]) -> None:
         """Output span end to LangFuse and clear OpenTelemetry context."""
         if not self.enabled or not self._span_stack:
             return
@@ -278,7 +244,7 @@ class LangFuseTracer(Tracer):
                 output=output,
                 metadata=metadata or {},
                 level="ERROR" if error else None,
-                status_message=str(error) if error else None
+                status_message=str(error) if error else None,
             )
 
             # End the span
@@ -296,12 +262,7 @@ class LangFuseTracer(Tracer):
         except Exception as e:
             logger.warning(f"Failed to end LangFuse span '{name}': {e}")
 
-    def _output_event(
-        self,
-        name: str,
-        parent_span: Optional[str],
-        metadata: Optional[Dict[str, Any]]
-    ) -> None:
+    def _output_event(self, name: str, parent_span: Optional[str], metadata: Optional[Dict[str, Any]]) -> None:
         """Output event to LangFuse."""
         if not self.enabled or not self._root_span:
             return
@@ -311,24 +272,14 @@ class LangFuseTracer(Tracer):
             if self._span_stack:
                 # Event under current span
                 parent = self._span_stack[-1]
-                parent.create_event(
-                    name=name,
-                    metadata=metadata or {}
-                )
+                parent.create_event(name=name, metadata=metadata or {})
             else:
                 # Event under root span
-                self._root_span.create_event(
-                    name=name,
-                    metadata=metadata or {}
-                )
+                self._root_span.create_event(name=name, metadata=metadata or {})
         except Exception as e:
             logger.warning(f"Failed to create LangFuse event '{name}': {e}")
 
-    def _output_attach_to_trace(
-        self,
-        trace_id: str,
-        parent_span_id: Optional[str]
-    ) -> None:
+    def _output_attach_to_trace(self, trace_id: str, parent_span_id: Optional[str]) -> None:
         """Output attach to trace to LangFuse.
 
         Args:
@@ -346,10 +297,7 @@ class LangFuseTracer(Tracer):
             if parent_span_id:
                 trace_context["parent_span_id"] = parent_span_id
 
-            self._root_span = self.client.start_span(
-                trace_context=trace_context,
-                name=f"worker_trace_{trace_id[:8]}"
-            )
+            self._root_span = self.client.start_span(trace_context=trace_context, name=f"worker_trace_{trace_id[:8]}")
         except Exception as e:
             logger.warning(f"Failed to attach to LangFuse trace '{trace_id}': {e}")
             self._root_span = None
@@ -361,55 +309,38 @@ class LangFuseTracer(Tracer):
         task_id: str,
         parent_task_id: Optional[str] = None,
         is_iteration: bool = False,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Dynamic task added hook (override to add event output)."""
         event_metadata = {
             **(metadata or {}),
             "task_id": task_id,
             "parent_task_id": parent_task_id,
-            "is_iteration": is_iteration
+            "is_iteration": is_iteration,
         }
 
         event_name = "task_iteration_added" if is_iteration else "dynamic_task_added"
         self.event(event_name, metadata=event_metadata)
 
-    def on_parallel_group_start(
-        self,
-        group_id: str,
-        member_ids: List[str],
-        context: ExecutionContext
-    ) -> None:
+    def on_parallel_group_start(self, group_id: str, member_ids: List[str], context: ExecutionContext) -> None:
         """Parallel group start hook (override to add event output)."""
         # Log event
         self.event(
             "parallel_group_start",
-            metadata={
-                "group_id": group_id,
-                "member_count": len(member_ids),
-                "member_ids": member_ids
-            }
+            metadata={"group_id": group_id, "member_count": len(member_ids), "member_ids": member_ids},
         )
 
         # Call parent implementation for graph tracking
         super().on_parallel_group_start(group_id, member_ids, context)
 
     def on_parallel_group_end(
-        self,
-        group_id: str,
-        member_ids: List[str],
-        context: ExecutionContext,
-        results: Optional[Dict[str, Any]] = None
+        self, group_id: str, member_ids: List[str], context: ExecutionContext, results: Optional[Dict[str, Any]] = None
     ) -> None:
         """Parallel group end hook (override to add event output)."""
         success_count = len(results) if results else 0
         self.event(
             "parallel_group_end",
-            metadata={
-                "group_id": group_id,
-                "member_count": len(member_ids),
-                "success_count": success_count
-            }
+            metadata={"group_id": group_id, "member_count": len(member_ids), "success_count": success_count},
         )
 
     def clone(self, trace_id: str) -> LangFuseTracer:

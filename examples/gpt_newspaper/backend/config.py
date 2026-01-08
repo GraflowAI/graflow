@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
 def _load_model_params(raw_value: str | None) -> Dict[str, Any]:
     """Parse model parameter configuration from JSON."""
     if not raw_value:
@@ -39,9 +40,7 @@ class Config:
     # LLM Configuration
     # Uses GRAFLOW_LLM_MODEL for Graflow's LLMClient integration
     DEFAULT_MODEL = os.getenv("GRAFLOW_LLM_MODEL", "gpt-4o-mini")
-    DEFAULT_MODEL_PARAMS: Dict[str, Any] = _load_model_params(
-        os.getenv("GRAFLOW_MODEL_PARAMS")
-    )
+    DEFAULT_MODEL_PARAMS: Dict[str, Any] = _load_model_params(os.getenv("GRAFLOW_MODEL_PARAMS"))
 
     # Agent Model Configuration
     # GPT_NEWSPAPER_MODEL: Model for agent workflows (supports both Gemini and LiteLLM models)

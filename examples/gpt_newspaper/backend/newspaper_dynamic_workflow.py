@@ -220,7 +220,9 @@ def create_article_workflow(query: str, article_id: str, output_dir: str, tracer
                     if not channel.get("image"):
                         channel.set("image", supplemental_result.get("image") or DEFAULT_IMAGE_URL)
                     channel.set("completed_search_tasks", channel.get("completed_search_tasks", default=0) + 1)
-                    print(f"[{article_id}]   ↳ supplemental search completed with {len(supplemental_result.get('sources', []))} sources")
+                    print(
+                        f"[{article_id}]   ↳ supplemental search completed with {len(supplemental_result.get('sources', []))} sources"
+                    )
                     return supplemental_result
 
                 context.next_task(TaskWrapper(f"search_{article_id}_supplemental", supplemental_research))
@@ -264,9 +266,7 @@ def create_article_workflow(query: str, article_id: str, output_dir: str, tracer
         def write_data_digest_task(context: TaskExecutionContext) -> Dict:
             return _generate_draft(context, "data_digest", "analytical")
 
-        writer_personas = (
-            write_feature_task | write_brief_task | write_data_digest_task
-        ).with_execution(
+        writer_personas = (write_feature_task | write_brief_task | write_data_digest_task).with_execution(
             backend=CoordinationBackend.THREADING,
             policy=BestEffortGroupPolicy(),
         )
@@ -390,9 +390,7 @@ def create_article_workflow(query: str, article_id: str, output_dir: str, tracer
             print(f"[{article_id}] 📊 Risk check cleared")
             return {"status": "ok", "check": "risk", "title": article.get("title")}
 
-        quality_gate = (
-            fact_check_task | compliance_check_task | risk_check_task
-        ).with_execution(
+        quality_gate = (fact_check_task | compliance_check_task | risk_check_task).with_execution(
             backend=CoordinationBackend.THREADING,
             policy=AtLeastNGroupPolicy(min_success=2),
         )
@@ -433,7 +431,18 @@ def create_article_workflow(query: str, article_id: str, output_dir: str, tracer
             return design_result
 
         # Build workflow graph with dynamic stages and guarded parallel groups
-        topic_intake_task >> search_router_task >> curate_task >> writer_personas >> select_draft_task >> write_task >> critique_task >> quality_gate >> quality_gate_summary_task >> design_task # type: ignore
+        (
+            topic_intake_task
+            >> search_router_task
+            >> curate_task
+            >> writer_personas
+            >> select_draft_task
+            >> write_task
+            >> critique_task
+            >> quality_gate
+            >> quality_gate_summary_task
+            >> design_task
+        )  # type: ignore
 
         return wf
 
@@ -467,7 +476,7 @@ def execute_article_workflow(query: str, article_id: str, output_dir: str) -> Di
     wf = create_article_workflow(query, article_id, output_dir, tracer=tracer)
     result = wf.execute(
         f"topic_intake_{article_id}",
-        max_steps=30  # Allow multiple write-critique cycles
+        max_steps=30,  # Allow multiple write-critique cycles
     )
 
     # Shutdown tracer to flush remaining traces
@@ -521,7 +530,7 @@ def run_newspaper_workflow(
         completed_articles = list(
             executor.map(
                 lambda args: execute_article_workflow(*args),
-                zip(queries, article_ids, [output_dir] * len(queries), strict=False)
+                zip(queries, article_ids, [output_dir] * len(queries), strict=False),
             )
         )
 
@@ -574,10 +583,7 @@ def main():
     ]
 
     # Run workflow
-    run_newspaper_workflow(
-        queries=queries,
-        layout="layout_1.html"
-    )
+    run_newspaper_workflow(queries=queries, layout="layout_1.html")
 
 
 if __name__ == "__main__":

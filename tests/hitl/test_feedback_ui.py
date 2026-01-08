@@ -15,9 +15,7 @@ from graflow.hitl.types import FeedbackRequest, FeedbackResponse, FeedbackType
 def app_with_web_ui():
     """Create FastAPI app with Web UI enabled."""
     return create_feedback_api(
-        feedback_backend="filesystem",
-        feedback_config={"data_dir": "test_feedback_data"},
-        enable_web_ui=True
+        feedback_backend="filesystem", feedback_config={"data_dir": "test_feedback_data"}, enable_web_ui=True
     )
 
 
@@ -37,7 +35,7 @@ def create_test_request(
     feedback_type: str = "approval",
     feedback_id: str = "test-feedback-123",
     prompt: str = "Test prompt",
-    options: list[str] | None = None
+    options: list[str] | None = None,
 ) -> FeedbackRequest:
     """Create test feedback request."""
     return FeedbackRequest(
@@ -66,16 +64,8 @@ class TestFeedbackUIEndpoints:
     def test_list_pending_feedback_with_requests(self, client, feedback_manager):
         """Test listing pending feedback with multiple requests."""
         # Create multiple pending requests
-        request1 = create_test_request(
-            feedback_id="test-1",
-            feedback_type="approval",
-            prompt="Approve deployment?"
-        )
-        request2 = create_test_request(
-            feedback_id="test-2",
-            feedback_type="text",
-            prompt="Enter feedback"
-        )
+        request1 = create_test_request(feedback_id="test-1", feedback_type="approval", prompt="Approve deployment?")
+        request2 = create_test_request(feedback_id="test-2", feedback_type="text", prompt="Enter feedback")
         feedback_manager.store_request(request1)
         feedback_manager.store_request(request2)
 
@@ -121,9 +111,7 @@ class TestFeedbackUIEndpoints:
         """Test showing selection feedback form."""
         # Create pending request
         request = create_test_request(
-            feedback_type="selection",
-            prompt="Choose an option",
-            options=["option_a", "option_b", "option_c"]
+            feedback_type="selection", prompt="Choose an option", options=["option_a", "option_b", "option_c"]
         )
         feedback_manager.store_request(request)
 
@@ -161,12 +149,8 @@ class TestFeedbackUIEndpoints:
         # POST submission
         response = client.post(
             f"/ui/feedback/{request.feedback_id}/submit",
-            data={
-                "approved": "true",
-                "reason": "Looks good!",
-                "responded_by": "test@example.com"
-            },
-            follow_redirects=False
+            data={"approved": "true", "reason": "Looks good!", "responded_by": "test@example.com"},
+            follow_redirects=False,
         )
         assert response.status_code == 303  # See Other (redirect)
         assert f"/ui/feedback/{request.feedback_id}/success" in response.headers["location"]
@@ -187,11 +171,8 @@ class TestFeedbackUIEndpoints:
         # POST submission
         response = client.post(
             f"/ui/feedback/{request.feedback_id}/submit",
-            data={
-                "approved": "false",
-                "reason": "Not ready yet"
-            },
-            follow_redirects=False
+            data={"approved": "false", "reason": "Not ready yet"},
+            follow_redirects=False,
         )
         assert response.status_code == 303
 
@@ -209,9 +190,7 @@ class TestFeedbackUIEndpoints:
 
         # POST submission
         response = client.post(
-            f"/ui/feedback/{request.feedback_id}/submit",
-            data={"text": "This is my response"},
-            follow_redirects=False
+            f"/ui/feedback/{request.feedback_id}/submit", data={"text": "This is my response"}, follow_redirects=False
         )
         assert response.status_code == 303
 
@@ -223,17 +202,12 @@ class TestFeedbackUIEndpoints:
     def test_submit_selection(self, client, feedback_manager):
         """Test submitting selection."""
         # Create pending request
-        request = create_test_request(
-            feedback_type="selection",
-            options=["option_a", "option_b"]
-        )
+        request = create_test_request(feedback_type="selection", options=["option_a", "option_b"])
         feedback_manager.store_request(request)
 
         # POST submission
         response = client.post(
-            f"/ui/feedback/{request.feedback_id}/submit",
-            data={"selected": "option_b"},
-            follow_redirects=False
+            f"/ui/feedback/{request.feedback_id}/submit", data={"selected": "option_b"}, follow_redirects=False
         )
         assert response.status_code == 303
 
@@ -245,17 +219,14 @@ class TestFeedbackUIEndpoints:
     def test_submit_multi_selection(self, client, feedback_manager):
         """Test submitting multi-selection."""
         # Create pending request
-        request = create_test_request(
-            feedback_type="multi_selection",
-            options=["option_a", "option_b", "option_c"]
-        )
+        request = create_test_request(feedback_type="multi_selection", options=["option_a", "option_b", "option_c"])
         feedback_manager.store_request(request)
 
         # POST submission
         response = client.post(
             f"/ui/feedback/{request.feedback_id}/submit",
             data={"selected_multiple": ["option_a", "option_c"]},
-            follow_redirects=False
+            follow_redirects=False,
         )
         assert response.status_code == 303
 
@@ -274,7 +245,7 @@ class TestFeedbackUIEndpoints:
         response = client.post(
             f"/ui/feedback/{request.feedback_id}/submit",
             data={"custom_data": '{"key": "value", "number": 42}'},
-            follow_redirects=False
+            follow_redirects=False,
         )
         assert response.status_code == 303
 
@@ -293,7 +264,7 @@ class TestFeedbackUIEndpoints:
         response = client.post(
             f"/ui/feedback/{request.feedback_id}/submit",
             data={"custom_data": "not valid json{"},
-            follow_redirects=False
+            follow_redirects=False,
         )
         assert response.status_code == 400
 
@@ -306,9 +277,7 @@ class TestFeedbackUIEndpoints:
 
         # POST submission - should redirect to expired
         response = client.post(
-            f"/ui/feedback/{request.feedback_id}/submit",
-            data={"approved": "true"},
-            follow_redirects=False
+            f"/ui/feedback/{request.feedback_id}/submit", data={"approved": "true"}, follow_redirects=False
         )
         assert response.status_code == 307  # Redirect
         assert f"/ui/feedback/{request.feedback_id}/expired" in response.headers["location"]
@@ -325,7 +294,7 @@ class TestFeedbackUIEndpoints:
             approved=True,
             reason="Test reason",
             responded_at=datetime.now().isoformat(),
-            responded_by="test@example.com"
+            responded_by="test@example.com",
         )
         feedback_manager.store_response(response_obj)
 

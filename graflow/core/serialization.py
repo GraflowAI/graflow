@@ -12,9 +12,11 @@ logger = logging.getLogger(__name__)
 
 try:
     import cloudpickle
+
     HAS_CLOUDPICKLE = True
 except ImportError:
     import pickle as cloudpickle  # type: ignore[no-redef]
+
     HAS_CLOUDPICKLE = False
 
 
@@ -42,14 +44,18 @@ def dumps(obj: Any) -> bytes:
         return cloudpickle.dumps(obj)
     except TypeError as e:
         # Serialization failed - analyze object for unpicklable components
-        logger.error(f"Failed to serialize object of type {type(obj).__name__}. Serialization failed with TypeError: {e}")
+        logger.error(
+            f"Failed to serialize object of type {type(obj).__name__}. Serialization failed with TypeError: {e}"
+        )
 
         # Try to detect TaskGraph objects for lock analysis
         from graflow.core.graph import TaskGraph
+
         if isinstance(obj, TaskGraph):
             logger.info("Analyzing TaskGraph for thread locks...")
             try:
                 from graflow.debug.find_locks import debug_taskgraph_for_locks
+
                 debug_taskgraph_for_locks(obj)
             except Exception as debug_err:
                 logger.warning(f"Failed to analyze object for locks: {debug_err}")

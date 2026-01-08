@@ -65,10 +65,7 @@ def main():
             channel = context.get_channel()
 
             # Set configuration data
-            config = {
-                "batch_size": 100,
-                "timeout": 30
-            }
+            config = {"batch_size": 100, "timeout": 30}
             channel.set("config", config)
             print(f"   Set 'config' = {config}")
 

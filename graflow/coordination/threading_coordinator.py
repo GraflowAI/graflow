@@ -23,6 +23,7 @@ class ThreadingCoordinator(TaskCoordinator):
     def __init__(self, thread_count: Optional[int] = None):
         """Initialize threading coordinator."""
         import multiprocessing as mp
+
         self.thread_count = thread_count or mp.cpu_count()
         self._executor: Optional[concurrent.futures.ThreadPoolExecutor] = None
 
@@ -30,16 +31,11 @@ class ThreadingCoordinator(TaskCoordinator):
         """Ensure thread pool executor is initialized."""
         if self._executor is None:
             self._executor = concurrent.futures.ThreadPoolExecutor(
-                max_workers=self.thread_count,
-                thread_name_prefix="ThreadingCoordinator"
+                max_workers=self.thread_count, thread_name_prefix="ThreadingCoordinator"
             )
 
     def execute_group(
-        self,
-        group_id: str,
-        tasks: List[Executable],
-        execution_context: ExecutionContext,
-        policy: GroupExecutionPolicy
+        self, group_id: str, tasks: List[Executable], execution_context: ExecutionContext, policy: GroupExecutionPolicy
     ) -> None:
         """Execute parallel group using WorkflowEngine in thread pool.
 
@@ -62,7 +58,9 @@ class ThreadingCoordinator(TaskCoordinator):
             logger.info("No tasks in group %s", group_id)
             return
 
-        def execute_task_with_engine(task: Executable, branch_context: ExecutionContext) -> tuple[str, bool, str, float]:
+        def execute_task_with_engine(
+            task: Executable, branch_context: ExecutionContext
+        ) -> tuple[str, bool, str, float]:
             """Execute single task using WorkflowEngine within a branch context.
 
             Note: The tracer is propagated via branch_context, which inherits the parent tracer.
@@ -97,9 +95,7 @@ class ThreadingCoordinator(TaskCoordinator):
         future_task_map: Dict[concurrent.futures.Future, str] = {}
 
         for task in tasks:
-            branch_context = execution_context.create_branch_context(
-                branch_id=task.task_id
-            )
+            branch_context = execution_context.create_branch_context(branch_id=task.task_id)
 
             future = self._executor.submit(execute_task_with_engine, task, branch_context)
             futures.append(future)
@@ -121,7 +117,7 @@ class ThreadingCoordinator(TaskCoordinator):
                     success=success,
                     error_message=message if not success else None,
                     duration=duration,
-                    timestamp=time.time()
+                    timestamp=time.time(),
                 )
 
                 if success:
@@ -135,10 +131,7 @@ class ThreadingCoordinator(TaskCoordinator):
                 # Create failure result for unexpected exceptions
                 task_id = future_task_map.get(future, "unknown")
                 results[task_id] = TaskResult(
-                    task_id=task_id,
-                    success=False,
-                    error_message=str(e),
-                    timestamp=time.time()
+                    task_id=task_id, success=False, error_message=str(e), timestamp=time.time()
                 )
 
         success_count = len([r for r in results.values() if r.success])

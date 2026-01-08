@@ -146,9 +146,7 @@ class CheckpointManager:
         return pickle_path, metadata_obj
 
     @classmethod
-    def resume_from_checkpoint(
-        cls, checkpoint_path: str
-    ) -> Tuple[ExecutionContext, CheckpointMetadata]:
+    def resume_from_checkpoint(cls, checkpoint_path: str) -> Tuple[ExecutionContext, CheckpointMetadata]:
         """Restore execution context and metadata from a checkpoint."""
 
         # 1. Identify storage backend based on checkpoint path.

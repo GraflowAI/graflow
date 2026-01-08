@@ -10,6 +10,7 @@ def test_workflow_termination():
     executed_tasks = []
 
     with workflow("termination_test") as wf:
+
         @task(inject_context=True)
         def task_a(context):
             executed_tasks.append("task_a")
@@ -34,6 +35,7 @@ def test_workflow_termination():
         # Create execution context manually to inspect completed_tasks
         from graflow.core.context import ExecutionContext
         from graflow.core.engine import WorkflowEngine
+
         exec_context = ExecutionContext.create(wf.graph)
         engine = WorkflowEngine()
         engine.execute(exec_context)
@@ -55,6 +57,7 @@ def test_workflow_cancellation():
 
     try:
         with workflow("cancellation_test") as wf:
+
             @task(inject_context=True)
             def task_a(context):
                 executed_tasks.append("task_a")
@@ -79,6 +82,7 @@ def test_workflow_cancellation():
             # Create execution context manually to inspect completed_tasks
             from graflow.core.context import ExecutionContext
             from graflow.core.engine import WorkflowEngine
+
             exec_context = ExecutionContext.create(wf.graph)
             engine = WorkflowEngine()
             engine.execute(exec_context)
@@ -102,6 +106,7 @@ def test_normal_workflow_without_control():
     executed_tasks = []
 
     with workflow("normal_test") as wf:
+
         @task
         def task_a():
             executed_tasks.append("task_a")
@@ -134,6 +139,7 @@ def test_conditional_termination():
     executed_tasks_1 = []
 
     with workflow("conditional_terminate_true") as wf:
+
         @task(inject_context=True)
         def check_condition_true(context):
             executed_tasks_1.append("check_condition")
@@ -156,6 +162,7 @@ def test_conditional_termination():
     executed_tasks_2 = []
 
     with workflow("conditional_terminate_false") as wf:
+
         @task(inject_context=True)
         def check_condition_false(context):
             executed_tasks_2.append("check_condition")

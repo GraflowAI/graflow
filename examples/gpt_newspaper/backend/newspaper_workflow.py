@@ -228,7 +228,7 @@ def execute_article_workflow(query: str, article_id: str, output_dir: str) -> Di
     wf = create_article_workflow(query, article_id, output_dir, tracer=tracer)
     result = wf.execute(
         f"search_{article_id}",
-        max_steps=30  # Allow multiple write-critique cycles
+        max_steps=30,  # Allow multiple write-critique cycles
     )
 
     # Shutdown tracer to flush remaining traces
@@ -282,7 +282,7 @@ def run_newspaper_workflow(
         completed_articles = list(
             executor.map(
                 lambda args: execute_article_workflow(*args),
-                zip(queries, article_ids, [output_dir] * len(queries), strict=False)
+                zip(queries, article_ids, [output_dir] * len(queries), strict=False),
             )
         )
 
@@ -335,10 +335,7 @@ def main():
     ]
 
     # Run workflow
-    run_newspaper_workflow(
-        queries=queries,
-        layout="layout_1.html"
-    )
+    run_newspaper_workflow(queries=queries, layout="layout_1.html")
 
 
 if __name__ == "__main__":

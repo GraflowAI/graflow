@@ -2,7 +2,6 @@
 Test goto functionality for next_task
 """
 
-
 from graflow.core.context import ExecutionContext
 from graflow.core.decorators import task
 from graflow.core.graph import TaskGraph
@@ -58,6 +57,7 @@ def test_normal_next_task_runs_successors():
     @task("main_task2", inject_context=True)
     def main_task2(task_ctx):
         execution_log.append("main_task2")
+
         # Create new dynamic task (not goto)
         @task("dynamic_task")
         def dynamic_task():
@@ -98,6 +98,7 @@ def test_mixed_goto_and_normal():
     @task("controller", inject_context=True)
     def controller(task_ctx):
         execution_log.append("controller")
+
         # Normal dynamic task creation
         @task("worker")
         def worker():

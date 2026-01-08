@@ -60,6 +60,7 @@ def main():
             Current time as a string
         """
         from datetime import datetime
+
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     def calculate(expression: str) -> str:
@@ -87,9 +88,7 @@ def main():
             print("Registering research agent with tools...")
             try:
                 adk_agent = LlmAgent(
-                    name="research_agent",
-                    model="gemini-2.5-flash",
-                    tools=[get_current_time, calculate]
+                    name="research_agent", model="gemini-2.5-flash", tools=[get_current_time, calculate]
                 )
 
                 # Pattern 1: Pass LlmAgent with app_name (simpler, backward compatible)

@@ -46,7 +46,9 @@ async def list_pending_feedback(
         req_dict = req.to_dict()  # Use to_dict() to properly convert Enum to string
         # Mask feedback_id: show first character + 14 asterisks + last character
         original_id = req_dict["feedback_id"]
-        req_dict["feedback_id"] = f"{original_id[:1]}**************{original_id[-1:]}" if original_id else "****************"
+        req_dict["feedback_id"] = (
+            f"{original_id[:1]}**************{original_id[-1:]}" if original_id else "****************"
+        )
         masked_requests.append(req_dict)
 
     # Render list

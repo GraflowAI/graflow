@@ -18,10 +18,7 @@ from graflow.hitl.types import (
 @pytest.fixture
 def feedback_manager(tmp_path):
     """Create a FeedbackManager with filesystem backend in temp directory."""
-    return FeedbackManager(
-        backend="filesystem",
-        backend_config={"data_dir": str(tmp_path / "feedback_data")}
-    )
+    return FeedbackManager(backend="filesystem", backend_config={"data_dir": str(tmp_path / "feedback_data")})
 
 
 class TestFeedbackManagerFilesystem:
@@ -273,9 +270,7 @@ class TestFeedbackManagerFilesystem:
         # Create manager with channel
         channel = MemoryChannel(name="test_channel")
         manager = FeedbackManager(
-            backend="filesystem",
-            backend_config={"data_dir": str(tmp_path / "feedback_data")},
-            channel_manager=channel
+            backend="filesystem", backend_config={"data_dir": str(tmp_path / "feedback_data")}, channel_manager=channel
         )
 
         result = []
@@ -342,10 +337,7 @@ class TestConvenienceMethods:
         result = []
 
         def request_thread():
-            approved = task_context.request_approval(
-                prompt="Approve this?",
-                timeout=5.0
-            )
+            approved = task_context.request_approval(prompt="Approve this?", timeout=5.0)
             result.append(approved)
 
         thread = threading.Thread(target=request_thread)
@@ -391,10 +383,7 @@ class TestConvenienceMethods:
         result = []
 
         def request_thread():
-            text = task_context.request_text_input(
-                prompt="Enter comment:",
-                timeout=5.0
-            )
+            text = task_context.request_text_input(prompt="Enter comment:", timeout=5.0)
             result.append(text)
 
         thread = threading.Thread(target=request_thread)
@@ -437,11 +426,7 @@ class TestConvenienceMethods:
         result = []
 
         def request_thread():
-            selected = task_context.request_selection(
-                prompt="Choose option:",
-                options=["A", "B", "C"],
-                timeout=5.0
-            )
+            selected = task_context.request_selection(prompt="Choose option:", options=["A", "B", "C"], timeout=5.0)
             result.append(selected)
 
         thread = threading.Thread(target=request_thread)

@@ -35,8 +35,7 @@ def get_feedback_manager(request: Request) -> FeedbackManager:
     feedback_manager = getattr(request.app.state, "feedback_manager", None)
     if not feedback_manager:
         raise HTTPException(
-            status_code=500,
-            detail="FeedbackManager not initialized. Did you use create_feedback_api()?"
+            status_code=500, detail="FeedbackManager not initialized. Did you use create_feedback_api()?"
         )
     return feedback_manager
 
@@ -71,19 +70,16 @@ This endpoint is useful for building feedback dashboards or notification systems
                                 "timeout": 180.0,
                                 "metadata": {},
                                 "channel_key": None,
-                                "write_to_channel": False
+                                "write_to_channel": False,
                             }
-                        ]
+                        ],
                     }
                 }
-            }
+            },
         }
-    }
+    },
 )
-async def list_pending_feedback(
-    request: Request,
-    session_id: Optional[str] = None
-) -> PendingFeedbackListResponse:
+async def list_pending_feedback(request: Request, session_id: Optional[str] = None) -> PendingFeedbackListResponse:
     """List pending feedback requests.
 
     Args:
@@ -97,15 +93,9 @@ async def list_pending_feedback(
     requests = feedback_manager.list_pending_requests(session_id)
 
     # Convert to response models
-    response_requests = [
-        FeedbackRequestResponse(**req.to_dict())
-        for req in requests
-    ]
+    response_requests = [FeedbackRequestResponse(**req.to_dict()) for req in requests]
 
-    return PendingFeedbackListResponse(
-        count=len(response_requests),
-        requests=response_requests
-    )
+    return PendingFeedbackListResponse(count=len(response_requests), requests=response_requests)
 
 
 @router.get(
@@ -124,18 +114,11 @@ Use this to check the status of a specific feedback request.
         },
         404: {
             "description": "Feedback request not found",
-            "content": {
-                "application/json": {
-                    "example": {"detail": "Feedback request not found"}
-                }
-            }
-        }
-    }
+            "content": {"application/json": {"example": {"detail": "Feedback request not found"}}},
+        },
+    },
 )
-async def get_feedback(
-    request: Request,
-    feedback_id: str
-) -> FeedbackDetailResponse:
+async def get_feedback(request: Request, feedback_id: str) -> FeedbackDetailResponse:
     """Get feedback request details.
 
     Args:
@@ -153,10 +136,7 @@ async def get_feedback(
     # Get request
     feedback_request = feedback_manager.get_request(feedback_id)
     if not feedback_request:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Feedback request '{feedback_id}' not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Feedback request '{feedback_id}' not found")
 
     # Get response (if exists)
     feedback_response = feedback_manager.get_response(feedback_id)
@@ -167,10 +147,7 @@ async def get_feedback(
     if feedback_response:
         response_data = FeedbackResponseDetails(**feedback_response.to_dict())
 
-    return FeedbackDetailResponse(
-        request=request_data,
-        response=response_data
-    )
+    return FeedbackDetailResponse(request=request_data, response=response_data)
 
 
 @router.post(
@@ -206,33 +183,23 @@ Returns the complete feedback response with all details for confirmation.
                         "selected_multiple": None,
                         "custom_data": None,
                         "responded_at": "2025-12-27T10:30:00.123456",
-                        "responded_by": "user@example.com"
+                        "responded_by": "user@example.com",
                     }
                 }
-            }
+            },
         },
         400: {
             "description": "Failed to provide feedback",
-            "content": {
-                "application/json": {
-                    "example": {"detail": "Failed to provide feedback"}
-                }
-            }
+            "content": {"application/json": {"example": {"detail": "Failed to provide feedback"}}},
         },
         404: {
             "description": "Feedback request not found",
-            "content": {
-                "application/json": {
-                    "example": {"detail": "Feedback request not found"}
-                }
-            }
-        }
-    }
+            "content": {"application/json": {"example": {"detail": "Feedback request not found"}}},
+        },
+    },
 )
 async def respond_to_feedback(
-    request: Request,
-    feedback_id: str,
-    body: FeedbackResponseRequest
+    request: Request, feedback_id: str, body: FeedbackResponseRequest
 ) -> FeedbackResponseDetails:
     """Provide feedback response.
 
@@ -252,10 +219,7 @@ async def respond_to_feedback(
     # Get original request to determine type
     feedback_request = feedback_manager.get_request(feedback_id)
     if not feedback_request:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Feedback request '{feedback_id}' not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Feedback request '{feedback_id}' not found")
 
     # Create response based on request type
     response = FeedbackResponse(
@@ -273,10 +237,7 @@ async def respond_to_feedback(
     # Provide feedback
     success = feedback_manager.provide_feedback(feedback_id, response)
     if not success:
-        raise HTTPException(
-            status_code=400,
-            detail="Failed to provide feedback"
-        )
+        raise HTTPException(status_code=400, detail="Failed to provide feedback")
 
     # Return the complete response details for confirmation
     return FeedbackResponseDetails(**response.to_dict())
@@ -297,27 +258,17 @@ this feedback anymore. Use this when a feedback request is no longer needed or w
             "description": "Feedback request cancelled successfully",
             "content": {
                 "application/json": {
-                    "example": {
-                        "message": "Feedback request cancelled",
-                        "feedback_id": "deploy_task_abc12345"
-                    }
+                    "example": {"message": "Feedback request cancelled", "feedback_id": "deploy_task_abc12345"}
                 }
-            }
+            },
         },
         404: {
             "description": "Feedback request not found",
-            "content": {
-                "application/json": {
-                    "example": {"detail": "Feedback request not found"}
-                }
-            }
-        }
-    }
+            "content": {"application/json": {"example": {"detail": "Feedback request not found"}}},
+        },
+    },
 )
-async def cancel_feedback(
-    request: Request,
-    feedback_id: str
-) -> MessageResponse:
+async def cancel_feedback(request: Request, feedback_id: str) -> MessageResponse:
     """Cancel pending feedback request.
 
     Args:
@@ -335,16 +286,10 @@ async def cancel_feedback(
     # Get request
     feedback_request = feedback_manager.get_request(feedback_id)
     if not feedback_request:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Feedback request '{feedback_id}' not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Feedback request '{feedback_id}' not found")
 
     # Update status to cancelled
     feedback_request.status = "cancelled"
     feedback_manager.store_request(feedback_request)
 
-    return MessageResponse(
-        message="Feedback request cancelled",
-        feedback_id=feedback_id
-    )
+    return MessageResponse(message="Feedback request cancelled", feedback_id=feedback_id)

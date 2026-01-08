@@ -76,6 +76,7 @@ class GraphStore:
         if kwargs.get("decode_responses"):
             kwargs["decode_responses"] = False
             from redis import Redis
+
             return Redis(**kwargs)
 
         return redis_client
@@ -146,7 +147,7 @@ class GraphStore:
             )
 
         # Decompress and deserialize
-        graph_bytes = zlib.decompress(compressed) # type: ignore
+        graph_bytes = zlib.decompress(compressed)  # type: ignore
         graph = loads(graph_bytes)
 
         # Update local cache (LRU)

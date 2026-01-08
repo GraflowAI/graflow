@@ -42,7 +42,7 @@ class TestTracerImplementation(Tracer):
     def flush(self) -> None:
         self.flush_calls.append(True)
 
-    def clone(self, trace_id: str) -> 'TestTracerImplementation':
+    def clone(self, trace_id: str) -> "TestTracerImplementation":
         cloned = TestTracerImplementation(enable_runtime_graph=False)
         return cloned
 

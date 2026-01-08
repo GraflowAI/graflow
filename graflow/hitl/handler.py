@@ -226,7 +226,7 @@ class SlackFeedbackHandler(FeedbackHandler):
             status_text = "Approved" if response.approved else "Rejected"
         elif hasattr(response, "text"):
             status_emoji = "💬"
-            status_text = f"Text: {response.text[:100]}" # type: ignore
+            status_text = f"Text: {response.text[:100]}"  # type: ignore
         elif hasattr(response, "selected"):
             status_emoji = "✓"
             status_text = f"Selected: {response.selected}"

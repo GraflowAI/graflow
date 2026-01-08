@@ -48,6 +48,7 @@ def example_1_simple_pipeline():
     print("=" * 70)
 
     with workflow("simple_pipeline") as ctx:
+
         @task
         def load_data():
             """Load data from source."""
@@ -123,6 +124,7 @@ def example_2_parallel_workflow():
     print("=" * 70)
 
     with workflow("parallel_workflow") as ctx:
+
         @task(inject_context=True)
         def load_data(context: TaskExecutionContext):
             """Load data from source."""
@@ -179,11 +181,7 @@ def example_2_parallel_workflow():
         mermaid = draw_mermaid(
             nx_graph,
             title="Parallel Processing",
-            node_colors={
-                "load_data": "#90EE90",
-                "aggregate_results": "#FFB6C1",
-                "generate_report": "#87CEEB"
-            }
+            node_colors={"load_data": "#90EE90", "aggregate_results": "#FFB6C1", "generate_report": "#87CEEB"},
         )
         print(mermaid)
 
@@ -196,14 +194,10 @@ def example_2_parallel_workflow():
                 "process_batch_2": "lightyellow",
                 "process_batch_3": "lightyellow",
                 "aggregate_results": "lightcoral",
-                "generate_report": "lightblue"
+                "generate_report": "lightblue",
             }
 
-            png_bytes = draw_png(
-                nx_graph,
-                node_colors=node_colors,
-                output_path="/tmp/parallel_workflow.png"
-            )
+            png_bytes = draw_png(nx_graph, node_colors=node_colors, output_path="/tmp/parallel_workflow.png")
             if png_bytes:
                 print(f"✅ PNG saved: /tmp/parallel_workflow.png ({len(png_bytes)} bytes)")
         except Exception as e:
@@ -217,6 +211,7 @@ def example_3_complex_workflow():
     print("=" * 70)
 
     with workflow("ml_training") as ctx:
+
         @task
         def load_training_data():
             """Load training dataset."""
@@ -288,23 +283,19 @@ def example_3_complex_workflow():
         print("-" * 70)
         # Color code by stage
         stage_colors = {
-            "load_training_data": "#E6F3FF",      # Data loading - light blue
+            "load_training_data": "#E6F3FF",  # Data loading - light blue
             "preprocess_data": "#E6F3FF",
-            "feature_engineering": "#FFF4E6",     # Feature eng - light orange
-            "train_model": "#FFEBE6",             # Training - light red
+            "feature_engineering": "#FFF4E6",  # Feature eng - light orange
+            "train_model": "#FFEBE6",  # Training - light red
             "validate_model": "#FFEBE6",
             "hyperparameter_tuning": "#FFEBE6",
             "final_training": "#FFEBE6",
-            "model_evaluation": "#E6FFE6",        # Evaluation - light green
-            "model_deployment": "#F3E6FF",        # Deployment - light purple
-            "monitoring_setup": "#F3E6FF"
+            "model_evaluation": "#E6FFE6",  # Evaluation - light green
+            "model_deployment": "#F3E6FF",  # Deployment - light purple
+            "monitoring_setup": "#F3E6FF",
         }
 
-        mermaid = draw_mermaid(
-            nx_graph,
-            title="ML Training Pipeline",
-            node_colors=stage_colors
-        )
+        mermaid = draw_mermaid(nx_graph, title="ML Training Pipeline", node_colors=stage_colors)
         print(mermaid)
 
         print("\n📸 PNG Generation:")
@@ -320,14 +311,10 @@ def example_3_complex_workflow():
                 "final_training": "lightcoral",
                 "model_evaluation": "lightgreen",
                 "model_deployment": "plum",
-                "monitoring_setup": "plum"
+                "monitoring_setup": "plum",
             }
 
-            png_bytes = draw_png(
-                nx_graph,
-                node_colors=png_colors,
-                output_path="/tmp/ml_workflow.png"
-            )
+            png_bytes = draw_png(nx_graph, node_colors=png_colors, output_path="/tmp/ml_workflow.png")
             if png_bytes:
                 print(f"✅ PNG saved: /tmp/ml_workflow.png ({len(png_bytes)} bytes)")
         except Exception as e:

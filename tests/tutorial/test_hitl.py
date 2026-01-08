@@ -23,9 +23,10 @@ def provide_feedback_after_delay(
     approved: bool = True,
     text: Optional[str] = None,
     selected: Optional[str] = None,
-    delay: float = 0.5
+    delay: float = 0.5,
 ):
     """Helper to provide feedback after a delay in a separate thread"""
+
     def _provide():
         time.sleep(delay)
         manager = context.execution_context.feedback_manager
@@ -40,7 +41,7 @@ def provide_feedback_after_delay(
                 approved=approved if response_type == FeedbackType.APPROVAL else None,
                 text=text if response_type == FeedbackType.TEXT else None,
                 selected=selected if response_type == FeedbackType.SELECTION else None,
-                responded_by="test_user"
+                responded_by="test_user",
             )
             manager.provide_feedback(feedback_id, response)
 
@@ -61,11 +62,7 @@ class TestBasicApproval:
                 # Provide feedback in background
                 provide_feedback_after_delay(ctx, approved=True)
 
-                response = ctx.request_feedback(
-                    feedback_type="approval",
-                    prompt="Approve this action?",
-                    timeout=5.0
-                )
+                response = ctx.request_feedback(feedback_type="approval", prompt="Approve this action?", timeout=5.0)
 
                 return response.approved
 
@@ -82,11 +79,7 @@ class TestBasicApproval:
             def request_approval(ctx: TaskExecutionContext):
                 provide_feedback_after_delay(ctx, approved=False)
 
-                response = ctx.request_feedback(
-                    feedback_type="approval",
-                    prompt="Approve this action?",
-                    timeout=5.0
-                )
+                response = ctx.request_feedback(feedback_type="approval", prompt="Approve this action?", timeout=5.0)
 
                 return response.approved
 
@@ -112,18 +105,14 @@ class TestBasicApproval:
                             response_type=FeedbackType.APPROVAL,
                             approved=True,
                             reason="Looks good to me!",
-                            responded_by="approver"
+                            responded_by="approver",
                         )
                         manager.provide_feedback(feedback_id, response)
 
                 thread = threading.Thread(target=_provide, daemon=True)
                 thread.start()
 
-                response = ctx.request_feedback(
-                    feedback_type="approval",
-                    prompt="Approve deployment?",
-                    timeout=5.0
-                )
+                response = ctx.request_feedback(feedback_type="approval", prompt="Approve deployment?", timeout=5.0)
 
                 return {"approved": response.approved, "reason": response.reason}
 
@@ -146,11 +135,7 @@ class TestTextInput:
             def request_comment(ctx: TaskExecutionContext):
                 provide_feedback_after_delay(ctx, text="This is my comment")
 
-                response = ctx.request_feedback(
-                    feedback_type="text",
-                    prompt="Enter your comment:",
-                    timeout=5.0
-                )
+                response = ctx.request_feedback(feedback_type="text", prompt="Enter your comment:", timeout=5.0)
 
                 return response.text
 
@@ -171,7 +156,7 @@ class TestTextInput:
                     feedback_type="text",
                     prompt="Provide feedback:",
                     metadata={"task": "review", "version": "1.0"},
-                    timeout=5.0
+                    timeout=5.0,
                 )
 
                 return response.text
@@ -197,7 +182,7 @@ class TestSelection:
                     feedback_type="selection",
                     prompt="Choose an option:",
                     options=["option1", "option2", "option3"],
-                    timeout=5.0
+                    timeout=5.0,
                 )
 
                 return response.selected
@@ -219,7 +204,7 @@ class TestSelection:
                     feedback_type="selection",
                     prompt="Choose execution mode:",
                     options=["fast", "balanced", "thorough"],
-                    timeout=5.0
+                    timeout=5.0,
                 )
 
                 return response.selected
@@ -246,7 +231,7 @@ class TestChannelIntegration:
                     prompt="Approve?",
                     channel_key="deployment_approved",
                     write_to_channel=True,
-                    timeout=5.0
+                    timeout=5.0,
                 )
 
                 # Response should be automatically written to channel
@@ -270,11 +255,7 @@ class TestChannelIntegration:
             def request_and_store(ctx: TaskExecutionContext):
                 provide_feedback_after_delay(ctx, text="Important note")
 
-                response = ctx.request_feedback(
-                    feedback_type="text",
-                    prompt="Enter note:",
-                    timeout=5.0
-                )
+                response = ctx.request_feedback(feedback_type="text", prompt="Enter note:", timeout=5.0)
 
                 # Manually write to channel
                 ctx.get_channel().set("user_note", response.text)
@@ -307,11 +288,7 @@ class TestTimeoutBehavior:
                 # Provide feedback almost immediately
                 provide_feedback_after_delay(ctx, approved=True, delay=0.1)
 
-                response = ctx.request_feedback(
-                    feedback_type="approval",
-                    prompt="Quick approval?",
-                    timeout=10.0
-                )
+                response = ctx.request_feedback(feedback_type="approval", prompt="Quick approval?", timeout=10.0)
 
                 return response.approved
 
@@ -331,7 +308,7 @@ class TestTimeoutBehavior:
                     ctx.request_feedback(
                         feedback_type="approval",
                         prompt="This will timeout",
-                        timeout=1.0  # Short timeout
+                        timeout=1.0,  # Short timeout
                     )
                     return "Should not reach here"
                 except FeedbackTimeoutError:
@@ -354,11 +331,7 @@ class TestWorkflowIntegration:
             def stage1(ctx: TaskExecutionContext):
                 provide_feedback_after_delay(ctx, approved=True)
 
-                response = ctx.request_feedback(
-                    feedback_type="approval",
-                    prompt="Approve stage 1?",
-                    timeout=5.0
-                )
+                response = ctx.request_feedback(feedback_type="approval", prompt="Approve stage 1?", timeout=5.0)
 
                 if not response.approved:
                     ctx.cancel_workflow("Stage 1 rejected")
@@ -369,11 +342,7 @@ class TestWorkflowIntegration:
             def stage2(ctx: TaskExecutionContext):
                 provide_feedback_after_delay(ctx, approved=True, delay=0.6)
 
-                response = ctx.request_feedback(
-                    feedback_type="approval",
-                    prompt="Approve stage 2?",
-                    timeout=5.0
-                )
+                response = ctx.request_feedback(feedback_type="approval", prompt="Approve stage 2?", timeout=5.0)
 
                 if not response.approved:
                     ctx.cancel_workflow("Stage 2 rejected")
@@ -399,11 +368,7 @@ class TestWorkflowIntegration:
             def gate_task(ctx: TaskExecutionContext):
                 provide_feedback_after_delay(ctx, approved=False)
 
-                response = ctx.request_feedback(
-                    feedback_type="approval",
-                    prompt="Approve?",
-                    timeout=5.0
-                )
+                response = ctx.request_feedback(feedback_type="approval", prompt="Approve?", timeout=5.0)
 
                 if not response.approved:
                     ctx.cancel_workflow("User rejected")
@@ -432,7 +397,7 @@ class TestWorkflowIntegration:
                     feedback_type="selection",
                     prompt="Choose processing mode:",
                     options=["fast", "thorough"],
-                    timeout=5.0
+                    timeout=5.0,
                 )
 
                 ctx.get_channel().set("mode", response.selected)
@@ -459,11 +424,7 @@ class TestFeedbackHandler:
     def test_feedback_with_custom_handler(self):
         """Test feedback with custom handler callbacks"""
 
-        handler_calls = {
-            "created": False,
-            "received": False,
-            "timeout": False
-        }
+        handler_calls = {"created": False, "received": False, "timeout": False}
 
         class CustomHandler:
             def on_request_created(self, request):
@@ -483,10 +444,7 @@ class TestFeedbackHandler:
 
                 handler = CustomHandler()
                 response = ctx.request_feedback(
-                    feedback_type="approval",
-                    prompt="Test handler",
-                    timeout=5.0,
-                    handler=handler
+                    feedback_type="approval", prompt="Test handler", timeout=5.0, handler=handler
                 )
 
                 return response.approved
@@ -511,11 +469,7 @@ class TestMultipleFeedbackTypes:
             def approval_step(ctx: TaskExecutionContext):
                 provide_feedback_after_delay(ctx, approved=True)
 
-                response = ctx.request_feedback(
-                    feedback_type="approval",
-                    prompt="Start process?",
-                    timeout=5.0
-                )
+                response = ctx.request_feedback(feedback_type="approval", prompt="Start process?", timeout=5.0)
 
                 return response.approved
 
@@ -523,11 +477,7 @@ class TestMultipleFeedbackTypes:
             def text_step(ctx: TaskExecutionContext):
                 provide_feedback_after_delay(ctx, text="Process notes", delay=0.6)
 
-                response = ctx.request_feedback(
-                    feedback_type="text",
-                    prompt="Enter notes:",
-                    timeout=5.0
-                )
+                response = ctx.request_feedback(feedback_type="text", prompt="Enter notes:", timeout=5.0)
 
                 ctx.get_channel().set("notes", response.text)
                 return response.text
@@ -537,10 +487,7 @@ class TestMultipleFeedbackTypes:
                 provide_feedback_after_delay(ctx, selected="medium", delay=0.7)
 
                 response = ctx.request_feedback(
-                    feedback_type="selection",
-                    prompt="Choose priority:",
-                    options=["low", "medium", "high"],
-                    timeout=5.0
+                    feedback_type="selection", prompt="Choose priority:", options=["low", "medium", "high"], timeout=5.0
                 )
 
                 return response.selected
@@ -564,11 +511,7 @@ class TestRealWorldPatterns:
 
             @task
             def prepare_deployment():
-                return {
-                    "version": "v1.2.3",
-                    "environment": "production",
-                    "changes": ["feature-x", "bugfix-y"]
-                }
+                return {"version": "v1.2.3", "environment": "production", "changes": ["feature-x", "bugfix-y"]}
 
             @task(inject_context=True)
             def request_approval(ctx: TaskExecutionContext):
@@ -580,7 +523,7 @@ class TestRealWorldPatterns:
                     feedback_type="approval",
                     prompt=f"Approve deployment {deployment_info['version']} to {deployment_info['environment']}?",
                     metadata=deployment_info,
-                    timeout=5.0
+                    timeout=5.0,
                 )
 
                 if not response.approved:
@@ -609,11 +552,7 @@ class TestRealWorldPatterns:
 
             @task
             def process_data():
-                return {
-                    "records_processed": 1000,
-                    "errors": 5,
-                    "success_rate": 0.995
-                }
+                return {"records_processed": 1000, "errors": 5, "success_rate": 0.995}
 
             @task(inject_context=True)
             def validate_results(ctx: TaskExecutionContext):
@@ -625,7 +564,7 @@ class TestRealWorldPatterns:
                     feedback_type="text",
                     prompt=f"Processed {results['records_processed']} records with {results['errors']} errors. Comments?",
                     metadata=results,
-                    timeout=5.0
+                    timeout=5.0,
                 )
 
                 ctx.get_channel().set("validation_comment", response.text)

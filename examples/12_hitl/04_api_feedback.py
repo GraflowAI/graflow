@@ -42,9 +42,7 @@ from graflow.core.workflow import workflow
 
 # Configure logging to show INFO level messages from graflow.hitl
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
 )
 
 
@@ -52,18 +50,8 @@ def main():
     """Demonstrate distributed feedback via REST API."""
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="HITL Feedback API Example")
-    parser.add_argument(
-        "--redis-host",
-        type=str,
-        default="localhost",
-        help="Redis host (default: localhost)"
-    )
-    parser.add_argument(
-        "--redis-port",
-        type=int,
-        default=6379,
-        help="Redis port (default: 6379)"
-    )
+    parser.add_argument("--redis-host", type=str, default="localhost", help="Redis host (default: localhost)")
+    parser.add_argument("--redis-port", type=int, default=6379, help="Redis port (default: 6379)")
     args = parser.parse_args()
 
     try:
@@ -80,9 +68,7 @@ def main():
     # Connect to Redis
     print(f"\n[Setup] Connecting to Redis at {args.redis_host}:{args.redis_port}...")
     try:
-        redis_client = redis.Redis(
-            host=args.redis_host, port=args.redis_port, db=0, decode_responses=True
-        )
+        redis_client = redis.Redis(host=args.redis_host, port=args.redis_port, db=0, decode_responses=True)
         redis_client.ping()
         print("        ✓ Connected to Redis")
     except Exception as e:
@@ -91,7 +77,9 @@ def main():
         return
 
     print("\n[Setup] Make sure API server is running:")
-    print(f"        python -m graflow.api --backend redis --redis-host {args.redis_host} --redis-port {args.redis_port}")
+    print(
+        f"        python -m graflow.api --backend redis --redis-host {args.redis_host} --redis-port {args.redis_port}"
+    )
     print()
 
     # Create workflow
@@ -124,10 +112,7 @@ def main():
             # Fallback if channel doesn't have the info
             if deployment_info is None:
                 print("[Task 2] Warning: Could not retrieve deployment info from channel")
-                deployment_info = {
-                    "version": "v2.0.0",
-                    "environment": "production"
-                }
+                deployment_info = {"version": "v2.0.0", "environment": "production"}
 
             print("[Task 2] Waiting for feedback via REST API...")
             print("[Task 2] Timeout: 300 seconds (5 minutes)")

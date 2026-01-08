@@ -75,6 +75,7 @@ from graflow.worker.worker import TaskWorker
 
 REDIS_IMAGE = "redis:7.2"
 
+
 def _is_port_available(port: int) -> bool:
     """Check if a local TCP port is free to bind."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -129,12 +130,7 @@ def _start_redis_container():
 
     try:
         client = docker.from_env()
-        container = client.containers.run(
-            REDIS_IMAGE,
-            ports={'6379/tcp': 6379},
-            detach=True,
-            remove=True
-        )
+        container = client.containers.run(REDIS_IMAGE, ports={"6379/tcp": 6379}, detach=True, remove=True)
         _register_container_cleanup(container)
         host_port = _get_container_host_port(container)
         if host_port is None or host_port != 6379:
@@ -205,19 +201,14 @@ def check_redis() -> redis.Redis | None:
     _stop_redis_container(container)
     return None
 
-def start_workers(redis_client:redis.Redis, num_workers:int = 2):
+
+def start_workers(redis_client: redis.Redis, num_workers: int = 2):
     # Start local worker threads so the example is self-contained
     # In a real deployment, these would be separate processes/containers
-    redis_queue = DistributedTaskQueue(
-        redis_client=redis_client,
-        key_prefix="graflow:distributed_demo"
-    )
+    redis_queue = DistributedTaskQueue(redis_client=redis_client, key_prefix="graflow:distributed_demo")
     redis_queue.cleanup()
 
-    workers = [
-        TaskWorker(queue=redis_queue, worker_id=f"worker-{i}")
-        for i in range(num_workers)
-    ]
+    workers = [TaskWorker(queue=redis_queue, worker_id=f"worker-{i}") for i in range(num_workers)]
 
     def shutdown_workers():
         print("\nStopping workers...")
@@ -239,6 +230,7 @@ def start_workers(redis_client:redis.Redis, num_workers:int = 2):
 
     print(f"✅ {num_workers} local worker threads started")
     return workers
+
 
 def main():
     """Run distributed workflow demonstration."""
@@ -301,17 +293,17 @@ def main():
             # Aggregate
             total = result1["records"] + result2["records"] + result3["records"]
 
-            return {
-                "sources": [result1, result2, result3],
-                "total_records": total
-            }
+            return {"sources": [result1, result2, result3], "total_records": total}
 
-    # Define parallel extraction followed by aggregation
-        parallel_extract = (extract_source_1 | extract_source_2 | extract_source_3).set_group_name("parallel_extract").with_execution(backend=CoordinationBackend.REDIS)
-        parallel_extract >> aggregate_results # type: ignore
+        # Define parallel extraction followed by aggregation
+        parallel_extract = (
+            (extract_source_1 | extract_source_2 | extract_source_3)
+            .set_group_name("parallel_extract")
+            .with_execution(backend=CoordinationBackend.REDIS)
+        )
+        parallel_extract >> aggregate_results  # type: ignore
         # Step 2: Submit workflow
         print("\nStep 2: Executing workflow with Redis backend")
-
 
         # Create execution context with Redis
         # Note: We use the same key_prefix as the workers to ensure they share the queue
@@ -320,10 +312,7 @@ def main():
             start_node="parallel_extract",
             channel_backend="redis",
             max_steps=100,
-            config={
-                "redis_client": redis_client,
-                "key_prefix": "graflow:distributed_demo"
-            }
+            config={"redis_client": redis_client, "key_prefix": "graflow:distributed_demo"},
         )
         exec_context.channel.clear()
 
@@ -334,6 +323,7 @@ def main():
             # This will block until the workflow completes (or fails)
             # The engine handles distributed coordination via RedisCoordinator
             from graflow.core.engine import WorkflowEngine
+
             engine = WorkflowEngine()
             result = engine.execute(exec_context)
 
@@ -350,6 +340,7 @@ def main():
         except Exception as e:
             print(f"\n❌ Workflow execution failed: {e}")
             import traceback
+
             traceback.print_exc()
 
 

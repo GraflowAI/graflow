@@ -15,10 +15,11 @@ if TYPE_CHECKING:
 
 class TaskStatus(Enum):
     """Task status management."""
-    READY = "ready"        # Ready for execution
-    RUNNING = "running"    # Currently executing
-    SUCCESS = "success"    # Successfully completed
-    ERROR = "error"        # Failed with error
+
+    READY = "ready"  # Ready for execution
+    RUNNING = "running"  # Currently executing
+    SUCCESS = "success"  # Successfully completed
+    ERROR = "error"  # Failed with error
 
 
 @dataclass
@@ -29,6 +30,7 @@ class TaskSpec:
     executable task. The actual task is stored in the Graph (via GraphStore)
     and retrieved directly without additional serialization.
     """
+
     executable: Executable
     execution_context: ExecutionContext
     status: TaskStatus = TaskStatus.READY
@@ -40,8 +42,8 @@ class TaskSpec:
     # Phase 2: Barrier synchronization support
     group_id: Optional[str] = None
     # Trace context for distributed tracing
-    trace_id: Optional[str] = None           # Trace ID (= session_id, W3C compliant 32-digit hex)
-    parent_span_id: Optional[str] = None     # Parent span ID (task that queued this task)
+    trace_id: Optional[str] = None  # Trace ID (= session_id, W3C compliant 32-digit hex)
+    parent_span_id: Optional[str] = None  # Parent span ID (task that queued this task)
 
     @property
     def task_id(self) -> str:
@@ -73,6 +75,7 @@ class TaskSpec:
         """
         return self.executable
 
+
 class TaskQueue(ABC):
     """Abstract base class for all task queues."""
 
@@ -82,18 +85,14 @@ class TaskQueue(ABC):
         # Advanced features
         self.enable_retry: bool = False
         self.enable_metrics: bool = False
-        self.metrics: Dict[str, int] = {
-            'enqueued': 0,
-            'dequeued': 0,
-            'retries': 0,
-            'failures': 0
-        }
+        self.metrics: Dict[str, int] = {"enqueued": 0, "dequeued": 0, "retries": 0, "failures": 0}
 
     @property
     def _logger(self):
         """Get logger instance (lazy initialization to avoid module-level import)."""
-        if not hasattr(self, '_logger_instance'):
+        if not hasattr(self, "_logger_instance"):
             import logging
+
             self._logger_instance = logging.getLogger(__name__)
         return self._logger_instance
 
@@ -145,12 +144,12 @@ class TaskQueue(ABC):
         task_spec.status = TaskStatus.ERROR
 
         if self.enable_metrics:
-            self.metrics['failures'] += 1
+            self.metrics["failures"] += 1
 
         if self.enable_retry and task_spec.can_retry():
             task_spec.increment_retry(error_message)
             if self.enable_metrics:
-                self.metrics['retries'] += 1
+                self.metrics["retries"] += 1
             return True  # Retry
 
         return False  # Don't retry
@@ -161,19 +160,10 @@ class TaskQueue(ABC):
 
     def reset_metrics(self) -> None:
         """Reset queue metrics."""
-        self.metrics = {
-            'enqueued': 0,
-            'dequeued': 0,
-            'retries': 0,
-            'failures': 0
-        }
+        self.metrics = {"enqueued": 0, "dequeued": 0, "retries": 0, "failures": 0}
 
     def notify_task_completion(
-        self,
-        task_id: str,
-        success: bool,
-        group_id: Optional[str] = None,
-        error_message: Optional[str] = None
+        self, task_id: str, success: bool, group_id: Optional[str] = None, error_message: Optional[str] = None
     ) -> None:
         """Notify task completion for barrier synchronization.
 
@@ -191,4 +181,3 @@ class TaskQueue(ABC):
             self._logger.debug(f"Task {task_id} completed successfully in group {group_id}")
         else:
             self._logger.debug(f"Task {task_id} failed in group {group_id}: {error_message}")
-

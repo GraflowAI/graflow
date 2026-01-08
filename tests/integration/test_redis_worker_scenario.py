@@ -21,6 +21,7 @@ _redis_client: Optional[Any] = None
 
 class DataMessage(TypedDict):
     """Custom message type for data exchange."""
+
     data: list[int]
     task_id: str
     timestamp: float
@@ -74,11 +75,7 @@ def _make_task_spec(task: RedisWorkflowTask, execution_context: ExecutionContext
     Tasks are retrieved from Graph (via GraphStore), no explicit
     serialization strategy needed.
     """
-    return TaskSpec(
-        executable=task,
-        execution_context=execution_context,
-        status=TaskStatus.READY
-    )
+    return TaskSpec(executable=task, execution_context=execution_context, status=TaskStatus.READY)
 
 
 def _create_producer_task(task_id: str, data: list[int]) -> RedisWorkflowTask:
@@ -86,11 +83,7 @@ def _create_producer_task(task_id: str, data: list[int]) -> RedisWorkflowTask:
 
     def run() -> str:
         channel = _get_channel()
-        data_msg: DataMessage = {
-            "data": data,
-            "task_id": task_id,
-            "timestamp": time.time()
-        }
+        data_msg: DataMessage = {"data": data, "task_id": task_id, "timestamp": time.time()}
         channel.set(f"data:{task_id}", data_msg)
 
         # Atomic increment
@@ -126,7 +119,7 @@ def _create_consumer_task(task_id: str) -> RedisWorkflowTask:
             "task_id": task_id,
             "result": consumed_data,
             "timestamp": time.time(),
-            "status": "completed"
+            "status": "completed",
         }
         channel.set(f"consumed:{task_id}", result_msg)
         return result
@@ -157,7 +150,7 @@ def _create_aggregator_task(task_id: str) -> RedisWorkflowTask:
             "task_id": task_id,
             "result": final_result,
             "timestamp": time.time(),
-            "status": "completed"
+            "status": "completed",
         }
         channel.set("final_result", final_msg)
         return final_result
@@ -181,9 +174,7 @@ def execution_context(clean_redis):
     """Create real ExecutionContext with Redis channel support."""
     graph = TaskGraph()
     context = ExecutionContext(
-        graph,
-        channel_backend="redis",
-        config={"redis_client": clean_redis, "key_prefix": "test_graflow"}
+        graph, channel_backend="redis", config={"redis_client": clean_redis, "key_prefix": "test_graflow"}
     )
     _configure_redis_client(clean_redis)
     # Ensure channel state is clean
@@ -209,12 +200,7 @@ def redis_coordinator(redis_queue):
 @pytest.fixture
 def task_worker(redis_queue):
     """Create TaskWorker instance for tests."""
-    worker = TaskWorker(
-        queue=redis_queue,
-        worker_id="test_worker",
-        max_concurrent_tasks=3,
-        poll_interval=0.1
-    )
+    worker = TaskWorker(queue=redis_queue, worker_id="test_worker", max_concurrent_tasks=3, poll_interval=0.1)
     yield worker
     if worker.is_running:
         worker.stop()
@@ -228,18 +214,12 @@ def test_producer_consumer_with_typed_channels(redis_queue, task_worker, clean_r
         "producer_task_1": _create_producer_task("producer_task_1", [6, 7, 8, 9, 10]),
         "consumer_task_0": _create_consumer_task("consumer_task_0"),
         "consumer_task_1": _create_consumer_task("consumer_task_1"),
-        "aggregator_task": _create_aggregator_task("aggregator_task")
+        "aggregator_task": _create_aggregator_task("aggregator_task"),
     }
     _register_tasks(execution_context, tasks)
 
     # Enqueue tasks in desired execution order
-    enqueue_order = [
-        "producer_task_0",
-        "producer_task_1",
-        "consumer_task_0",
-        "consumer_task_1",
-        "aggregator_task"
-    ]
+    enqueue_order = ["producer_task_0", "producer_task_1", "consumer_task_0", "consumer_task_1", "aggregator_task"]
     for task_id in enqueue_order:
         redis_queue.enqueue(_make_task_spec(tasks[task_id], execution_context))
 
@@ -281,12 +261,7 @@ def test_parallel_coordination_with_redis(redis_queue, clean_redis, redis_coordi
     # Create multiple workers
     workers = []
     for i in range(2):
-        worker = TaskWorker(
-            queue=redis_queue,
-            worker_id=f"worker_{i}",
-            max_concurrent_tasks=2,
-            poll_interval=0.1
-        )
+        worker = TaskWorker(queue=redis_queue, worker_id=f"worker_{i}", max_concurrent_tasks=2, poll_interval=0.1)
         workers.append(worker)
 
     try:
@@ -294,10 +269,7 @@ def test_parallel_coordination_with_redis(redis_queue, clean_redis, redis_coordi
         barrier_id = "task_sync"
         redis_coordinator.create_barrier(barrier_id, 4)  # 4 parallel tasks
 
-        tasks = {
-            f"simple_task_{i}": _create_simple_task(f"simple_task_{i}")
-            for i in range(4)
-        }
+        tasks = {f"simple_task_{i}": _create_simple_task(f"simple_task_{i}") for i in range(4)}
         _register_tasks(execution_context, tasks)
 
         # Create tasks
@@ -341,11 +313,7 @@ def test_redis_channel_operations_in_tasks(clean_redis):
     channel.redis_client = clean_redis
 
     # Test message passing pattern used by tasks
-    data_msg: DataMessage = {
-        "data": [1, 2, 3],
-        "task_id": "test_task",
-        "timestamp": time.time()
-    }
+    data_msg: DataMessage = {"data": [1, 2, 3], "task_id": "test_task", "timestamp": time.time()}
 
     # Producer writes data
     channel.set("data:test_task", data_msg)
@@ -360,7 +328,7 @@ def test_redis_channel_operations_in_tasks(clean_redis):
         "task_id": "test_task",
         "result": "processed_data",
         "timestamp": time.time(),
-        "status": "completed"
+        "status": "completed",
     }
 
     channel.set("result:test_task", result_msg)

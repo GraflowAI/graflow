@@ -39,56 +39,27 @@ class NoopTracer(Tracer):
 
     # === Output methods (all no-ops) ===
 
-    def _output_trace_start(
-        self,
-        name: str,
-        trace_id: Optional[str],
-        metadata: Optional[Dict[str, Any]]
-    ) -> None:
+    def _output_trace_start(self, name: str, trace_id: Optional[str], metadata: Optional[Dict[str, Any]]) -> None:
         """Trace start output (no-op)."""
         pass
 
-    def _output_trace_end(
-        self,
-        name: str,
-        output: Optional[Any],
-        metadata: Optional[Dict[str, Any]]
-    ) -> None:
+    def _output_trace_end(self, name: str, output: Optional[Any], metadata: Optional[Dict[str, Any]]) -> None:
         """Trace end output (no-op)."""
         pass
 
-    def _output_span_start(
-        self,
-        name: str,
-        parent_name: Optional[str],
-        metadata: Optional[Dict[str, Any]]
-    ) -> None:
+    def _output_span_start(self, name: str, parent_name: Optional[str], metadata: Optional[Dict[str, Any]]) -> None:
         """Span start output (no-op)."""
         pass
 
-    def _output_span_end(
-        self,
-        name: str,
-        output: Optional[Any],
-        metadata: Optional[Dict[str, Any]]
-    ) -> None:
+    def _output_span_end(self, name: str, output: Optional[Any], metadata: Optional[Dict[str, Any]]) -> None:
         """Span end output (no-op)."""
         pass
 
-    def _output_event(
-        self,
-        name: str,
-        parent_span: Optional[str],
-        metadata: Optional[Dict[str, Any]]
-    ) -> None:
+    def _output_event(self, name: str, parent_span: Optional[str], metadata: Optional[Dict[str, Any]]) -> None:
         """Event output (no-op)."""
         pass
 
-    def _output_attach_to_trace(
-        self,
-        trace_id: str,
-        parent_span_id: Optional[str]
-    ) -> None:
+    def _output_attach_to_trace(self, trace_id: str, parent_span_id: Optional[str]) -> None:
         """Attach to trace output (no-op)."""
         pass
 

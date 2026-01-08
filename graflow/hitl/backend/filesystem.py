@@ -183,9 +183,7 @@ class FilesystemFeedbackBackend(FeedbackBackend):
             )
             return None
 
-    def list_pending_requests(
-        self, session_id: Optional[str] = None
-    ) -> list[FeedbackRequest]:
+    def list_pending_requests(self, session_id: Optional[str] = None) -> list[FeedbackRequest]:
         """List pending feedback requests from filesystem.
 
         Args:
@@ -231,17 +229,11 @@ class FilesystemFeedbackBackend(FeedbackBackend):
                     # Continue with other files
 
         except Exception as e:
-            logger.error(
-                "Failed to list pending requests: %s",
-                str(e),
-                extra={"error": str(e)}
-            )
+            logger.error("Failed to list pending requests: %s", str(e), extra={"error": str(e)})
 
         return pending_requests
 
-    def list_requests(
-        self, session_id: Optional[str] = None, n_recent: int = 100
-    ) -> list[FeedbackRequest]:
+    def list_requests(self, session_id: Optional[str] = None, n_recent: int = 100) -> list[FeedbackRequest]:
         """List recent feedback requests from filesystem (all statuses).
 
         Args:
@@ -284,11 +276,7 @@ class FilesystemFeedbackBackend(FeedbackBackend):
                     # Continue with other files
 
         except Exception as e:
-            logger.error(
-                "Failed to list requests: %s",
-                str(e),
-                extra={"error": str(e)}
-            )
+            logger.error("Failed to list requests: %s", str(e), extra={"error": str(e)})
 
         # Sort by created_at descending (newest first)
         requests.sort(key=lambda r: r.created_at, reverse=True)

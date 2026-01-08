@@ -1,6 +1,5 @@
 """Tests for automatic keyword argument resolution from channel."""
 
-
 from graflow.core.context import TaskExecutionContext
 from graflow.core.decorators import task
 from graflow.core.workflow import workflow
@@ -87,11 +86,13 @@ class TestKeywordArgsResolution:
                 assert isinstance(multiplier, int), f"Expected multiplier to be int, got {type(multiplier)}"
                 assert data == "hello", f"Expected data='hello', got {data!r}"
                 assert multiplier == 3, f"Expected multiplier=3, got {multiplier}"
-                results.append({
-                    "session_id": context.session_id,
-                    "data": data,
-                    "multiplier": multiplier,
-                })
+                results.append(
+                    {
+                        "session_id": context.session_id,
+                        "data": data,
+                        "multiplier": multiplier,
+                    }
+                )
 
             _ = setup >> process
             wf.execute(setup.task_id)
@@ -181,12 +182,14 @@ class TestKeywordArgsResolution:
                 assert count == 5, f"Expected count=5, got {count}"
                 assert flag is True, f"Expected flag=True, got {flag}"
                 assert ratio == 3.14, f"Expected ratio=3.14, got {ratio}"
-                results.append({
-                    "text": text,
-                    "count": count,
-                    "flag": flag,
-                    "ratio": ratio,
-                })
+                results.append(
+                    {
+                        "text": text,
+                        "count": count,
+                        "flag": flag,
+                        "ratio": ratio,
+                    }
+                )
 
             _ = setup >> process
             wf.execute(setup.task_id)
@@ -251,12 +254,14 @@ class TestKeywordArgsResolution:
                 assert name == "Alice", f"Expected name='Alice', got {name!r}"
                 assert age == 25, f"Expected age=25, got {age}"
                 assert city == "Tokyo", f"Expected city='Tokyo', got {city!r}"
-                results.append({
-                    "session": context.session_id,
-                    "name": name,
-                    "age": age,
-                    "city": city,
-                })
+                results.append(
+                    {
+                        "session": context.session_id,
+                        "name": name,
+                        "age": age,
+                        "city": city,
+                    }
+                )
 
             _ = setup >> process
             wf.execute(setup.task_id)

@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 # Optional imports
 try:
     from google.adk.agents import LlmAgent
+
     ADK_AVAILABLE = True
 except ImportError:
     ADK_AVAILABLE = False
@@ -59,15 +60,10 @@ def agent_to_yaml(agent: LlmAgent) -> str:  # type: ignore[valid-type]
         ```
     """
     if not ADK_AVAILABLE:
-        raise ImportError(
-            "Google ADK is not installed. "
-            "Install with: pip install google-adk"
-        )
+        raise ImportError("Google ADK is not installed. Install with: pip install google-adk")
 
     if not isinstance(agent, LlmAgent):
-        raise TypeError(
-            f"agent must be a LlmAgent instance, got {type(agent)}"
-        )
+        raise TypeError(f"agent must be a LlmAgent instance, got {type(agent)}")
 
     try:
         # Use Pydantic's model_dump to get dict representation
@@ -108,10 +104,7 @@ def yaml_to_agent(yaml_str: str) -> LlmAgent:  # type: ignore[valid-type]
         ```
     """
     if not ADK_AVAILABLE:
-        raise ImportError(
-            "Google ADK is not installed. "
-            "Install with: pip install google-adk"
-        )
+        raise ImportError("Google ADK is not installed. Install with: pip install google-adk")
 
     try:
         # Parse YAML to dict

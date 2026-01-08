@@ -91,8 +91,10 @@ def test_closure_serialization():
 
     def create_multiplier(factor):
         """Factory that creates a closure."""
+
         def multiply(x):
             return x * factor  # Captures 'factor' from outer scope
+
         return multiply
 
     # Create closure
@@ -159,12 +161,16 @@ def test_nested_closure_serialization():
 
     def create_adder(outer_value):
         """Outer closure."""
+
         def add_outer(inner_value):
             """Inner closure that captures outer_value."""
+
             def add_inner(x):
                 """Innermost function."""
                 return x + outer_value + inner_value
+
             return add_inner
+
         return add_outer
 
     try:
@@ -201,13 +207,15 @@ def test_task_with_complex_state():
 
     def create_processor(config: TaskConfig):
         """Factory that creates a processing function with config."""
+
         def process(items: list) -> dict:
             # Simulate processing with config
             return {
                 "config": config.to_dict(),
                 "processed_count": len(items),
-                "items": [f"processed_{item}" for item in items]
+                "items": [f"processed_{item}" for item in items],
             }
+
         return process
 
     try:

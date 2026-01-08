@@ -20,11 +20,7 @@ class TestLLMClient:
 
     def test_client_with_default_params(self):
         """Test client with default parameters."""
-        client = LLMClient(
-            model="gpt-4o-mini",
-            temperature=0.7,
-            max_tokens=1024
-        )
+        client = LLMClient(model="gpt-4o-mini", temperature=0.7, max_tokens=1024)
 
         assert client.model == "gpt-4o-mini"
         assert client.default_params["temperature"] == 0.7

@@ -12,10 +12,7 @@ from typing import Any, Dict
 from graflow.queue.distributed import DistributedTaskQueue
 
 # Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
 
 def create_redis_queue(redis_config: Dict[str, Any], logger: logging.Logger) -> DistributedTaskQueue:
@@ -25,10 +22,7 @@ def create_redis_queue(redis_config: Dict[str, Any], logger: logging.Logger) -> 
 
         # Create Redis client
         redis_client = redis.Redis(
-            host=redis_config['host'],
-            port=redis_config['port'],
-            db=redis_config.get('db', 0),
-            decode_responses=True
+            host=redis_config["host"], port=redis_config["port"], db=redis_config.get("db", 0), decode_responses=True
         )
 
         # Test connection
@@ -37,10 +31,7 @@ def create_redis_queue(redis_config: Dict[str, Any], logger: logging.Logger) -> 
 
         # RedisTaskQueue no longer needs execution_context
         # Tasks are retrieved from Graph via GraphStore
-        return DistributedTaskQueue(
-            redis_client=redis_client,
-            key_prefix=redis_config.get('key_prefix', 'graflow')
-        )
+        return DistributedTaskQueue(redis_client=redis_client, key_prefix=redis_config.get("key_prefix", "graflow"))
 
     except ImportError:
         logger.error("redis package is required for Redis TaskQueue")
@@ -53,59 +44,44 @@ def create_redis_queue(redis_config: Dict[str, Any], logger: logging.Logger) -> 
 def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description='TaskWorker independent process',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        description="TaskWorker independent process", formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
 
     # Worker configuration
     parser.add_argument(
-        '--worker-id',
-        default=os.environ.get('WORKER_ID', f'worker_{os.getpid()}'),
-        help='Unique worker identifier'
+        "--worker-id", default=os.environ.get("WORKER_ID", f"worker_{os.getpid()}"), help="Unique worker identifier"
     )
     parser.add_argument(
-        '--max-concurrent-tasks',
+        "--max-concurrent-tasks",
         type=int,
-        default=int(os.environ.get('MAX_CONCURRENT_TASKS', '4')),
-        help='Maximum number of concurrent tasks'
+        default=int(os.environ.get("MAX_CONCURRENT_TASKS", "4")),
+        help="Maximum number of concurrent tasks",
     )
     parser.add_argument(
-        '--poll-interval',
+        "--poll-interval",
         type=float,
-        default=float(os.environ.get('POLL_INTERVAL', '0.1')),
-        help='Polling interval in seconds'
+        default=float(os.environ.get("POLL_INTERVAL", "0.1")),
+        help="Polling interval in seconds",
     )
 
     # Redis configuration
+    parser.add_argument("--redis-host", default=os.environ.get("REDIS_HOST", "localhost"), help="Redis host")
+    parser.add_argument("--redis-port", type=int, default=int(os.environ.get("REDIS_PORT", "6379")), help="Redis port")
     parser.add_argument(
-        '--redis-host',
-        default=os.environ.get('REDIS_HOST', 'localhost'),
-        help='Redis host'
+        "--redis-db", type=int, default=int(os.environ.get("REDIS_DB", "0")), help="Redis database number"
     )
     parser.add_argument(
-        '--redis-port',
-        type=int,
-        default=int(os.environ.get('REDIS_PORT', '6379')),
-        help='Redis port'
-    )
-    parser.add_argument(
-        '--redis-db',
-        type=int,
-        default=int(os.environ.get('REDIS_DB', '0')),
-        help='Redis database number'
-    )
-    parser.add_argument(
-        '--redis-key-prefix',
-        default=os.environ.get('REDIS_KEY_PREFIX', 'graflow'),
-        help='Redis key prefix used for queue keys'
+        "--redis-key-prefix",
+        default=os.environ.get("REDIS_KEY_PREFIX", "graflow"),
+        help="Redis key prefix used for queue keys",
     )
 
     # Logging
     parser.add_argument(
-        '--log-level',
-        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
-        default=os.environ.get('LOG_LEVEL', 'INFO'),
-        help='Logging level'
+        "--log-level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        default=os.environ.get("LOG_LEVEL", "INFO"),
+        help="Logging level",
     )
 
     return parser.parse_args()
@@ -113,6 +89,7 @@ def parse_arguments():
 
 def setup_signal_handlers(worker: Any, logger: logging.Logger) -> None:
     """Setup signal handlers for graceful shutdown."""
+
     def signal_handler(signum: int, frame: Any) -> None:
         logger.info(f"Received signal {signum}, initiating graceful shutdown...")
         if worker:
@@ -143,10 +120,10 @@ def main():
         )
 
         redis_config = {
-            'host': args.redis_host,
-            'port': args.redis_port,
-            'db': args.redis_db,
-            'key_prefix': args.redis_key_prefix,
+            "host": args.redis_host,
+            "port": args.redis_port,
+            "db": args.redis_db,
+            "key_prefix": args.redis_key_prefix,
         }
         queue = create_redis_queue(redis_config, logger)
 
@@ -157,7 +134,7 @@ def main():
             queue=queue,
             worker_id=args.worker_id,
             max_concurrent_tasks=args.max_concurrent_tasks,
-            poll_interval=args.poll_interval
+            poll_interval=args.poll_interval,
         )
 
         # Setup signal handlers

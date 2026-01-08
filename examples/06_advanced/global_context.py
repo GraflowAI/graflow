@@ -162,6 +162,7 @@ def scenario_4_mixed_contexts():
 
     # Explicit context 1
     with workflow("explicit_1") as ctx1:
+
         @task
         def ctx1_task():
             """Task in explicit context 1."""
@@ -173,6 +174,7 @@ def scenario_4_mixed_contexts():
 
     # Explicit context 2
     with workflow("explicit_2") as ctx2:
+
         @task
         def ctx2_task():
             """Task in explicit context 2."""
@@ -201,6 +203,7 @@ def scenario_5_nested_context_access():
 
             # Create nested context
             with workflow("inner") as inner:
+
                 @task
                 def inner_task():
                     """Task in nested context."""

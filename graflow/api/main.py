@@ -52,7 +52,7 @@ Examples:
 
   # Custom host and port
   python -m graflow.api.main --host 0.0.0.0 --port 8080
-        """
+        """,
     )
 
     # Backend options
@@ -61,95 +61,53 @@ Examples:
         "--backend",
         choices=["filesystem", "redis"],
         default="filesystem",
-        help="Feedback backend type (default: filesystem)"
+        help="Feedback backend type (default: filesystem)",
     )
     backend_group.add_argument(
         "--data-dir",
         type=str,
         default="feedback_data",
-        help="Data directory for filesystem backend (default: feedback_data)"
+        help="Data directory for filesystem backend (default: feedback_data)",
     )
     backend_group.add_argument(
-        "--redis-host",
-        type=str,
-        default="localhost",
-        help="Redis host for redis backend (default: localhost)"
+        "--redis-host", type=str, default="localhost", help="Redis host for redis backend (default: localhost)"
     )
     backend_group.add_argument(
-        "--redis-port",
-        type=int,
-        default=6379,
-        help="Redis port for redis backend (default: 6379)"
+        "--redis-port", type=int, default=6379, help="Redis port for redis backend (default: 6379)"
     )
     backend_group.add_argument(
-        "--redis-db",
-        type=int,
-        default=0,
-        help="Redis database number for redis backend (default: 0)"
+        "--redis-db", type=int, default=0, help="Redis database number for redis backend (default: 0)"
     )
     backend_group.add_argument(
-        "--redis-expiration-days",
-        type=int,
-        default=7,
-        help="Days before Redis keys expire (default: 7)"
+        "--redis-expiration-days", type=int, default=7, help="Days before Redis keys expire (default: 7)"
     )
 
     # Server options
     server_group = parser.add_argument_group("Server Options")
+    server_group.add_argument("--host", type=str, default="127.0.0.1", help="Server host (default: 127.0.0.1)")
+    server_group.add_argument("--port", type=int, default=8000, help="Server port (default: 8000)")
     server_group.add_argument(
-        "--host",
-        type=str,
-        default="127.0.0.1",
-        help="Server host (default: 127.0.0.1)"
+        "--reload", action="store_true", help="Enable auto-reload for development (default: False)"
     )
-    server_group.add_argument(
-        "--port",
-        type=int,
-        default=8000,
-        help="Server port (default: 8000)"
-    )
-    server_group.add_argument(
-        "--reload",
-        action="store_true",
-        help="Enable auto-reload for development (default: False)"
-    )
-    server_group.add_argument(
-        "--workers",
-        type=int,
-        default=1,
-        help="Number of worker processes (default: 1)"
-    )
+    server_group.add_argument("--workers", type=int, default=1, help="Number of worker processes (default: 1)")
     server_group.add_argument(
         "--log-level",
         choices=["critical", "error", "warning", "info", "debug", "trace"],
         default="info",
-        help="Log level (default: info)"
+        help="Log level (default: info)",
     )
 
     # API options
     api_group = parser.add_argument_group("API Options")
     api_group.add_argument(
-        "--title",
-        type=str,
-        default="Graflow Feedback API",
-        help="API title (default: Graflow Feedback API)"
+        "--title", type=str, default="Graflow Feedback API", help="API title (default: Graflow Feedback API)"
+    )
+    api_group.add_argument("--enable-cors", action="store_true", help="Enable CORS (default: False)")
+    api_group.add_argument(
+        "--cors-origins", type=str, nargs="+", default=["*"], help="CORS allowed origins (default: *)"
     )
     api_group.add_argument(
-        "--enable-cors",
-        action="store_true",
-        help="Enable CORS (default: False)"
-    )
-    api_group.add_argument(
-        "--cors-origins",
-        type=str,
-        nargs="+",
-        default=["*"],
-        help="CORS allowed origins (default: *)"
-    )
-    api_group.add_argument(
-        "--disable-web-ui",
-        action="store_true",
-        help="Disable Web UI (API only mode) (default: False)"
+        "--disable-web-ui", action="store_true", help="Disable Web UI (API only mode) (default: False)"
     )
 
     return parser.parse_args(args)
@@ -174,9 +132,7 @@ def create_app_from_args(args: argparse.Namespace) -> FastAPI:
 
     # Build backend config
     if args.backend == "filesystem":
-        backend_config = {
-            "data_dir": args.data_dir
-        }
+        backend_config = {"data_dir": args.data_dir}
     elif args.backend == "redis":
         # Import redis here to check availability
         try:
@@ -187,12 +143,7 @@ def create_app_from_args(args: argparse.Namespace) -> FastAPI:
             sys.exit(1)
 
         # Create Redis client
-        redis_client = redis.Redis(
-            host=args.redis_host,
-            port=args.redis_port,
-            db=args.redis_db,
-            decode_responses=True
-        )
+        redis_client = redis.Redis(host=args.redis_host, port=args.redis_port, db=args.redis_db, decode_responses=True)
 
         # Test connection
         try:
@@ -205,10 +156,7 @@ def create_app_from_args(args: argparse.Namespace) -> FastAPI:
             print("  docker run -p 6379:6379 redis:7.2")
             sys.exit(1)
 
-        backend_config = {
-            "redis_client": redis_client,
-            "expiration_days": args.redis_expiration_days
-        }
+        backend_config = {"redis_client": redis_client, "expiration_days": args.redis_expiration_days}
     else:
         raise ValueError(f"Unknown backend: {args.backend}")
 
@@ -219,7 +167,7 @@ def create_app_from_args(args: argparse.Namespace) -> FastAPI:
         title=args.title,
         enable_cors=args.enable_cors,
         cors_origins=args.cors_origins if args.enable_cors else None,
-        enable_web_ui=not args.disable_web_ui
+        enable_web_ui=not args.disable_web_ui,
     )
 
     print("\nGraflow Feedback API")
@@ -264,7 +212,7 @@ def main(args: Optional[list[str]] = None) -> None:
         port=parsed_args.port,
         reload=parsed_args.reload,
         workers=parsed_args.workers if not parsed_args.reload else 1,  # reload doesn't work with multiple workers
-        log_level=parsed_args.log_level
+        log_level=parsed_args.log_level,
     )
 
 

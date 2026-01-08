@@ -80,7 +80,7 @@ def main():
             print(f"  - Steps: {context.steps}")
 
             # Verify checkpoint files exist
-            base_path = context.last_checkpoint_path.replace('.pkl', '')
+            base_path = context.last_checkpoint_path.replace(".pkl", "")
             print("\n📁 Checkpoint files:")
             print(f"  - {base_path}.pkl: {os.path.exists(f'{base_path}.pkl')}")
             print(f"  - {base_path}.state.json: {os.path.exists(f'{base_path}.state.json')}")
@@ -94,9 +94,7 @@ def main():
         print("-" * 60)
 
         # Resume from checkpoint
-        restored_context, restored_metadata = CheckpointManager.resume_from_checkpoint(
-            context.last_checkpoint_path
-        )
+        restored_context, restored_metadata = CheckpointManager.resume_from_checkpoint(context.last_checkpoint_path)
 
         print("\n✓ Checkpoint restored")
         print(f"  - Session ID: {restored_metadata.session_id}")
@@ -111,6 +109,7 @@ def main():
         # Continue execution with restored context
         print("\n▶ Continuing execution from checkpoint...")
         from graflow.core.engine import WorkflowEngine
+
         engine = WorkflowEngine()
         final_result = engine.execute(restored_context)
 

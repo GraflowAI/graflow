@@ -66,7 +66,7 @@ class TestParallelGroup:
             parallel_group = ParallelGroup([task1, task2])
             parallel_group.set_execution_context(execution_context)
 
-            mock_execute = mocker.patch.object(GroupExecutor, 'execute_parallel_group')
+            mock_execute = mocker.patch.object(GroupExecutor, "execute_parallel_group")
             parallel_group.run()
 
             mock_execute.assert_called_once()
@@ -79,11 +79,11 @@ class TestParallelGroup:
             assert tasks[1].task_id == "task2"
             assert context == execution_context
 
-
     def test_parallel_group_with_task_wrapper(self, execution_context, mocker):
         """Test ParallelGroup with TaskWrapper that requires context injection."""
         with WorkflowContext("test"):
             task1 = Task("task1")
+
             def test_func(ctx):
                 return f"result_{ctx.task_id}"
 
@@ -91,7 +91,7 @@ class TestParallelGroup:
             parallel_group = ParallelGroup([task1, task_wrapper])
             parallel_group.set_execution_context(execution_context)
 
-            mock_execute = mocker.patch.object(GroupExecutor, 'execute_parallel_group')
+            mock_execute = mocker.patch.object(GroupExecutor, "execute_parallel_group")
             parallel_group.run()
 
             mock_execute.assert_called_once()
@@ -137,24 +137,21 @@ class TestParallelGroup:
             successor = Task("successor")
 
             # Create dependency: (task1 | task2) >> successor
-            parallel_group >> successor # type: ignore
+            parallel_group >> successor  # type: ignore
 
             graph = ctx.graph._graph
             print(f"Graph: {ctx.graph}")
 
             # Verify: Group has edge to successor
             group_successors = list(graph.successors(parallel_group.task_id))
-            assert "successor" in group_successors, \
-                f"Group should have successor edge, got: {group_successors}"
+            assert "successor" in group_successors, f"Group should have successor edge, got: {group_successors}"
 
             # Verify: Individual tasks do NOT have edge to successor
             task1_successors = list(graph.successors("task1"))
-            assert "successor" not in task1_successors, \
-                f"task1 should NOT have successor edge, got: {task1_successors}"
+            assert "successor" not in task1_successors, f"task1 should NOT have successor edge, got: {task1_successors}"
 
             task2_successors = list(graph.successors("task2"))
-            assert "successor" not in task2_successors, \
-                f"task2 should NOT have successor edge, got: {task2_successors}"
+            assert "successor" not in task2_successors, f"task2 should NOT have successor edge, got: {task2_successors}"
 
     def test_parallel_group_lshift_creates_group_level_edge(self):
         """Test that << creates edge from predecessor to GROUP, not to individual tasks.
@@ -168,21 +165,24 @@ class TestParallelGroup:
             parallel_group = task1 | task2
 
             # Create dependency: predecessor >> (task1 | task2)
-            parallel_group << predecessor # type: ignore
+            parallel_group << predecessor  # type: ignore
 
             graph = ctx.graph._graph
             print(f"Graph: {ctx.graph}")
 
             # Verify: Predecessor has edge to group
             predecessor_successors = list(graph.successors("predecessor"))
-            assert parallel_group.task_id in predecessor_successors, \
+            assert parallel_group.task_id in predecessor_successors, (
                 f"Predecessor should have edge to group, got: {predecessor_successors}"
+            )
 
             # Verify: Predecessor does NOT have edges to individual tasks
-            assert "task1" not in predecessor_successors, \
+            assert "task1" not in predecessor_successors, (
                 f"Predecessor should NOT have edge to task1, got: {predecessor_successors}"
-            assert "task2" not in predecessor_successors, \
+            )
+            assert "task2" not in predecessor_successors, (
                 f"Predecessor should NOT have edge to task2, got: {predecessor_successors}"
+            )
 
     def test_parallel_diamond_pattern_graph_structure(self):
         """Test diamond pattern graph structure: fetch >> (A | B) >> store.
@@ -200,7 +200,7 @@ class TestParallelGroup:
             store = Task("store")
 
             # Build: fetch >> (task_a | task_b) >> store
-            fetch >> (task_a | task_b) >> store # type: ignore
+            fetch >> (task_a | task_b) >> store  # type: ignore
 
             graph = ctx.graph._graph
             print(f"Graph: {ctx.graph}")
@@ -212,31 +212,34 @@ class TestParallelGroup:
 
             # Verify: fetch -> ParallelGroup
             fetch_successors = list(graph.successors("fetch"))
-            assert group_id in fetch_successors, \
-                f"fetch should connect to ParallelGroup, got: {fetch_successors}"
+            assert group_id in fetch_successors, f"fetch should connect to ParallelGroup, got: {fetch_successors}"
 
             # Verify: ParallelGroup membership via TaskGraph API
             members = ctx.graph.get_parallel_group_members(group_id)
-            assert set(members) == {"task_a", "task_b"}, \
+            assert set(members) == {"task_a", "task_b"}, (
                 f"ParallelGroup members should be task_a/task_b, got: {members}"
+            )
 
             # Verify: ParallelGroup only connects to external successors (store)
             group_successors = list(graph.successors(group_id))
-            assert "store" in group_successors, \
-                f"ParallelGroup should connect to store, got: {group_successors}"
-            assert "task_a" not in group_successors, \
+            assert "store" in group_successors, f"ParallelGroup should connect to store, got: {group_successors}"
+            assert "task_a" not in group_successors, (
                 f"ParallelGroup should not connect directly to task_a, got: {group_successors}"
-            assert "task_b" not in group_successors, \
+            )
+            assert "task_b" not in group_successors, (
                 f"ParallelGroup should not connect directly to task_b, got: {group_successors}"
+            )
 
             # Verify: task_a/task_b do NOT have successors (KEY FIX)
             task_a_successors = list(graph.successors("task_a"))
-            assert len(task_a_successors) == 0, \
+            assert len(task_a_successors) == 0, (
                 f"task_a should have NO successors (prevent race), got: {task_a_successors}"
+            )
 
             task_b_successors = list(graph.successors("task_b"))
-            assert len(task_b_successors) == 0, \
+            assert len(task_b_successors) == 0, (
                 f"task_b should have NO successors (prevent race), got: {task_b_successors}"
+            )
 
     def test_parallel_group_repr(self):
         """Test string representation of ParallelGroup."""
@@ -458,6 +461,7 @@ class TestParallelGroupIntegration:
         results = []
 
         with WorkflowContext("test") as wf_ctx:
+
             def task_func_1():
                 results.append("task1_executed")
                 return "result1"

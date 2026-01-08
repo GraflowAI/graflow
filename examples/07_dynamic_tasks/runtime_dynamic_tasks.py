@@ -92,18 +92,12 @@ def scenario_1_conditional_tasks():
                 if value > 100:
                     # Create high-value processing task
                     print("✅ Value > 100, creating high-value task")
-                    high_task = TaskWrapper(
-                        f"high_processor_{value}",
-                        lambda v=value: process_high_value(v)
-                    )
+                    high_task = TaskWrapper(f"high_processor_{value}", lambda v=value: process_high_value(v))
                     context.next_task(high_task)
                 else:
                     # Create standard processing task
                     print("✅ Value <= 100, creating standard task")
-                    std_task = TaskWrapper(
-                        f"std_processor_{value}",
-                        lambda v=value: process_standard_value(v)
-                    )
+                    std_task = TaskWrapper(f"std_processor_{value}", lambda v=value: process_standard_value(v))
                     context.next_task(std_task)
 
             return {"processed": len(test_values)}
@@ -118,11 +112,7 @@ def scenario_2_iterative_processing():
     def save_final_model(params):
         """Save the optimized model."""
         print("✅ Converged! Saving final model\n")
-        return {
-            "saved": True,
-            "final_accuracy": params["accuracy"],
-            "iterations": params["iteration"]
-        }
+        return {"saved": True, "final_accuracy": params["accuracy"], "iterations": params["iteration"]}
 
     with workflow("iterative_optimization") as ctx:
 
@@ -131,11 +121,7 @@ def scenario_2_iterative_processing():
             """Optimize parameters iteratively until convergence."""
             # Get parameters from data or initialize
             if data is None:
-                params = {
-                    "iteration": 0,
-                    "accuracy": 0.5,
-                    "learning_rate": 0.1
-                }
+                params = {"iteration": 0, "accuracy": 0.5, "learning_rate": 0.1}
             else:
                 params = data
 
@@ -149,16 +135,13 @@ def scenario_2_iterative_processing():
             updated_params = {
                 "iteration": iteration + 1,
                 "accuracy": new_accuracy,
-                "learning_rate": params["learning_rate"] * 0.95
+                "learning_rate": params["learning_rate"] * 0.95,
             }
 
             # Check convergence
             if new_accuracy >= 0.9:
                 # Converged - create final task
-                final_task = TaskWrapper(
-                    "save_model",
-                    lambda: save_final_model(updated_params)
-                )
+                final_task = TaskWrapper("save_model", lambda: save_final_model(updated_params))
                 context.next_task(final_task)
             else:
                 # Continue optimization
@@ -205,10 +188,7 @@ def scenario_3_batch_processing():
             total = sum(r["result"] for r in results)
 
             # Create aggregation task
-            agg_task = TaskWrapper(
-                f"aggregator_{batch_id}",
-                lambda: aggregate_results(len(results), total)
-            )
+            agg_task = TaskWrapper(f"aggregator_{batch_id}", lambda: aggregate_results(len(results), total))
             context.next_task(agg_task)
 
             return {"batch_id": batch_id, "items_processed": len(batch_items)}
@@ -223,6 +203,7 @@ def scenario_4_error_recovery():
     def risky_operation(attempt):
         """Simulate an operation that might fail."""
         import random
+
         success = random.random() > 0.3 or attempt >= 2
         if success:
             print(f"  ✅ Operation succeeded on attempt {attempt + 1}")
@@ -307,10 +288,7 @@ def scenario_5_state_machine():
                 print("→ Transitioning to END")
                 channel.set("state", "END")
                 # Create final task
-                final_task = TaskWrapper(
-                    "end_state",
-                    lambda: process_state("END", data)
-                )
+                final_task = TaskWrapper("end_state", lambda: process_state("END", data))
                 context.next_task(final_task)
 
             return {"state": current_state, "data": data}

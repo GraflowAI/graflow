@@ -40,11 +40,7 @@ class PercentageSuccessPolicy(GroupExecutionPolicy):
         success_rate = success_count / total_count if total_count > 0 else 0
 
         if success_rate < self.min_percentage:
-            failed = [
-                (tid, r.error_message)
-                for tid, r in results.items()
-                if not r.success
-            ]
+            failed = [(tid, r.error_message) for tid, r in results.items() if not r.success]
             raise ParallelGroupError(
                 f"Success rate {success_rate:.1%} < {self.min_percentage:.1%}",
                 group_id=group_id,
@@ -52,9 +48,7 @@ class PercentageSuccessPolicy(GroupExecutionPolicy):
                 successful_tasks=[tid for tid, r in results.items() if r.success],
             )
 
-        print(
-            f"✓ Group '{group_id}': {success_rate:.1%} success rate (threshold: {self.min_percentage:.1%})"
-        )
+        print(f"✓ Group '{group_id}': {success_rate:.1%} success rate (threshold: {self.min_percentage:.1%})")
 
 
 def example_multi_region_deployment():
@@ -237,8 +231,7 @@ def example_percentage_based():
 
         # Require 70% success rate (3/4 = 75% meets threshold)
         processing = (worker_1 | worker_2 | worker_3 | worker_4).with_execution(
-            backend=CoordinationBackend.THREADING,
-            policy=PercentageSuccessPolicy(min_percentage=0.70)
+            backend=CoordinationBackend.THREADING, policy=PercentageSuccessPolicy(min_percentage=0.70)
         )
 
         @task

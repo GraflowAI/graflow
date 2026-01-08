@@ -38,9 +38,7 @@ class ExecutionContextFactory:
             task = None
 
         if task is None:
-            raise ValueError(
-                f"Task {record.task_id} not found in graph {record.graph_hash}"
-            )
+            raise ValueError(f"Task {record.task_id} not found in graph {record.graph_hash}")
 
         # 3. Create ExecutionContext
         context = ExecutionContext(

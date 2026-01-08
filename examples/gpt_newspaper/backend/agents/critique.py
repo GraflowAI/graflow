@@ -29,7 +29,7 @@ class CritiqueAgent:
         Returns:
             Critique feedback string or None if article is acceptable
         """
-        prompt = f"""Today's date is {datetime.now().strftime('%d/%m/%Y')}.
+        prompt = f"""Today's date is {datetime.now().strftime("%d/%m/%Y")}.
 
 Article:
 {article}

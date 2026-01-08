@@ -74,19 +74,13 @@ def test_conditional_task_creation():
     def process_data(value):
         if value > 50:
             # High value processing
-            high_task = TaskWrapper(
-                f"high_value_handler_{value}",
-                lambda: f"high_value_processing_{value}"
-            )
+            high_task = TaskWrapper(f"high_value_handler_{value}", lambda: f"high_value_processing_{value}")
             task_id = context.next_task(high_task)
             created_tasks.append(task_id)
 
         elif value > 10:
             # Medium value processing
-            med_task = TaskWrapper(
-                f"medium_value_handler_{value}",
-                lambda: f"medium_value_processing_{value}"
-            )
+            med_task = TaskWrapper(f"medium_value_handler_{value}", lambda: f"medium_value_processing_{value}")
             task_id = context.next_task(med_task)
             created_tasks.append(task_id)
 
@@ -95,7 +89,7 @@ def test_conditional_task_creation():
     # Test with different values
     process_data(75)  # Should create high value task
     process_data(25)  # Should create medium value task
-    process_data(5)   # Should not create any task
+    process_data(5)  # Should not create any task
 
     # Verify correct tasks were created
     assert len(created_tasks) == 2
@@ -110,6 +104,7 @@ def test_conditional_task_creation():
 
 def test_engine_execution_with_dynamic_tasks():
     """Test engine execution with dynamic task creation."""
+
     @task("start_task", inject_context=True)
     def start_task_func(task_ctx):
         # Create a dynamic task that should execute before successors
@@ -162,15 +157,18 @@ def test_engine_execution_with_dynamic_tasks():
 
 def test_multiple_dynamic_tasks():
     """Test multiple dynamic tasks created in sequence."""
+
     @task("coordinator", inject_context=True)
     def coordinator_func(task_ctx):
         # Create multiple dynamic tasks
         created_workers = []
         for i in range(3):
+
             def make_worker_func(worker_id):
                 @task(f"worker_{worker_id}")
                 def worker_func():
                     return f"worker_{worker_id}_done"
+
                 return worker_func
 
             worker_task = make_worker_func(i)
@@ -213,15 +211,18 @@ def test_multiple_dynamic_tasks():
 
 def test_dynamic_tasks_with_processing():
     """Test dynamic tasks combined with processing."""
+
     @task("processor", inject_context=True)
     def processor_func(task_ctx):
         # Create multiple dynamic analysis tasks
         created_analysis = []
         for i in range(3):
+
             def analysis_func_factory(current_count):
                 @task(f"analysis_{current_count}")
                 def analysis_func():
                     return f"analysis_{current_count}_complete"
+
                 return analysis_func
 
             analysis_task = analysis_func_factory(i)
@@ -264,6 +265,7 @@ def test_dynamic_tasks_with_processing():
 
 def test_jump_to_existing_task_nodes():
     """Test jumping to existing task nodes."""
+
     @task("start_node", inject_context=True)
     def start_node_func(task_ctx):
         # Jump to an existing task node that's already in the graph
@@ -321,6 +323,7 @@ def test_jump_to_existing_task_nodes():
 
 def test_complex_task_jumping():
     """Test complex task jumping scenarios."""
+
     @task("controller", inject_context=True)
     def controller_func(task_ctx):
         # Jump to multiple existing tasks based on conditions

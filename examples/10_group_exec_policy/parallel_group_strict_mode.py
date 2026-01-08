@@ -144,9 +144,7 @@ def example_multiple_failures():
             raise ValueError("Task C failed!")
 
         # Create parallel group
-        _parallel = (task_a | task_b | task_c).with_execution(
-            backend=CoordinationBackend.THREADING
-        )
+        _parallel = (task_a | task_b | task_c).with_execution(backend=CoordinationBackend.THREADING)
 
         # Execute workflow and handle error
         engine = WorkflowEngine()

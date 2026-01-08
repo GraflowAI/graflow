@@ -51,10 +51,8 @@ def main():
             print("Task 1: Generate greeting")
 
             greeting = llm_client.completion_text(
-                messages=[
-                    {"role": "user", "content": "Say a brief, friendly greeting as an AI assistant."}
-                ],
-                max_tokens=50
+                messages=[{"role": "user", "content": "Say a brief, friendly greeting as an AI assistant."}],
+                max_tokens=50,
             )
 
             print(f"{greeting}\n")
@@ -66,10 +64,7 @@ def main():
             print("Task 2: Answer question")
 
             answer = llm_client.completion_text(
-                messages=[
-                    {"role": "user", "content": "In one sentence, what is Python?"}
-                ],
-                max_tokens=50
+                messages=[{"role": "user", "content": "In one sentence, what is Python?"}], max_tokens=50
             )
 
             print(f"{answer}\n")
@@ -88,10 +83,7 @@ def main():
             """
 
             summary = llm_client.completion_text(
-                messages=[
-                    {"role": "user", "content": f"Summarize in one sentence: {text}"}
-                ],
-                max_tokens=50
+                messages=[{"role": "user", "content": f"Summarize in one sentence: {text}"}], max_tokens=50
             )
 
             print(f"{summary}\n")

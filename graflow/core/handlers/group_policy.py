@@ -212,9 +212,7 @@ class AtLeastNGroupPolicy(GroupExecutionPolicy):
 
         total_tasks = len(tasks)
         if self.min_success > total_tasks:
-            raise ValueError(
-                f"min_success ({self.min_success}) cannot exceed number of tasks ({total_tasks})"
-            )
+            raise ValueError(f"min_success ({self.min_success}) cannot exceed number of tasks ({total_tasks})")
 
         successful_tasks, failed_tasks = self._partition_group_results(results)
 
@@ -328,10 +326,6 @@ def resolve_group_policy(policy: Union[str, Mapping[str, Any], GroupExecutionPol
                 raise ValueError("Serialized custom policy must include a GroupExecutionPolicy instance")
             return instance
 
-        raise ValueError(
-            f"Unknown serialized group execution policy '{policy_name}'."
-        )
+        raise ValueError(f"Unknown serialized group execution policy '{policy_name}'.")
 
-    raise TypeError(
-        f"Unsupported policy specification type: {type(policy)!r}"
-    )
+    raise TypeError(f"Unsupported policy specification type: {type(policy)!r}")

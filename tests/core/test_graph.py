@@ -54,6 +54,7 @@ def test_parallel_group_graph():
     members = ctx.graph.get_parallel_group_members(group.task_id)
     assert set(members) == {"A", "B"}
 
+
 def test_cycle_detection():
     """Test cycle detection in a graph."""
     task_a = Task("A")
@@ -70,6 +71,7 @@ def test_cycle_detection():
     cycles = list(nx.simple_cycles(graph.nx_graph()))
     assert len(cycles) == 1
     assert set(cycles[0]) == {"A", "B", "C"}
+
 
 def test_a_a_b():
     """Test graph construction for flow: A >> A >> B."""
@@ -88,6 +90,7 @@ def test_a_a_b():
     }
     assert set(graph.edges) == expected_edges
 
+
 def test_a_a_b_duplicate_task():
     """Test graph construction for flow: A >> A >> B."""
     current_workflow_context()
@@ -97,6 +100,7 @@ def test_a_a_b_duplicate_task():
     with pytest.raises(DuplicateTaskError):
         task_a2 = Task("A")
         assert task_a1.task_id == task_a2.task_id, "Duplicate task IDs should match"
+
 
 def test_a_b_a():
     """Test graph construction for flow: A >> B >> A."""
@@ -115,6 +119,7 @@ def test_a_b_a():
     }
     assert set(graph.edges) == expected_edges
 
+
 def test_complex_graph1():
     """Test graph construction for complex flow: A >> (B | C) >> D."""
     task_a = Task("A")
@@ -125,20 +130,21 @@ def test_complex_graph1():
     flow = task_a >> (task_b | task_c) >> task_d
     graph = build_graph(flow)
 
-    #draw_task_graph(graph, title="Parallel Group Graph")
+    # draw_task_graph(graph, title="Parallel Group Graph")
 
     assert set(graph.nodes) == {"A", "B", "C", "D", "ParallelGroup_1"}
     expected_edges = {
         ("A", "ParallelGroup_1"),
         ("ParallelGroup_1", "B"),
         ("ParallelGroup_1", "C"),
-        ("ParallelGroup_1", "D")
+        ("ParallelGroup_1", "D"),
     }
     assert set(graph.edges) == expected_edges
 
     ctx = current_workflow_context()
     members = ctx.graph.get_parallel_group_members("ParallelGroup_1")
     assert set(members) == {"B", "C"}
+
 
 def test_merge_parallel_groups():
     """Test merging two parallel groups."""
@@ -210,10 +216,13 @@ def test_complex_graph2():
     assert set(graph.nodes) == expected_nodes
     expected_edges = {
         ("A", group1.task_id),
-        (group1.task_id, "B"), (group1.task_id, "C"),
+        (group1.task_id, "B"),
+        (group1.task_id, "C"),
         (group1.task_id, group2.task_id),
-        (group2.task_id, "D"), (group2.task_id, "E"), (group2.task_id, "F"),
-        }
+        (group2.task_id, "D"),
+        (group2.task_id, "E"),
+        (group2.task_id, "F"),
+    }
     assert set(graph.edges) == expected_edges
 
     ctx = current_workflow_context()

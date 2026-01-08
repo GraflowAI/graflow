@@ -47,9 +47,9 @@ def main():  # noqa: PLR0912
         while retry_count < max_retries and not success:
             try:
                 if retry_count > 0:
-                    print(f"\n{'='*70}")
+                    print(f"\n{'=' * 70}")
                     print(f"Retry Attempt {retry_count}/{max_retries - 1}")
-                    print(f"{'='*70}")
+                    print(f"{'=' * 70}")
 
                 # ========================================
                 # Build workflow
@@ -91,11 +91,7 @@ def main():  # noqa: PLR0912
                             """Fetch data from external source (always succeeds)."""
                             print("📥 Fetching data from external source...")
                             time.sleep(0.1)
-                            data = {
-                                "records": 1000,
-                                "source": "database",
-                                "timestamp": time.time()
-                            }
+                            data = {"records": 1000, "source": "database", "timestamp": time.time()}
                             print(f"   ✓ Fetched {data['records']} records")
                             return data
 
@@ -109,19 +105,15 @@ def main():  # noqa: PLR0912
 
                             # Checkpoint before expensive validation
                             checkpoint_path = os.path.join(tmpdir, "fault_recovery_checkpoint")
-                            task_ctx.checkpoint(path=checkpoint_path, metadata={
-                                "stage": "before_validation",
-                                "records": data["records"]
-                            })
+                            task_ctx.checkpoint(
+                                path=checkpoint_path,
+                                metadata={"stage": "before_validation", "records": data["records"]},
+                            )
                             print("   📸 Checkpoint created before validation")
 
                             # Simulate validation
                             time.sleep(0.1)
-                            validated_data = {
-                                **data,
-                                "validated": True,
-                                "validation_time": time.time()
-                            }
+                            validated_data = {**data, "validated": True, "validation_time": time.time()}
 
                             print(f"   ✓ Validated {data['records']} records")
                             return validated_data
@@ -151,11 +143,7 @@ def main():  # noqa: PLR0912
                                 raise RuntimeError("Simulated processing failure")
 
                             # Processing succeeded
-                            result = {
-                                **data,
-                                "processed": True,
-                                "processing_time": time.time()
-                            }
+                            result = {**data, "processed": True, "processing_time": time.time()}
 
                             # Mark as completed for idempotency
                             channel.set("processing_status", "completed")
@@ -165,10 +153,10 @@ def main():  # noqa: PLR0912
 
                             # Checkpoint after expensive processing
                             checkpoint_path = os.path.join(tmpdir, "fault_recovery_checkpoint")
-                            task_ctx.checkpoint(path=checkpoint_path, metadata={
-                                "stage": "processing_complete",
-                                "records": data["records"]
-                            })
+                            task_ctx.checkpoint(
+                                path=checkpoint_path,
+                                metadata={"stage": "processing_complete", "records": data["records"]},
+                            )
                             print("   📸 Checkpoint created after processing")
 
                             return result

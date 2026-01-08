@@ -89,11 +89,7 @@ def main():
             print("   Validating data...")
 
             # Simulate validation
-            validation_result = {
-                "valid": 950,
-                "invalid": 50,
-                "total": 1000
-            }
+            validation_result = {"valid": 950, "invalid": 50, "total": 1000}
             print(f"   Validation result: {validation_result}\n")
 
             return validation_result
@@ -113,7 +109,9 @@ def main():
 
             # Retrieve result from validate_data task
             validation_result = context.get_result("validate_data")
-            print(f"   Retrieved validation result: {validation_result['valid']} valid / {validation_result['invalid']} invalid")
+            print(
+                f"   Retrieved validation result: {validation_result['valid']} valid / {validation_result['invalid']} invalid"
+            )
 
             # Transform only valid records
             valid_count = validation_result["valid"]
@@ -153,7 +151,7 @@ def main():
                 "fetched": fetch_result,
                 "valid": validation_result["valid"],
                 "processed": transform_result,
-                "success_rate": success_rate
+                "success_rate": success_rate,
             }
 
         # Define workflow: fetch -> validate -> transform -> summary

@@ -13,6 +13,7 @@ from graflow.exceptions import ConfigError
 
 class TestMessage(TypedDict):
     """Test message type."""
+
     id: str
     value: int
     optional_field: str
@@ -20,6 +21,7 @@ class TestMessage(TypedDict):
 
 class InvalidMessage:
     """Not a TypedDict."""
+
     def __init__(self):
         self.id = "test"
 
@@ -47,11 +49,7 @@ class TestTypedChannel:
         memory_channel = MemoryChannel("test")
         typed_channel = TypedChannel(memory_channel, TestMessage)
 
-        message: TestMessage = {
-            "id": "test123",
-            "value": 42,
-            "optional_field": "hello"
-        }
+        message: TestMessage = {"id": "test123", "value": 42, "optional_field": "hello"}
 
         typed_channel.send("key1", message)
         assert typed_channel.exists("key1")
@@ -65,18 +63,14 @@ class TestTypedChannel:
         invalid_message = {"id": "test123"}
 
         with pytest.raises(TypeError, match="Message does not conform"):
-            typed_channel.send("key1", invalid_message) # type: ignore
+            typed_channel.send("key1", invalid_message)  # type: ignore
 
     def test_receive_valid_message(self):
         """Test receiving a valid message."""
         memory_channel = MemoryChannel("test")
         typed_channel = TypedChannel(memory_channel, TestMessage)
 
-        message: TestMessage = {
-            "id": "test123",
-            "value": 42,
-            "optional_field": "hello"
-        }
+        message: TestMessage = {"id": "test123", "value": 42, "optional_field": "hello"}
 
         typed_channel.send("key1", message)
         received = typed_channel.receive("key1")
@@ -110,11 +104,7 @@ class TestTypedChannel:
         memory_channel = MemoryChannel("test")
         typed_channel = TypedChannel(memory_channel, TestMessage)
 
-        message: TestMessage = {
-            "id": "test123",
-            "value": 42,
-            "optional_field": "hello"
-        }
+        message: TestMessage = {"id": "test123", "value": 42, "optional_field": "hello"}
 
         # Send and check existence
         typed_channel.send("key1", message)
@@ -182,7 +172,7 @@ class TestSchemas:
             "task_id": "task1",
             "result": {"processed": True},
             "timestamp": time.time(),
-            "status": "completed"
+            "status": "completed",
         }
 
         typed_channel.send("result", message)
@@ -201,7 +191,7 @@ class TestSchemas:
             "task_id": "task1",
             "progress": 0.75,
             "message": "Processing...",
-            "timestamp": time.time()
+            "timestamp": time.time(),
         }
 
         typed_channel.send("progress", message)
@@ -223,11 +213,7 @@ class TestValidationHelpers:
 
     def test_validate_typed_dict_valid(self):
         """Test validation with valid data."""
-        data = {
-            "id": "test123",
-            "value": 42,
-            "optional_field": "hello"
-        }
+        data = {"id": "test123", "value": 42, "optional_field": "hello"}
         assert _validate_typed_dict(data, TestMessage) is True
 
     def test_validate_typed_dict_missing_field(self):
@@ -237,12 +223,7 @@ class TestValidationHelpers:
 
     def test_validate_typed_dict_extra_field(self):
         """Test validation with extra field."""
-        data = {
-            "id": "test123",
-            "value": 42,
-            "optional_field": "hello",
-            "extra_field": "not allowed"
-        }
+        data = {"id": "test123", "value": 42, "optional_field": "hello", "extra_field": "not allowed"}
         assert _validate_typed_dict(data, TestMessage) is False
 
     def test_validate_typed_dict_wrong_type(self):
@@ -250,7 +231,7 @@ class TestValidationHelpers:
         data = {
             "id": "test123",
             "value": "not_an_int",  # Should be int
-            "optional_field": "hello"
+            "optional_field": "hello",
         }
         assert _validate_typed_dict(data, TestMessage) is False
 

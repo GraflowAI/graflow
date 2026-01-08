@@ -123,6 +123,7 @@ def show_graph_info(graph: nx.DiGraph) -> None:
 
 # ASCII Drawing Utilities
 
+
 class VertexViewer:
     """VertexViewer class for ASCII graph drawing."""
 
@@ -243,13 +244,13 @@ def _build_sugiyama_layout(vertices: dict[str, str], edges: list[tuple[str, str]
     graph = Graph(vertices_list, edges_)
 
     for vertex in vertices_list:
-        vertex.view = VertexViewer(vertex.data) # type: ignore
+        vertex.view = VertexViewer(vertex.data)  # type: ignore
 
     # NOTE: determine min box length to create the best layout
-    minw = min(v.view.w for v in vertices_list) # type: ignore
+    minw = min(v.view.w for v in vertices_list)  # type: ignore
 
     for edge in edges_:
-        edge.view = _EdgeViewer() # type: ignore
+        edge.view = _EdgeViewer()  # type: ignore
 
     sug = SugiyamaLayout(graph.C[0])
     graph = graph.C[0]
@@ -259,7 +260,7 @@ def _build_sugiyama_layout(vertices: dict[str, str], edges: list[tuple[str, str]
 
     sug.yspace = VertexViewer.HEIGHT
     sug.xspace = minw
-    sug.route_edge = route_with_lines # type: ignore
+    sug.route_edge = route_with_lines  # type: ignore
 
     sug.draw()
 
@@ -283,6 +284,7 @@ def _is_parallel_group(node_id: str, graph: nx.DiGraph) -> bool:
         if task is not None:
             # Import here to avoid circular dependency
             from graflow.core.task import ParallelGroup
+
             return isinstance(task, ParallelGroup)
     return False
 
@@ -321,10 +323,7 @@ def _draw_double_box(canvas: AsciiCanvas, x0: int, y0: int, width: int, height: 
     canvas.point(x0 + width, y0 + height, "╝")
 
 
-def _classify_parallel_group_edges(
-    group_node_id: str,
-    graph: nx.DiGraph
-) -> tuple[list[str], list[str]]:
+def _classify_parallel_group_edges(group_node_id: str, graph: nx.DiGraph) -> tuple[list[str], list[str]]:
     """Classify edges from a ParallelGroup into internal and external.
 
     Args:
@@ -359,10 +358,7 @@ def _classify_parallel_group_edges(
     return internal_tasks, external_tasks
 
 
-def _collect_parallel_group_internal_tasks(
-    group_node_id: str,
-    graph: nx.DiGraph
-) -> set[str]:
+def _collect_parallel_group_internal_tasks(group_node_id: str, graph: nx.DiGraph) -> set[str]:
     """Collect all tasks that should be inside the ParallelGroup container.
 
     This includes:
@@ -420,6 +416,7 @@ def _collect_parallel_group_internal_tasks(
             dfs(task_id)
 
     return internal_tasks
+
 
 def _transform_graph_with_start_end_nodes(graph: nx.DiGraph) -> tuple[nx.DiGraph, set[str]]:
     """Transform graph to replace ParallelGroup nodes with start and end nodes.
@@ -522,7 +519,7 @@ def draw_ascii(graph: nx.DiGraph) -> str:  # noqa: PLR0912
         node_boxes = []
 
         for node in nodes:
-            node_str = str(node)[:max_width-2]  # Truncate if too long
+            node_str = str(node)[: max_width - 2]  # Truncate if too long
             padding = max_width - len(node_str)
             left_pad = padding // 2
             right_pad = padding - left_pad
@@ -546,10 +543,12 @@ def draw_ascii(graph: nx.DiGraph) -> str:  # noqa: PLR0912
 
     for vertex in sug.g.sV:
         # NOTE: moving boxes w/2 to the left
-        xlist.extend((
-            vertex.view.xy[0] - vertex.view.w / 2.0,
-            vertex.view.xy[0] + vertex.view.w / 2.0,
-        ))
+        xlist.extend(
+            (
+                vertex.view.xy[0] - vertex.view.w / 2.0,
+                vertex.view.xy[0] + vertex.view.w / 2.0,
+            )
+        )
         ylist.extend((vertex.view.xy[1], vertex.view.xy[1] + vertex.view.h))
 
     for edge in sug.g.sE:
@@ -591,13 +590,7 @@ def draw_ascii(graph: nx.DiGraph) -> str:  # noqa: PLR0912
             end_y = round(end[1] - miny)
 
             if start_x < 0 or start_y < 0 or end_x < 0 or end_y < 0:
-                msg = (
-                    "Invalid edge coordinates: "
-                    f"start_x={start_x}, "
-                    f"start_y={start_y}, "
-                    f"end_x={end_x}, "
-                    f"end_y={end_y}"
-                )
+                msg = f"Invalid edge coordinates: start_x={start_x}, start_y={start_y}, end_x={end_x}, end_y={end_y}"
                 raise ValueError(msg)
 
             canvas.line(start_x, start_y, end_x, end_y, edge_char)
@@ -657,6 +650,7 @@ def _transform_graph_for_container_view(graph: nx.DiGraph) -> tuple[nx.DiGraph, 
                 continue
 
             from graflow.core.task import ParallelGroup
+
             if not isinstance(task, ParallelGroup):
                 continue
 
@@ -720,9 +714,25 @@ def draw_mermaid(  # noqa: PLR0912
     """
     # Mermaid reserved keywords that cannot be used as node IDs
     reserved_keywords = {
-        'graph', 'subgraph', 'direction', 'click', 'class', 'classDef',
-        'style', 'linkStyle', 'fill', 'stroke', 'color', 'end', 'start',
-        'TD', 'TB', 'BT', 'RL', 'LR', 'flowchart'
+        "graph",
+        "subgraph",
+        "direction",
+        "click",
+        "class",
+        "classDef",
+        "style",
+        "linkStyle",
+        "fill",
+        "stroke",
+        "color",
+        "end",
+        "start",
+        "TD",
+        "TB",
+        "BT",
+        "RL",
+        "LR",
+        "flowchart",
     }
 
     # Create unique IDs for all node labels
@@ -802,7 +812,7 @@ def draw_mermaid(  # noqa: PLR0912
     for group_id, group_info in parallel_groups.items():
         group_id_escaped = _escape_node_label(group_id)
 
-        mermaid += f"    subgraph {group_id_escaped}[\" {group_info['label']} \"]\n"
+        mermaid += f'    subgraph {group_id_escaped}[" {group_info["label"]} "]\n'
         mermaid += "        direction TB\n"
 
         # Add tasks within the subgraph
@@ -855,8 +865,8 @@ def draw_mermaid(  # noqa: PLR0912
             edge_data = display_graph.get_edge_data(u, v)
 
             # Connect directly to the subgraph
-            if edge_data and edge_data.get('label'):
-                label = str(edge_data['label'])
+            if edge_data and edge_data.get("label"):
+                label = str(edge_data["label"])
                 mermaid += f"    {u_id} -- {label} --> {v_id};\n"
             else:
                 mermaid += f"    {u_id} --> {v_id};\n"
@@ -870,8 +880,8 @@ def draw_mermaid(  # noqa: PLR0912
             edge_data = display_graph.get_edge_data(u, v)
 
             # Connect directly from the subgraph
-            if edge_data and edge_data.get('label'):
-                label = str(edge_data['label'])
+            if edge_data and edge_data.get("label"):
+                label = str(edge_data["label"])
                 mermaid += f"    {u_id} -- {label} --> {v_id};\n"
             else:
                 mermaid += f"    {u_id} --> {v_id};\n"
@@ -889,14 +899,13 @@ def draw_mermaid(  # noqa: PLR0912
 
             # Check if edge has data/label
             edge_data = display_graph.get_edge_data(u, v)
-            if edge_data and edge_data.get('label'):
-                label = str(edge_data['label'])
+            if edge_data and edge_data.get("label"):
+                label = str(edge_data["label"])
                 # Wrap long labels
                 if len(label.split()) > wrap_label_n_words:
                     words = label.split()
                     wrapped_label = "<br>".join(
-                        " ".join(words[i:i + wrap_label_n_words])
-                        for i in range(0, len(words), wrap_label_n_words)
+                        " ".join(words[i : i + wrap_label_n_words]) for i in range(0, len(words), wrap_label_n_words)
                     )
                     mermaid += f"    {u_id} -- {wrapped_label} --> {v_id};\n"
                 else:
@@ -920,7 +929,6 @@ def draw_mermaid(  # noqa: PLR0912
                 mermaid += f"    class {node_id} {node_id}_style;\n"
 
     return mermaid
-
 
 
 def create_agraph(  # noqa: PLR0912
@@ -981,7 +989,7 @@ def create_agraph(  # noqa: PLR0912
             color="#4a148c",
             penwidth=2.5,
             labeljust="l",  # Left-justify label
-            labelloc="t",   # Place label at top
+            labelloc="t",  # Place label at top
         )
 
         # Add tasks to the cluster
@@ -1088,9 +1096,13 @@ def draw_dot(
     finally:
         viz.close()
 
-def draw_png(graph: nx.DiGraph, output_path: Optional[str] = None,
-             node_labels: Optional[dict[Any, str]] = None,
-             node_colors: Optional[dict[Any, str]] = None) -> Optional[bytes]:
+
+def draw_png(
+    graph: nx.DiGraph,
+    output_path: Optional[str] = None,
+    node_labels: Optional[dict[Any, str]] = None,
+    node_colors: Optional[dict[Any, str]] = None,
+) -> Optional[bytes]:
     """Draw a NetworkX DiGraph as PNG using pygraphviz.
 
     Args:
@@ -1173,16 +1185,11 @@ def _render_mermaid_using_api(
     try:
         import requests
     except ImportError as e:
-        msg = (
-            "Install the `requests` module to use the Mermaid.INK API: "
-            "`pip install requests`."
-        )
+        msg = "Install the `requests` module to use the Mermaid.INK API: `pip install requests`."
         raise ImportError(msg) from e
 
     # Use Mermaid API to render the image
-    mermaid_syntax_encoded = base64.b64encode(mermaid_syntax.encode("utf8")).decode(
-        "ascii"
-    )
+    mermaid_syntax_encoded = base64.b64encode(mermaid_syntax.encode("utf8")).decode("ascii")
 
     # Check if the background color is a hexadecimal color code using regex
     if background_color is not None:
@@ -1190,10 +1197,7 @@ def _render_mermaid_using_api(
         if not hex_color_pattern.match(background_color):
             background_color = f"!{background_color}"
 
-    image_url = (
-        f"https://mermaid.ink/img/{mermaid_syntax_encoded}"
-        f"?type={file_type}&bgColor={background_color}"
-    )
+    image_url = f"https://mermaid.ink/img/{mermaid_syntax_encoded}?type={file_type}&bgColor={background_color}"
 
     error_msg_suffix = (
         "To resolve this issue:\n"
@@ -1241,7 +1245,6 @@ def _render_mermaid_using_api(
 
     # This should not be reached, but just in case
     msg = (
-        "Failed to reach https://mermaid.ink/ API while trying to render "
-        f"your graph after {max_retries} retries. "
+        f"Failed to reach https://mermaid.ink/ API while trying to render your graph after {max_retries} retries. "
     ) + error_msg_suffix
     raise ValueError(msg)

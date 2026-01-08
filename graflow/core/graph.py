@@ -51,11 +51,12 @@ class TaskGraph:
         if task_id in self._graph.nodes:
             node_data = self._graph.nodes[task_id]
             if "task" not in node_data:
-                 raise KeyError(f"Node {task_id} exists but has no 'task' attribute")
+                raise KeyError(f"Node {task_id} exists but has no 'task' attribute")
             return node_data["task"]
 
         # Search in ParallelGroups
         from graflow.core.task import ParallelGroup
+
         for node_id in self._graph.nodes:
             node_data = self._graph.nodes[node_id]
             if "task" in node_data:
@@ -70,7 +71,7 @@ class TaskGraph:
     @property
     def nodes(self) -> NodeView:
         """Get all node names in the graph."""
-        return self._graph.nodes() # type: ignore
+        return self._graph.nodes()  # type: ignore
 
     @property
     def edges(self) -> OutEdgeView:
@@ -118,6 +119,7 @@ class TaskGraph:
             return []
 
         from graflow.core.task import ParallelGroup  # Local import to avoid cycles
+
         if isinstance(task, ParallelGroup):
             return [member.task_id for member in task.tasks]
 
@@ -157,4 +159,5 @@ class TaskGraph:
     def __str__(self) -> str:
         """Return a string representation of the graph."""
         from graflow.utils.graph import draw_ascii
+
         return draw_ascii(self._graph)

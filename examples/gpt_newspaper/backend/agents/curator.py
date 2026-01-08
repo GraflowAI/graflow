@@ -31,7 +31,7 @@ class CuratorAgent:
         Returns:
             Filtered list of 5 most relevant sources
         """
-        prompt = f"""Today's date is {datetime.now().strftime('%d/%m/%Y')}.
+        prompt = f"""Today's date is {datetime.now().strftime("%d/%m/%Y")}.
 
 Topic or Query: {query}
 

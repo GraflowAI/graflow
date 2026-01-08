@@ -53,10 +53,8 @@ def main():
 
             category = llm_client.completion_text(
                 model="gpt-5-mini",  # Override: use cheap model
-                messages=[
-                    {"role": "user", "content": "Classify this text in one word: 'Hello, how are you?'"}
-                ],
-                max_tokens=10
+                messages=[{"role": "user", "content": "Classify this text in one word: 'Hello, how are you?'"}],
+                max_tokens=10,
             )
 
             print(f"Category: {category}\n")
@@ -78,10 +76,10 @@ def main():
                         - Distributed processing via Redis
                         - Dynamic task generation
 
-                        Explain the key design principles in 2-3 sentences."""
+                        Explain the key design principles in 2-3 sentences.""",
                     }
                 ],
-                max_tokens=150
+                max_tokens=150,
             )
 
             print(f"{analysis}\n")
@@ -94,13 +92,8 @@ def main():
 
             summary = llm_client.completion_text(
                 model="gpt-5-mini",  # Override: back to cheap model
-                messages=[
-                    {
-                        "role": "user",
-                        "content": "In one sentence: What is a task graph?"
-                    }
-                ],
-                max_tokens=50
+                messages=[{"role": "user", "content": "In one sentence: What is a task graph?"}],
+                max_tokens=50,
             )
 
             print(f"{summary}\n")
