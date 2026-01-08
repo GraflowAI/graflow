@@ -30,10 +30,11 @@ def provide_feedback_after_delay(
     def _provide():
         time.sleep(delay)
         manager = context.execution_context.feedback_manager
-        pending = manager.list_pending_requests()
+        pending = manager.list_pending_requests(session_id=context.session_id)
         if pending:
-            feedback_id = pending[0].feedback_id
-            response_type = pending[0].feedback_type
+            request = next((item for item in pending if item.task_id == context.task_id), pending[0])
+            feedback_id = request.feedback_id
+            response_type = request.feedback_type
 
             response = FeedbackResponse(
                 feedback_id=feedback_id,
