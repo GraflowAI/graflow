@@ -1,5 +1,7 @@
 """Tests for DockerTaskHandler."""
 
+import sys
+
 from docker.types import DeviceRequest
 
 from graflow.core.context import ExecutionContext
@@ -21,6 +23,10 @@ def is_docker_available():
 
 
 DOCKER_AVAILABLE = is_docker_available()
+HOST_PYTHON_MAJOR = str(sys.version_info.major)
+PYTHON_IMAGE_SLIM = f"python:{HOST_PYTHON_MAJOR}-slim"
+PYTHON_IMAGE_ALPINE = f"python:{HOST_PYTHON_MAJOR}-alpine"
+PYTHON_IMAGE = f"python:{HOST_PYTHON_MAJOR}"
 
 
 class TestDockerTaskHandler:
@@ -39,7 +45,7 @@ class TestDockerTaskHandler:
         simple_task.set_execution_context(context)
 
         # Use auto-mount feature - graflow source will be auto-mounted to /graflow_src
-        handler = DockerTaskHandler(image="python:3.11-slim")
+        handler = DockerTaskHandler(image=PYTHON_IMAGE_SLIM)
         result = handler.execute_task(simple_task, context)
 
         assert context.get_result("simple_task") == "hello from docker"
@@ -58,7 +64,7 @@ class TestDockerTaskHandler:
         calc_task.set_execution_context(context)
 
         # Use auto-mount feature - graflow source will be auto-mounted to /graflow_src
-        handler = DockerTaskHandler(image="python:3.11-slim")
+        handler = DockerTaskHandler(image=PYTHON_IMAGE_SLIM)
         result = handler.execute_task(calc_task, context)
 
         assert context.get_result("calc_task") == 4950
@@ -66,20 +72,20 @@ class TestDockerTaskHandler:
 
     def test_docker_task_handler_custom_image(self):
         """Test with custom Docker image."""
-        handler = DockerTaskHandler(image="python:3.11-alpine", auto_remove=True)
-        assert handler.image == "python:3.11-alpine"
+        handler = DockerTaskHandler(image=PYTHON_IMAGE_ALPINE, auto_remove=True)
+        assert handler.image == PYTHON_IMAGE_ALPINE
         assert handler.auto_remove is True
 
     def test_docker_task_handler_with_environment(self):
         """Test with custom environment variables."""
-        handler = DockerTaskHandler(image="python:3.11-slim", environment={"MY_VAR": "test_value"})
+        handler = DockerTaskHandler(image=PYTHON_IMAGE_SLIM, environment={"MY_VAR": "test_value"})
         assert handler.environment == {"MY_VAR": "test_value"}
 
     def test_docker_task_handler_initialization(self):
         """Test DockerTaskHandler initialization with various parameters."""
         device_req = DeviceRequest(count=1, capabilities=[["gpu"]])
         handler = DockerTaskHandler(
-            image="python:3.11",
+            image=PYTHON_IMAGE,
             auto_remove=False,
             environment={"KEY": "value"},
             volumes={"/host/path": {"bind": "/container/path", "mode": "rw"}},
