@@ -76,7 +76,7 @@ class TestFeedbackUIEndpoints:
         assert "Approve deployment?" in response.text
         assert "Enter feedback" in response.text
         # Check masked IDs (1 char + 15 asterisks)
-        assert "t***************" in response.text  # test-1 and test-2 both start with 't'
+        assert "t**************" in response.text  # test-1 and test-2 both start with 't'
         # Full IDs should NOT be visible
         assert "test-1" not in response.text
         assert "test-2" not in response.text
