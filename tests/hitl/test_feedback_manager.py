@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 import time
+from typing import Optional
 
 import pytest
 
@@ -13,6 +14,46 @@ from graflow.hitl.types import (
     FeedbackTimeoutError,
     FeedbackType,
 )
+
+
+def provide_feedback_after_delay(
+    manager: FeedbackManager,
+    session_id: Optional[str] = None,
+    task_id: Optional[str] = None,
+    approved: Optional[bool] = None,
+    text: Optional[str] = None,
+    selected: Optional[str] = None,
+    reason: Optional[str] = None,
+    delay: float = 0.1,
+):
+    """Helper to provide feedback after a delay in a separate thread."""
+
+    def _provide():
+        time.sleep(delay)
+        pending = manager.list_pending_requests(session_id=session_id)
+        if pending:
+            # Find the right request if task_id is specified
+            if task_id:
+                request = next((item for item in pending if item.task_id == task_id), pending[0])
+            else:
+                request = pending[0]
+
+            feedback_id = request.feedback_id
+            response_type = request.feedback_type
+
+            response = FeedbackResponse(
+                feedback_id=feedback_id,
+                response_type=response_type,
+                approved=approved if response_type == FeedbackType.APPROVAL else None,
+                reason=reason if response_type == FeedbackType.APPROVAL else None,
+                text=text if response_type == FeedbackType.TEXT else None,
+                selected=selected if response_type == FeedbackType.SELECTION else None,
+                responded_by="test_user",
+            )
+            manager.provide_feedback(feedback_id, response)
+
+    thread = threading.Thread(target=_provide, daemon=True)
+    thread.start()
 
 
 @pytest.fixture
@@ -81,32 +122,19 @@ class TestFeedbackManagerFilesystem:
             )
             result.append(response)
 
-        thread = threading.Thread(target=request_thread)
-        thread.start()
-
-        # Wait for request to be created
-        time.sleep(0.1)
-
-        # Get pending request
-        pending = manager.list_pending_requests()
-        assert len(pending) == 1
-        feedback_id = pending[0].feedback_id
-
-        # Provide response
-        response = FeedbackResponse(
-            feedback_id=feedback_id,
-            response_type=FeedbackType.APPROVAL,
+        # Provide feedback in background
+        provide_feedback_after_delay(
+            manager,
+            session_id="test_session",
+            task_id="test_task",
             approved=True,
             reason="Looks good",
-            responded_by="test_user",
         )
-        success = manager.provide_feedback(feedback_id, response)
-        assert success is True
 
-        # Wait for thread to complete
+        thread = threading.Thread(target=request_thread)
+        thread.start()
         thread.join(timeout=2.0)
 
-        # Check result
         assert len(result) == 1
         assert result[0].approved is True
         assert result[0].reason == "Looks good"
@@ -115,10 +143,9 @@ class TestFeedbackManagerFilesystem:
         """Test that responses persist and can be retrieved by feedback_id."""
         manager = feedback_manager
 
-        # First request
-        result1 = []
+        result = []
 
-        def request_thread1():
+        def request_thread():
             response = manager.request_feedback(
                 task_id="test_task",
                 session_id="test_session",
@@ -126,23 +153,21 @@ class TestFeedbackManagerFilesystem:
                 prompt="Test approval?",
                 timeout=5.0,
             )
-            result1.append(response)
+            result.append(response)
 
-        thread1 = threading.Thread(target=request_thread1)
-        thread1.start()
-
-        # Wait and provide feedback
-        time.sleep(0.1)
-        pending = manager.list_pending_requests()
-        feedback_id = pending[0].feedback_id
-
-        response = FeedbackResponse(
-            feedback_id=feedback_id,
-            response_type=FeedbackType.APPROVAL,
+        # Provide feedback in background
+        provide_feedback_after_delay(
+            manager,
+            session_id="test_session",
+            task_id="test_task",
             approved=True,
         )
-        manager.provide_feedback(feedback_id, response)
-        thread1.join(timeout=2.0)
+
+        thread = threading.Thread(target=request_thread)
+        thread.start()
+        thread.join(timeout=2.0)
+
+        feedback_id = result[0].feedback_id
 
         # Verify response was stored
         stored_response = manager._backend.get_response(feedback_id)
@@ -172,19 +197,16 @@ class TestFeedbackManagerFilesystem:
             )
             result.append(response)
 
-        thread = threading.Thread(target=request_thread)
-        thread.start()
-
-        time.sleep(0.1)
-        pending = manager.list_pending_requests()
-        feedback_id = pending[0].feedback_id
-
-        response = FeedbackResponse(
-            feedback_id=feedback_id,
-            response_type=FeedbackType.TEXT,
+        # Provide feedback in background
+        provide_feedback_after_delay(
+            manager,
+            session_id="test_session",
+            task_id="test_task",
             text="This is my comment",
         )
-        manager.provide_feedback(feedback_id, response)
+
+        thread = threading.Thread(target=request_thread)
+        thread.start()
         thread.join(timeout=2.0)
 
         assert len(result) == 1
@@ -207,19 +229,16 @@ class TestFeedbackManagerFilesystem:
             )
             result.append(response)
 
-        thread = threading.Thread(target=request_thread)
-        thread.start()
-
-        time.sleep(0.1)
-        pending = manager.list_pending_requests()
-        feedback_id = pending[0].feedback_id
-
-        response = FeedbackResponse(
-            feedback_id=feedback_id,
-            response_type=FeedbackType.SELECTION,
+        # Provide feedback in background
+        provide_feedback_after_delay(
+            manager,
+            session_id="test_session",
+            task_id="test_task",
             selected="Option B",
         )
-        manager.provide_feedback(feedback_id, response)
+
+        thread = threading.Thread(target=request_thread)
+        thread.start()
         thread.join(timeout=2.0)
 
         assert len(result) == 1
@@ -287,22 +306,17 @@ class TestFeedbackManagerFilesystem:
             )
             result.append(response)
 
-        thread = threading.Thread(target=request_thread)
-        thread.start()
-
-        time.sleep(0.1)
-        pending = manager.list_pending_requests()
-        feedback_id = pending[0].feedback_id
-
-        # Provide feedback
-        response = FeedbackResponse(
-            feedback_id=feedback_id,
-            response_type=FeedbackType.APPROVAL,
+        # Provide feedback in background
+        provide_feedback_after_delay(
+            manager,
+            session_id="test_session",
+            task_id="test_task",
             approved=True,
             reason="Approved",
         )
-        manager.provide_feedback(feedback_id, response)
 
+        thread = threading.Thread(target=request_thread)
+        thread.start()
         thread.join(timeout=2.0)
 
         # Check channel was written
