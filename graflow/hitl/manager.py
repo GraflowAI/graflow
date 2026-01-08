@@ -362,6 +362,14 @@ class FeedbackManager:
         """
         self._backend.store_request(request)
 
+    def store_response(self, response: FeedbackResponse) -> None:
+        """Store a feedback response in backend.
+
+        Args:
+            response: FeedbackResponse to store
+        """
+        self._backend.store_response(response)
+
     def _poll_for_response(
         self,
         feedback_id: str,
