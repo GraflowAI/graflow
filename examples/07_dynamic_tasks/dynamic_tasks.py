@@ -67,7 +67,6 @@ def scenario_1_batch_processing():
     print("Creating 5 processing tasks dynamically...")
 
     with workflow("batch_processing") as ctx:
-
         # Create tasks dynamically based on number of items
         num_items = 5
         process_tasks = []
@@ -80,6 +79,7 @@ def scenario_1_batch_processing():
                 def process_item():
                     print(f"Processing item {item_id}")
                     return f"result_{item_id}"
+
                 return process_item
 
             # Create and register the task
@@ -114,8 +114,9 @@ def scenario_2_conditional_pipeline():
         "enable_caching": False,
     }
 
-    print(f"Configuration: enable_validation={config['enable_validation']}, "
-          f"enable_transform={config['enable_transform']}")
+    print(
+        f"Configuration: enable_validation={config['enable_validation']}, enable_transform={config['enable_transform']}"
+    )
     print("Building conditional pipeline...")
 
     with workflow("conditional_pipeline") as ctx:
@@ -129,6 +130,7 @@ def scenario_2_conditional_pipeline():
 
         # Conditionally add validation
         if config["enable_validation"]:
+
             @task
             def validate_data():
                 print("Validating data...")
@@ -142,6 +144,7 @@ def scenario_2_conditional_pipeline():
 
         # Conditionally add transformation
         if config["enable_transform"]:
+
             @task
             def transform_data():
                 print("Transforming data...")
@@ -177,33 +180,35 @@ def scenario_3_task_factory():
         task_id = f"calc_{operation}_{value}"
 
         if operation == "add":
+
             @task(id=task_id)
             def calculator():
                 result = 10 + value
                 print(f"Add: 10 + {value} = {result}")
                 return result
         elif operation == "multiply":
+
             @task(id=task_id)
             def calculator():
                 result = 10 * value
                 print(f"Multiply: 10 * {value} = {result}")
                 return result
         elif operation == "power":
+
             @task(id=task_id)
             def calculator():
-                result = 10 ** value
+                result = 10**value
                 print(f"Power: 10 ** {value} = {result}")
                 return result
         else:
+
             @task(id=task_id)
             def calculator():
                 print(f"Unknown operation: {operation}")
-                return None
 
         return calculator
 
     with workflow("task_factory") as ctx:
-
         # Create tasks from factory
         operations = [
             ("add", 5),

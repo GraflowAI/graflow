@@ -50,12 +50,7 @@ def example_1_basic_visualization():
 
     # Create a simple graph
     graph = nx.DiGraph()
-    graph.add_edges_from([
-        ("start", "task_a"),
-        ("task_a", "task_b"),
-        ("task_b", "task_c"),
-        ("task_c", "end")
-    ])
+    graph.add_edges_from([("start", "task_a"), ("task_a", "task_b"), ("task_b", "task_c"), ("task_c", "end")])
 
     print("\n📊 Graph Structure:")
     print("-" * 70)
@@ -97,7 +92,7 @@ def example_2_branching_graph():
         ("branch_a", "merge"),
         ("branch_b", "merge"),
         ("branch_c", "merge"),
-        ("merge", "output")
+        ("merge", "output"),
     ]
     graph.add_edges_from(edges)
 
@@ -108,20 +103,16 @@ def example_2_branching_graph():
     print("\n🌊 Mermaid with Custom Colors:")
     print("-" * 70)
     node_colors = {
-        "input": "#90EE90",      # Light green
-        "validate": "#FFE4B5",   # Light orange
-        "branch_a": "#87CEEB",   # Sky blue
+        "input": "#90EE90",  # Light green
+        "validate": "#FFE4B5",  # Light orange
+        "branch_a": "#87CEEB",  # Sky blue
         "branch_b": "#87CEEB",
         "branch_c": "#87CEEB",
-        "merge": "#FFB6C1",      # Light pink
-        "output": "#98FB98"      # Pale green
+        "merge": "#FFB6C1",  # Light pink
+        "output": "#98FB98",  # Pale green
     }
 
-    mermaid = draw_mermaid(
-        graph,
-        title="Branching Workflow",
-        node_colors=node_colors
-    )
+    mermaid = draw_mermaid(graph, title="Branching Workflow", node_colors=node_colors)
     print(mermaid)
 
     print("\n📸 PNG with Colored Nodes:")
@@ -134,14 +125,10 @@ def example_2_branching_graph():
             "branch_b": "lightblue",
             "branch_c": "lightblue",
             "merge": "lightcoral",
-            "output": "palegreen"
+            "output": "palegreen",
         }
 
-        png_bytes = draw_png(
-            graph,
-            node_colors=png_colors,
-            output_path="/tmp/branching_graph.png"
-        )
+        png_bytes = draw_png(graph, node_colors=png_colors, output_path="/tmp/branching_graph.png")
         if png_bytes:
             print(f"✅ Saved: /tmp/branching_graph.png ({len(png_bytes)} bytes)")
     except Exception as e:
@@ -162,30 +149,25 @@ def example_3_dag_visualization():
         ("source_a", "extract_a"),
         ("source_b", "extract_b"),
         ("source_c", "extract_c"),
-
         # Validation layer
         ("extract_a", "validate_a"),
         ("extract_b", "validate_b"),
         ("extract_c", "validate_c"),
-
         # Transformation layer
         ("validate_a", "transform"),
         ("validate_b", "transform"),
         ("validate_c", "transform"),
-
         # Enrichment
         ("transform", "enrich_demographics"),
         ("transform", "enrich_behavior"),
-
         # Aggregation
         ("enrich_demographics", "aggregate"),
         ("enrich_behavior", "aggregate"),
-
         # Output
         ("aggregate", "load_warehouse"),
         ("aggregate", "create_reports"),
         ("load_warehouse", "notify"),
-        ("create_reports", "notify")
+        ("create_reports", "notify"),
     ]
     graph.add_edges_from(edges)
 
@@ -221,32 +203,32 @@ def example_3_dag_visualization():
     for node in outputs:
         layer_colors[node] = "#F3E6FF"  # Light purple
 
-    mermaid = draw_mermaid(
-        graph,
-        title="Data Pipeline DAG",
-        node_colors=layer_colors,
-        with_styles=True
-    )
+    mermaid = draw_mermaid(graph, title="Data Pipeline DAG", node_colors=layer_colors, with_styles=True)
     print(mermaid)
 
     print("\n📸 PNG Generation:")
     print("-" * 70)
     try:
         png_colors = {
-            "source_a": "azure", "source_b": "azure", "source_c": "azure",
-            "extract_a": "lightblue", "extract_b": "lightblue", "extract_c": "lightblue",
-            "validate_a": "lightyellow", "validate_b": "lightyellow", "validate_c": "lightyellow",
+            "source_a": "azure",
+            "source_b": "azure",
+            "source_c": "azure",
+            "extract_a": "lightblue",
+            "extract_b": "lightblue",
+            "extract_c": "lightblue",
+            "validate_a": "lightyellow",
+            "validate_b": "lightyellow",
+            "validate_c": "lightyellow",
             "transform": "wheat",
-            "enrich_demographics": "lightgreen", "enrich_behavior": "lightgreen",
+            "enrich_demographics": "lightgreen",
+            "enrich_behavior": "lightgreen",
             "aggregate": "palegreen",
-            "load_warehouse": "plum", "create_reports": "plum", "notify": "plum"
+            "load_warehouse": "plum",
+            "create_reports": "plum",
+            "notify": "plum",
         }
 
-        png_bytes = draw_png(
-            graph,
-            node_colors=png_colors,
-            output_path="/tmp/data_pipeline_dag.png"
-        )
+        png_bytes = draw_png(graph, node_colors=png_colors, output_path="/tmp/data_pipeline_dag.png")
         if png_bytes:
             print(f"✅ Saved: /tmp/data_pipeline_dag.png ({len(png_bytes)} bytes)")
     except Exception as e:
@@ -262,10 +244,10 @@ def example_4_custom_labels():
     # Create graph with abbreviated node IDs
     graph = nx.DiGraph()
     edges = [
-        ("cfg", "ld"),    # config -> load
-        ("ld", "val"),    # load -> validate
-        ("val", "xfm"),   # validate -> transform
-        ("xfm", "sav")    # transform -> save
+        ("cfg", "ld"),  # config -> load
+        ("ld", "val"),  # load -> validate
+        ("val", "xfm"),  # validate -> transform
+        ("xfm", "sav"),  # transform -> save
     ]
     graph.add_edges_from(edges)
 
@@ -275,7 +257,7 @@ def example_4_custom_labels():
         "ld": "Load\nData",
         "val": "Validate\nQuality",
         "xfm": "Transform\n& Enrich",
-        "sav": "Save\nResults"
+        "sav": "Save\nResults",
     }
 
     print("\n📊 Graph with Abbreviated IDs:")
@@ -291,20 +273,9 @@ def example_4_custom_labels():
     print("\n📸 PNG with Custom Labels:")
     print("-" * 70)
     try:
-        colors = {
-            "cfg": "lightgreen",
-            "ld": "lightblue",
-            "val": "lightyellow",
-            "xfm": "lightcoral",
-            "sav": "plum"
-        }
+        colors = {"cfg": "lightgreen", "ld": "lightblue", "val": "lightyellow", "xfm": "lightcoral", "sav": "plum"}
 
-        png_bytes = draw_png(
-            graph,
-            node_labels=labels,
-            node_colors=colors,
-            output_path="/tmp/custom_labels.png"
-        )
+        png_bytes = draw_png(graph, node_labels=labels, node_colors=colors, output_path="/tmp/custom_labels.png")
         if png_bytes:
             print(f"✅ Saved: /tmp/custom_labels.png ({len(png_bytes)} bytes)")
             print("   (Node labels are expanded in the PNG)")
@@ -335,11 +306,7 @@ def example_5_edge_cases():
     print("\n3️⃣  Disconnected Components:")
     print("-" * 40)
     disconnected = nx.DiGraph()
-    disconnected.add_edges_from([
-        ("a1", "a2"),
-        ("b1", "b2"),
-        ("c1", "c2")
-    ])
+    disconnected.add_edges_from([("a1", "a2"), ("b1", "b2"), ("c1", "c2")])
     show_graph_info(disconnected)
     print(draw_ascii(disconnected))
 
@@ -363,20 +330,12 @@ def example_6_mermaid_api():
     print("=" * 70)
 
     graph = nx.DiGraph()
-    graph.add_edges_from([
-        ("start", "process"),
-        ("process", "validate"),
-        ("validate", "end")
-    ])
+    graph.add_edges_from([("start", "process"), ("process", "validate"), ("validate", "end")])
 
     print("\n🌐 Generating PNG via mermaid.ink API...")
     print("-" * 70)
     try:
-        png_bytes = draw_mermaid_png(
-            graph,
-            title="API Generated Graph",
-            background_color="white"
-        )
+        png_bytes = draw_mermaid_png(graph, title="API Generated Graph", background_color="white")
 
         if png_bytes:
             output_path = "/tmp/mermaid_api.png"

@@ -115,7 +115,7 @@ def test_complex_composition():
         pass
 
     # Create complex flow
-    start >> (middle1 | middle2) >> end # type: ignore
+    start >> (middle1 | middle2) >> end  # type: ignore
 
     # Should not raise and should create proper dependencies
 

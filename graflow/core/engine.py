@@ -28,7 +28,8 @@ class WorkflowEngine:
     def _register_default_handlers(self) -> None:
         """Register default handlers."""
         from graflow.core.handlers.direct import DirectTaskHandler
-        self._handlers['direct'] = DirectTaskHandler()
+
+        self._handlers["direct"] = DirectTaskHandler()
 
     def _get_handler(self, task: Executable) -> TaskHandler:
         """Get handler for the given task based on its handler_type.
@@ -42,13 +43,10 @@ class WorkflowEngine:
         Raises:
             ValueError: If handler_type is unknown
         """
-        handler_type = getattr(task, 'handler_type', 'direct')
+        handler_type = getattr(task, "handler_type", "direct")
 
         if handler_type not in self._handlers:
-            raise ValueError(
-                f"Unknown handler type: {handler_type}. "
-                f"Supported: {', '.join(self._handlers.keys())}"
-            )
+            raise ValueError(f"Unknown handler type: {handler_type}. Supported: {', '.join(self._handlers.keys())}")
 
         return self._handlers[handler_type]
 
@@ -79,7 +77,7 @@ class WorkflowEngine:
         error: FeedbackTimeoutError,  # FeedbackTimeoutError (imported dynamically to avoid circular import)
         task_id: str,
         task: Executable,
-        context: ExecutionContext
+        context: ExecutionContext,
     ) -> None:
         """Handle feedback timeout by creating checkpoint and exiting.
 
@@ -99,12 +97,13 @@ class WorkflowEngine:
                 "feedback_id": error.feedback_id,
                 "task_id": task_id,
                 "session_id": context.session_id,
-                "timeout": error.timeout
-            }
+                "timeout": error.timeout,
+            },
         )
 
         # Create checkpoint with resuming task_id (task will be resolved from graph on resume)
         from graflow.core.checkpoint import CheckpointManager
+
         checkpoint_path, checkpoint_metadata = CheckpointManager.create_checkpoint(
             context,
             metadata={
@@ -113,7 +112,7 @@ class WorkflowEngine:
                 "task_id": task_id,
                 "timeout": error.timeout,
             },
-            resuming_task_id=task_id
+            resuming_task_id=task_id,
         )
 
         logger.info(
@@ -124,8 +123,8 @@ class WorkflowEngine:
                 "checkpoint_path": checkpoint_path,
                 "checkpoint_id": checkpoint_metadata.checkpoint_id,
                 "feedback_id": error.feedback_id,
-                "session_id": context.session_id
-            }
+                "session_id": context.session_id,
+            },
         )
 
         # Store checkpoint info in context
@@ -138,24 +137,26 @@ class WorkflowEngine:
 
         if feedback_request:
             # Add checkpoint info to metadata
-            feedback_request.metadata.update({
-                "checkpoint_path": checkpoint_path,
-                "checkpoint_id": checkpoint_metadata.checkpoint_id,
-                "checkpoint_created_at": checkpoint_metadata.created_at,
-                "checkpoint_steps": checkpoint_metadata.steps,
-                "checkpoint_reason": "feedback_timeout"
-            })
+            feedback_request.metadata.update(
+                {
+                    "checkpoint_path": checkpoint_path,
+                    "checkpoint_id": checkpoint_metadata.checkpoint_id,
+                    "checkpoint_created_at": checkpoint_metadata.created_at,
+                    "checkpoint_steps": checkpoint_metadata.steps,
+                    "checkpoint_reason": "feedback_timeout",
+                }
+            )
 
             # Update request in backend
-            feedback_manager.update_request(feedback_request)
+            feedback_manager.store_request(feedback_request)
 
             logger.info(
                 "Updated feedback request with checkpoint info",
                 extra={
                     "feedback_id": error.feedback_id,
                     "checkpoint_path": checkpoint_path,
-                    "checkpoint_id": checkpoint_metadata.checkpoint_id
-                }
+                    "checkpoint_id": checkpoint_metadata.checkpoint_id,
+                },
             )
 
     def _handle_deferred_checkpoint(self, context: ExecutionContext) -> None:
@@ -177,17 +178,15 @@ class WorkflowEngine:
             extra={
                 "session_id": context.session_id,
                 "checkpoint_id": checkpoint_metadata.checkpoint_id,
-                "checkpoint_steps": checkpoint_metadata.steps
-            }
+                "checkpoint_steps": checkpoint_metadata.steps,
+            },
         )
         context.checkpoint_metadata = checkpoint_metadata.to_dict()
         context.last_checkpoint_path = checkpoint_path
         context.clear_checkpoint_request()
 
-    def execute(
-        self,
-        context: ExecutionContext,
-        start_task_id: Optional[str] = None
+    def execute(  # noqa: PLR0912
+        self, context: ExecutionContext, start_task_id: Optional[str] = None
     ) -> Any:
         """Execute workflow or single task using the provided context.
 
@@ -202,7 +201,7 @@ class WorkflowEngine:
         assert context.graph is not None, "Graph must be set before execution"
 
         # Determine workflow name for tracing
-        workflow_name = getattr(context.graph, 'name', None) or f"workflow_{context.session_id[:8]}"
+        workflow_name = getattr(context.graph, "name", None) or f"workflow_{context.session_id[:8]}"
 
         # Call tracer hook: workflow start (skip for nested contexts to avoid duplicate traces)
         # Nested contexts (branches/parallel groups) are already tracked via parent context's tracer
@@ -213,7 +212,7 @@ class WorkflowEngine:
         logger.info(
             "Starting execution from task: %s",
             start_task_id or context.start_node,
-            extra={"session_id": context.session_id, "workflow": workflow_name}
+            extra={"session_id": context.session_id, "workflow": workflow_name},
         )
 
         # Initialize first task
@@ -235,8 +234,9 @@ class WorkflowEngine:
             # Check if task exists in graph
             if task_id not in graph.nodes:
                 logger.error(
-                    "Node not found in graph: %s", task_id,
-                    extra={ "session_id": context.session_id, "available_nodes": list(graph.nodes.keys())[:10] }
+                    "Node not found in graph: %s",
+                    task_id,
+                    extra={"session_id": context.session_id, "available_nodes": list(graph.nodes.keys())[:10]},
                 )
                 raise exceptions.GraflowRuntimeError(
                     f"Node '{task_id}' not found in graph. "
@@ -272,15 +272,14 @@ class WorkflowEngine:
                 # Do NOT mark task as completed - this is a failure
                 logger.warning(
                     "Workflow cancellation requested by task '%s': %s",
-                    task_id, context.ctrl_message,
-                    extra={ "task_id": task_id, "session_id": context.session_id, "ctrl_message": context.ctrl_message }
+                    task_id,
+                    context.ctrl_message,
+                    extra={"task_id": task_id, "session_id": context.session_id, "ctrl_message": context.ctrl_message},
                 )
                 # Raise cancellation error immediately
                 from graflow.exceptions import GraflowWorkflowCanceledError
-                raise GraflowWorkflowCanceledError(
-                    context.ctrl_message or "Workflow canceled",
-                    task_id=task_id
-                )
+
+                raise GraflowWorkflowCanceledError(context.ctrl_message or "Workflow canceled", task_id=task_id)
 
             # Common post-task processing (for successful tasks)
             context.mark_task_completed(task_id)
@@ -294,8 +293,9 @@ class WorkflowEngine:
                 # Workflow termination requested (normal exit)
                 logger.info(
                     "Workflow termination requested by task '%s': %s",
-                    task_id, context.ctrl_message,
-                    extra={ "task_id": task_id, "session_id": context.session_id, "ctrl_message": context.ctrl_message}
+                    task_id,
+                    context.ctrl_message,
+                    extra={"task_id": task_id, "session_id": context.session_id, "ctrl_message": context.ctrl_message},
                 )
                 # Exit workflow execution loop
                 break
@@ -304,7 +304,7 @@ class WorkflowEngine:
                 # Goto called: skip normal successors
                 logger.debug(
                     "Goto called in task, skipping normal successors",
-                    extra={"task_id": task_id, "session_id": context.session_id}
+                    extra={"task_id": task_id, "session_id": context.session_id},
                 )
 
             else:
@@ -319,7 +319,7 @@ class WorkflowEngine:
 
         logger.info(
             "Execution completed",
-            extra={"session_id": context.session_id, "steps": context.steps, "workflow": workflow_name}
+            extra={"session_id": context.session_id, "steps": context.steps, "workflow": workflow_name},
         )
 
         # Call tracer hook: workflow end (skip for nested contexts to avoid duplicate traces)

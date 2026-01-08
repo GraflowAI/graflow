@@ -31,7 +31,7 @@ from graflow.core.workflow import workflow
 FAILURE_MODE = True  # Set to True to simulate failures
 
 
-def main():
+def main():  # noqa: PLR0912
     """Run fault recovery demonstration."""
     print("=" * 70)
     print("Fault Recovery with Checkpoints Example")
@@ -47,9 +47,9 @@ def main():
         while retry_count < max_retries and not success:
             try:
                 if retry_count > 0:
-                    print(f"\n{'='*70}")
+                    print(f"\n{'=' * 70}")
                     print(f"Retry Attempt {retry_count}/{max_retries - 1}")
-                    print(f"{'='*70}")
+                    print(f"{'=' * 70}")
 
                 # ========================================
                 # Build workflow
@@ -80,7 +80,7 @@ def main():
 
                     # Continue execution
                     engine = WorkflowEngine()
-                    final_result = engine.execute(restored_context)
+                    _final_result = engine.execute(restored_context)
                     final_context = restored_context
                 else:
                     # Execute from beginning
@@ -91,11 +91,7 @@ def main():
                             """Fetch data from external source (always succeeds)."""
                             print("📥 Fetching data from external source...")
                             time.sleep(0.1)
-                            data = {
-                                "records": 1000,
-                                "source": "database",
-                                "timestamp": time.time()
-                            }
+                            data = {"records": 1000, "source": "database", "timestamp": time.time()}
                             print(f"   ✓ Fetched {data['records']} records")
                             return data
 
@@ -109,19 +105,15 @@ def main():
 
                             # Checkpoint before expensive validation
                             checkpoint_path = os.path.join(tmpdir, "fault_recovery_checkpoint")
-                            task_ctx.checkpoint(path=checkpoint_path, metadata={
-                                "stage": "before_validation",
-                                "records": data["records"]
-                            })
+                            task_ctx.checkpoint(
+                                path=checkpoint_path,
+                                metadata={"stage": "before_validation", "records": data["records"]},
+                            )
                             print("   📸 Checkpoint created before validation")
 
                             # Simulate validation
                             time.sleep(0.1)
-                            validated_data = {
-                                **data,
-                                "validated": True,
-                                "validation_time": time.time()
-                            }
+                            validated_data = {**data, "validated": True, "validation_time": time.time()}
 
                             print(f"   ✓ Validated {data['records']} records")
                             return validated_data
@@ -151,11 +143,7 @@ def main():
                                 raise RuntimeError("Simulated processing failure")
 
                             # Processing succeeded
-                            result = {
-                                **data,
-                                "processed": True,
-                                "processing_time": time.time()
-                            }
+                            result = {**data, "processed": True, "processing_time": time.time()}
 
                             # Mark as completed for idempotency
                             channel.set("processing_status", "completed")
@@ -165,10 +153,10 @@ def main():
 
                             # Checkpoint after expensive processing
                             checkpoint_path = os.path.join(tmpdir, "fault_recovery_checkpoint")
-                            task_ctx.checkpoint(path=checkpoint_path, metadata={
-                                "stage": "processing_complete",
-                                "records": data["records"]
-                            })
+                            task_ctx.checkpoint(
+                                path=checkpoint_path,
+                                metadata={"stage": "processing_complete", "records": data["records"]},
+                            )
                             print("   📸 Checkpoint created after processing")
 
                             return result
@@ -185,7 +173,7 @@ def main():
                         fetch_data >> validate_data >> expensive_processing >> finalize  # type: ignore
 
                         # Execute workflow
-                        final_result, final_context = wf.execute("fetch_data", ret_context=True)
+                        _final_result, final_context = wf.execute("fetch_data", ret_context=True)
 
                 # Workflow completed successfully
                 success = True

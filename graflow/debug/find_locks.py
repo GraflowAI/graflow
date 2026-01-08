@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 LOCK_TYPES = (type(threading.Lock()), type(threading.RLock()))
 
 
-def _iter_children(obj: Any) -> Iterator[Tuple[str, Any]]:
+def _iter_children(obj: Any) -> Iterator[Tuple[str, Any]]:  # noqa: PLR0912
     """Iterate over child objects that should be recursively explored.
 
     Args:
@@ -40,7 +40,7 @@ def _iter_children(obj: Any) -> Iterator[Tuple[str, Any]]:
     # Check for function closures (this is where locks often hide!)
     if callable(obj):
         # Check closure variables
-        if hasattr(obj, '__closure__') and obj.__closure__:
+        if hasattr(obj, "__closure__") and obj.__closure__:
             for i, cell in enumerate(obj.__closure__):
                 try:
                     yield f".__closure__[{i}]", cell.cell_contents
@@ -50,19 +50,19 @@ def _iter_children(obj: Any) -> Iterator[Tuple[str, Any]]:
 
         # Check __globals__ (functions carry their module globals)
         # This is critical because cloudpickle serializes referenced globals!
-        if hasattr(obj, '__globals__'):
+        if hasattr(obj, "__globals__"):
             for key, value in obj.__globals__.items():
                 # Only check non-builtin globals to avoid infinite loops
-                if not key.startswith('__') and key not in ('annotations', 'functools', 'uuid', 'overload'):
+                if not key.startswith("__") and key not in ("annotations", "functools", "uuid", "overload"):
                     yield f".__globals__[{key!r}]", value
 
     # Check for __wrapped__ attribute (common in decorators)
-    if hasattr(obj, '__wrapped__'):
-        yield ".__wrapped__", obj.__wrapped__ # type: ignore
+    if hasattr(obj, "__wrapped__"):
+        yield ".__wrapped__", obj.__wrapped__  # type: ignore
 
     # Check for 'func' attribute (common in TaskWrapper and similar)
-    if hasattr(obj, 'func'):
-        yield ".func", obj.func # type: ignore
+    if hasattr(obj, "func"):
+        yield ".func", obj.func  # type: ignore
 
     # General objects with __dict__
     try:
@@ -202,6 +202,7 @@ def find_unpicklable_objects(root: Any, max_depth: int = 8) -> List[Tuple[str, A
 
     # Types that are commonly unpicklable
     import types
+
     unpicklable_types = [
         (LOCK_TYPES, "threading lock"),
         (type(lambda: None), "lambda function"),

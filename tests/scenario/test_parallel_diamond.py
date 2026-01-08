@@ -49,6 +49,4 @@ def test_parallel_diamond_runs_store_once_after_parallel_transforms():
     store_idx = store_indices[0]
     for label in ("transform_a", "transform_b"):
         assert label in execution_log, f"Missing execution for {label}: {execution_log}"
-        assert store_idx > execution_log.index(label), (
-            f"'store' ran before {label}: {execution_log}"
-        )
+        assert store_idx > execution_log.index(label), f"'store' ran before {label}: {execution_log}"

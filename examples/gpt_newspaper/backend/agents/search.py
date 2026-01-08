@@ -25,18 +25,12 @@ class SearchAgent:
         Returns:
             Tuple of (sources list, image url)
         """
-        results = self.client.search(
-            query=query, topic="news", max_results=10, include_images=True
-        )
+        results = self.client.search(query=query, topic="news", max_results=10, include_images=True)
         sources = results.get("results", [])
 
         # Get first image or use default
         images = results.get("images", [])
-        image = (
-            images[0]
-            if images
-            else "https://images.unsplash.com/photo-1542281286-9e0a16bb7366"
-        )
+        image = images[0] if images else "https://images.unsplash.com/photo-1542281286-9e0a16bb7366"
 
         return sources, image
 

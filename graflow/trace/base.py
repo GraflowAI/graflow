@@ -37,21 +37,14 @@ class Tracer(ABC):
             enable_runtime_graph: If True, track runtime execution graph
         """
         self.enable_runtime_graph = enable_runtime_graph
-        self._runtime_graph: Optional[nx.DiGraph] = (
-            nx.DiGraph() if enable_runtime_graph else None
-        )
+        self._runtime_graph: Optional[nx.DiGraph] = nx.DiGraph() if enable_runtime_graph else None
         self._execution_order: List[str] = []
         self._current_trace_id: Optional[str] = None
         self._span_stack: List[str] = []  # Track nested spans
 
     # === Concrete lifecycle methods with automatic graph tracking ===
 
-    def trace_start(
-        self,
-        name: str,
-        trace_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
-    ) -> None:
+    def trace_start(self, name: str, trace_id: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None) -> None:
         """Start a new trace (root span).
 
         Automatically tracks in runtime graph if enabled.
@@ -67,20 +60,13 @@ class Tracer(ABC):
         # Automatic runtime graph tracking
         if self.enable_runtime_graph:
             self._add_node_to_runtime_graph(
-                name,
-                status="running",
-                metadata={"type": "trace", "trace_id": trace_id, **(metadata or {})}
+                name, status="running", metadata={"type": "trace", "trace_id": trace_id, **(metadata or {})}
             )
 
         # Call subclass output method
         self._output_trace_start(name, trace_id, metadata)
 
-    def trace_end(
-        self,
-        name: str,
-        output: Optional[Any] = None,
-        metadata: Optional[Dict[str, Any]] = None
-    ) -> None:
+    def trace_end(self, name: str, output: Optional[Any] = None, metadata: Optional[Dict[str, Any]] = None) -> None:
         """End the current trace.
 
         Automatically updates runtime graph if enabled.
@@ -97,17 +83,14 @@ class Tracer(ABC):
                 name,
                 status="completed",
                 end_time=datetime.now(),
-                metadata={"output": str(output) if output else None, **(metadata or {})}
+                metadata={"output": str(output) if output else None, **(metadata or {})},
             )
 
         # Call subclass output method
         self._output_trace_end(name, output, metadata)
 
     def span_start(
-        self,
-        name: str,
-        parent_name: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        self, name: str, parent_name: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None
     ) -> None:
         """Start a new span (child of current trace or parent span).
 
@@ -121,23 +104,14 @@ class Tracer(ABC):
         """
         # Automatic runtime graph tracking
         if self.enable_runtime_graph:
-            self._add_node_to_runtime_graph(
-                name,
-                status="running",
-                metadata={"type": "span", **(metadata or {})}
-            )
+            self._add_node_to_runtime_graph(name, status="running", metadata={"type": "span", **(metadata or {})})
             if parent_name:
                 self._add_edge_to_runtime_graph(parent_name, name, relation="parent-child")
 
         # Call subclass output method
         self._output_span_start(name, parent_name, metadata)
 
-    def span_end(
-        self,
-        name: str,
-        output: Optional[Any] = None,
-        metadata: Optional[Dict[str, Any]] = None
-    ) -> None:
+    def span_end(self, name: str, output: Optional[Any] = None, metadata: Optional[Dict[str, Any]] = None) -> None:
         """End a span.
 
         Automatically updates runtime graph if enabled.
@@ -157,18 +131,13 @@ class Tracer(ABC):
                 name,
                 status=status,
                 end_time=datetime.now(),
-                metadata={"output": str(output) if output else None, **(metadata or {})}
+                metadata={"output": str(output) if output else None, **(metadata or {})},
             )
 
         # Call subclass output method
         self._output_span_end(name, output, metadata)
 
-    def event(
-        self,
-        name: str,
-        parent_span: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
-    ) -> None:
+    def event(self, name: str, parent_span: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None) -> None:
         """Record an event (point-in-time observation).
 
         Events are not tracked in runtime graph by default.
@@ -185,62 +154,33 @@ class Tracer(ABC):
     # === Abstract output methods for subclasses ===
 
     @abstractmethod
-    def _output_trace_start(
-        self,
-        name: str,
-        trace_id: Optional[str],
-        metadata: Optional[Dict[str, Any]]
-    ) -> None:
+    def _output_trace_start(self, name: str, trace_id: Optional[str], metadata: Optional[Dict[str, Any]]) -> None:
         """Output trace start (subclass implements output logic)."""
         pass
 
     @abstractmethod
-    def _output_trace_end(
-        self,
-        name: str,
-        output: Optional[Any],
-        metadata: Optional[Dict[str, Any]]
-    ) -> None:
+    def _output_trace_end(self, name: str, output: Optional[Any], metadata: Optional[Dict[str, Any]]) -> None:
         """Output trace end (subclass implements output logic)."""
         pass
 
     @abstractmethod
-    def _output_span_start(
-        self,
-        name: str,
-        parent_name: Optional[str],
-        metadata: Optional[Dict[str, Any]]
-    ) -> None:
+    def _output_span_start(self, name: str, parent_name: Optional[str], metadata: Optional[Dict[str, Any]]) -> None:
         """Output span start (subclass implements output logic)."""
         pass
 
     @abstractmethod
-    def _output_span_end(
-        self,
-        name: str,
-        output: Optional[Any],
-        metadata: Optional[Dict[str, Any]]
-    ) -> None:
+    def _output_span_end(self, name: str, output: Optional[Any], metadata: Optional[Dict[str, Any]]) -> None:
         """Output span end (subclass implements output logic)."""
         pass
 
     @abstractmethod
-    def _output_event(
-        self,
-        name: str,
-        parent_span: Optional[str],
-        metadata: Optional[Dict[str, Any]]
-    ) -> None:
+    def _output_event(self, name: str, parent_span: Optional[str], metadata: Optional[Dict[str, Any]]) -> None:
         """Output event (subclass implements output logic)."""
         pass
 
     # === Workflow-level hooks (concrete implementations) ===
 
-    def on_workflow_start(
-        self,
-        workflow_name: str,
-        context: ExecutionContext
-    ) -> None:
+    def on_workflow_start(self, workflow_name: str, context: ExecutionContext) -> None:
         """Called when workflow execution starts.
 
         Default implementation: starts a trace with trace_id from context.
@@ -255,16 +195,11 @@ class Tracer(ABC):
             metadata={
                 "start_node": context.start_node,
                 "max_steps": context.max_steps,
-                "session_id": context.session_id
-            }
+                "session_id": context.session_id,
+            },
         )
 
-    def on_workflow_end(
-        self,
-        workflow_name: str,
-        context: ExecutionContext,
-        result: Optional[Any] = None
-    ) -> None:
+    def on_workflow_end(self, workflow_name: str, context: ExecutionContext, result: Optional[Any] = None) -> None:
         """Called when workflow execution ends.
 
         Default implementation: ends the trace.
@@ -274,19 +209,11 @@ class Tracer(ABC):
             context: ExecutionContext
             result: Optional workflow result
         """
-        self.trace_end(
-            workflow_name,
-            output=result,
-            metadata={"steps": context.steps}
-        )
+        self.trace_end(workflow_name, output=result, metadata={"steps": context.steps})
 
     # === Task-level hooks (concrete implementations) ===
 
-    def on_task_queued(
-        self,
-        task: Executable,
-        context: ExecutionContext
-    ) -> None:
+    def on_task_queued(self, task: Executable, context: ExecutionContext) -> None:
         """Called when task is added to execution queue.
 
         Default implementation: no-op (can be overridden).
@@ -297,11 +224,7 @@ class Tracer(ABC):
         """
         pass  # Default: no-op (intentional, not abstract)
 
-    def on_task_start(
-        self,
-        task: Executable,
-        context: ExecutionContext
-    ) -> None:
+    def on_task_start(self, task: Executable, context: ExecutionContext) -> None:
         """Called when task execution starts.
 
         Default implementation: starts a span for the task.
@@ -311,16 +234,13 @@ class Tracer(ABC):
             context: ExecutionContext
         """
         parent_task_id = None
-        if hasattr(context, 'current_task_id') and context.current_task_id:
+        if hasattr(context, "current_task_id") and context.current_task_id:
             parent_task_id = context.current_task_id
 
         self.span_start(
             task.task_id,
             parent_name=parent_task_id,
-            metadata={
-                "task_type": type(task).__name__,
-                "handler_type": getattr(task, 'handler_type', 'direct')
-            }
+            metadata={"task_type": type(task).__name__, "handler_type": getattr(task, "handler_type", "direct")},
         )
 
     def on_task_end(
@@ -328,7 +248,7 @@ class Tracer(ABC):
         task: Executable,
         context: ExecutionContext,
         result: Optional[Any] = None,
-        error: Optional[Exception] = None
+        error: Optional[Exception] = None,
     ) -> None:
         """Called when task execution ends.
 
@@ -349,12 +269,7 @@ class Tracer(ABC):
 
     # === Parallel group hooks (concrete implementations) ===
 
-    def on_parallel_group_start(
-        self,
-        group_id: str,
-        member_ids: List[str],
-        context: ExecutionContext
-    ) -> None:
+    def on_parallel_group_start(self, group_id: str, member_ids: List[str], context: ExecutionContext) -> None:
         """Called when ParallelGroup execution starts.
 
         Default implementation: adds parallel-member edges to runtime graph
@@ -374,18 +289,10 @@ class Tracer(ABC):
             for member_id in member_ids:
                 # Only add edge if both nodes exist
                 if group_id in self._runtime_graph and member_id in self._runtime_graph:
-                    self._add_edge_to_runtime_graph(
-                        group_id,
-                        member_id,
-                        relation="parallel-member"
-                    )
+                    self._add_edge_to_runtime_graph(group_id, member_id, relation="parallel-member")
 
     def on_parallel_group_end(
-        self,
-        group_id: str,
-        member_ids: List[str],
-        context: ExecutionContext,
-        results: Optional[Dict[str, Any]] = None
+        self, group_id: str, member_ids: List[str], context: ExecutionContext, results: Optional[Dict[str, Any]] = None
     ) -> None:
         """Called when ParallelGroup execution ends.
 
@@ -404,7 +311,7 @@ class Tracer(ABC):
         task_id: str,
         parent_task_id: Optional[str] = None,
         is_iteration: bool = False,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Called when a dynamic task is added to the workflow.
 
@@ -420,11 +327,7 @@ class Tracer(ABC):
 
     # === Distributed execution support (concrete implementation) ===
 
-    def attach_to_trace(
-        self,
-        trace_id: str,
-        parent_span_id: Optional[str] = None
-    ) -> None:
+    def attach_to_trace(self, trace_id: str, parent_span_id: Optional[str] = None) -> None:
         """Attach this tracer to an existing trace (for distributed execution).
 
         Default implementation: sets trace context and calls output method.
@@ -438,11 +341,7 @@ class Tracer(ABC):
         self._output_attach_to_trace(trace_id, parent_span_id)
 
     @abstractmethod
-    def _output_attach_to_trace(
-        self,
-        trace_id: str,
-        parent_span_id: Optional[str]
-    ) -> None:
+    def _output_attach_to_trace(self, trace_id: str, parent_span_id: Optional[str]) -> None:
         """Output attach to trace (subclass implements output logic)."""
         pass
 
@@ -529,22 +428,12 @@ class Tracer(ABC):
 
         if format == "dict":
             return {
-                "nodes": [
-                    {
-                        "id": node,
-                        **self._runtime_graph.nodes[node]
-                    }
-                    for node in self._runtime_graph.nodes()
-                ],
+                "nodes": [{"id": node, **self._runtime_graph.nodes[node]} for node in self._runtime_graph.nodes()],
                 "edges": [
-                    {
-                        "source": u,
-                        "target": v,
-                        **self._runtime_graph.edges[u, v]
-                    }
+                    {"source": u, "target": v, **self._runtime_graph.edges[u, v]}
                     for u, v in self._runtime_graph.edges()
                 ],
-                "execution_order": self._execution_order
+                "execution_order": self._execution_order,
             }
         elif format == "json":
             import json
@@ -558,11 +447,10 @@ class Tracer(ABC):
             dict_data = self.export_runtime_graph("dict")
             if dict_data is None:
                 return None
-            return dict(json.loads(
-                json.dumps(dict_data, default=json_serializer)
-            ))
+            return dict(json.loads(json.dumps(dict_data, default=json_serializer)))
         elif format == "graphml":
             import io
+
             buffer = io.StringIO()
             nx.write_graphml(self._runtime_graph, buffer)
             return {"graphml": buffer.getvalue()}
@@ -572,10 +460,7 @@ class Tracer(ABC):
     # === Protected helper methods for graph tracking ===
 
     def _add_node_to_runtime_graph(
-        self,
-        node_id: str,
-        status: str = "running",
-        metadata: Optional[Dict[str, Any]] = None
+        self, node_id: str, status: str = "running", metadata: Optional[Dict[str, Any]] = None
     ) -> None:
         """Add node to runtime graph (internal helper).
 
@@ -585,12 +470,7 @@ class Tracer(ABC):
             metadata: Optional metadata
         """
         if self._runtime_graph is not None:
-            self._runtime_graph.add_node(
-                node_id,
-                status=status,
-                start_time=datetime.now(),
-                metadata=metadata or {}
-            )
+            self._runtime_graph.add_node(node_id, status=status, start_time=datetime.now(), metadata=metadata or {})
             self._execution_order.append(node_id)
 
     def _update_node_in_runtime_graph(
@@ -598,7 +478,7 @@ class Tracer(ABC):
         node_id: str,
         status: Optional[str] = None,
         end_time: Optional[datetime] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Update node in runtime graph (internal helper).
 
@@ -617,12 +497,7 @@ class Tracer(ABC):
             if metadata is not None:
                 node_data["metadata"].update(metadata)
 
-    def _add_edge_to_runtime_graph(
-        self,
-        parent_id: str,
-        child_id: str,
-        relation: str = "parent-child"
-    ) -> None:
+    def _add_edge_to_runtime_graph(self, parent_id: str, child_id: str, relation: str = "parent-child") -> None:
         """Add edge to runtime graph (internal helper).
 
         Args:

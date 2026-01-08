@@ -9,6 +9,7 @@ from typing import Optional, Sequence
 
 class GraflowError(Exception):
     """Base exception class for Graflow errors."""
+
     def __init__(self, message: str, cause: Optional[Exception] = None):
         super().__init__(message)
         self.cause = cause
@@ -18,13 +19,17 @@ class GraflowError(Exception):
             return f"{super().__str__()} (caused by {self.cause})"
         return super().__str__()
 
+
 class GraflowRuntimeError(GraflowError):
     """Exception raised for runtime errors in Graflow."""
+
     def __init__(self, message: str, cause: Optional[Exception] = None):
         super().__init__(message, cause)
 
+
 class CycleLimitExceededError(GraflowRuntimeError):
     """Exception raised when the cycle limit is exceeded during execution."""
+
     def __init__(self, task_id: str, cycle_count: int, max_cycles: int):
         super().__init__(f"Cycle limit exceeded for task {task_id}: {cycle_count}/{max_cycles} cycles")
         self.task_id = task_id
@@ -34,8 +39,10 @@ class CycleLimitExceededError(GraflowRuntimeError):
     def __str__(self) -> str:
         return f"CycleLimitExceededError(task_id={self.task_id}, cycle_count={self.cycle_count}, max_cycles={self.max_cycles})"
 
+
 class TaskError(GraflowRuntimeError):
     """Exception raised for errors related to tasks."""
+
     def __init__(self, task_id: str, message: str, cause: Optional[Exception] = None):
         super().__init__(f"Error in task '{task_id}': {message}", cause)
         self._task_id = task_id
@@ -45,11 +52,13 @@ class TaskError(GraflowRuntimeError):
         """Return the ID of the task that caused the error."""
         return self._task_id
 
+
 class GraphCompilationError(GraflowError):
     """Exception raised for errors during graph compilation."""
 
     def __init__(self, message: str, cause: Optional[Exception] = None):
         super().__init__(message, cause)
+
 
 class DuplicateTaskError(GraphCompilationError):
     """Exception raised when a task with the same ID already exists."""
@@ -57,6 +66,7 @@ class DuplicateTaskError(GraphCompilationError):
     def __init__(self, task_id: str):
         super().__init__(f"Duplicate task ID: {task_id}")
         self.task_id = task_id
+
 
 class ConfigError(GraflowError):
     """Exception raised for configuration errors."""
@@ -83,7 +93,7 @@ class ParallelGroupError(GraflowRuntimeError):
         message: str,
         group_id: str,
         failed_tasks: Sequence[tuple[str, str | None]],
-        successful_tasks: Sequence[str]
+        successful_tasks: Sequence[str],
     ):
         super().__init__(message)
         self.group_id = group_id

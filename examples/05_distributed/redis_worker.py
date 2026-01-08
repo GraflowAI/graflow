@@ -86,6 +86,7 @@ from graflow.worker.worker import TaskWorker
 
 REDIS_IMAGE = "redis:7.2"
 
+
 def _is_port_available(port: int) -> bool:
     """Check if a local TCP port is free to bind."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -140,12 +141,7 @@ def _start_redis_container():
 
     try:
         client = docker.from_env()
-        container = client.containers.run(
-            REDIS_IMAGE,
-            ports={'6379/tcp': 6379},
-            detach=True,
-            remove=True
-        )
+        container = client.containers.run(REDIS_IMAGE, ports={"6379/tcp": 6379}, detach=True, remove=True)
         _register_container_cleanup(container)
         host_port = _get_container_host_port(container)
         if host_port is None or host_port != 6379:
@@ -189,7 +185,7 @@ def check_redis() -> redis.Redis | None:
                 return None
         if "NOAUTH" in message:
             print("⚠️  Redis at localhost:6379 requires authentication; this example expects no auth.")
-            print("ℹ️  Set REDIS_PASSWORD for the example to use your existing Redis.")
+            print("ℹ️  Set REDIS_PASSWORD for the example to use your existing Redis.")  # noqa: RUF001
             return None
         print("⏳ Attempting to start Redis via Docker (no auth) on port 6379...")
 
@@ -220,16 +216,10 @@ def check_redis() -> redis.Redis | None:
 def start_workers(redis_client: redis.Redis, num_workers: int = 2):
     """Start local worker threads so the example is self-contained."""
     # In a real deployment, these would be separate processes/containers
-    redis_queue = DistributedTaskQueue(
-        redis_client=redis_client,
-        key_prefix="graflow:worker_demo"
-    )
+    redis_queue = DistributedTaskQueue(redis_client=redis_client, key_prefix="graflow:worker_demo")
     redis_queue.cleanup()
 
-    workers = [
-        TaskWorker(queue=redis_queue, worker_id=f"worker-{i}")
-        for i in range(num_workers)
-    ]
+    workers = [TaskWorker(queue=redis_queue, worker_id=f"worker-{i}") for i in range(num_workers)]
 
     def shutdown_workers():
         print("\nStopping workers...")
@@ -255,9 +245,9 @@ def start_workers(redis_client: redis.Redis, num_workers: int = 2):
 
 def demonstrate_cli_worker():
     """Demonstrate CLI worker usage."""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("CLI Worker Usage")
-    print("="*60)
+    print("=" * 60)
 
     print("\nTo start a worker as a separate process:")
     print("\n  python -m graflow.worker.main --worker-id worker-1 --redis-key-prefix graflow:worker_demo")
@@ -322,7 +312,11 @@ def main():
             return "result_3"
 
         # Define parallel execution with Redis backend
-        _ = (test_task_1 | test_task_2 | test_task_3).set_group_name("parallel_tasks").with_execution(backend=CoordinationBackend.REDIS)
+        _ = (
+            (test_task_1 | test_task_2 | test_task_3)
+            .set_group_name("parallel_tasks")
+            .with_execution(backend=CoordinationBackend.REDIS)
+        )
 
         # Step 2: Execute workflow
         print("\nStep 2: Executing workflow with Redis backend")
@@ -334,10 +328,7 @@ def main():
             start_node="parallel_tasks",
             channel_backend="redis",
             max_steps=100,
-            config={
-                "redis_client": redis_client,
-                "key_prefix": "graflow:worker_demo"
-            }
+            config={"redis_client": redis_client, "key_prefix": "graflow:worker_demo"},
         )
         exec_context.channel.clear()
 
@@ -348,6 +339,7 @@ def main():
             # This will block until the workflow completes (or fails)
             # The engine handles distributed coordination via RedisCoordinator
             from graflow.core.engine import WorkflowEngine
+
             engine = WorkflowEngine()
             result = engine.execute(exec_context)
 
@@ -367,6 +359,7 @@ def main():
         except Exception as e:
             print(f"\n❌ Workflow execution failed: {e}")
             import traceback
+
             traceback.print_exc()
 
     # Show CLI usage

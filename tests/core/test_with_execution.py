@@ -77,9 +77,7 @@ class TestWithExecution:
             task2 = Task("task2")
             group = task1 | task2
 
-            result = group.with_execution(
-                backend=CoordinationBackend.REDIS
-            ).set_group_name("my_group")
+            result = group.with_execution(backend=CoordinationBackend.REDIS).set_group_name("my_group")
 
             assert isinstance(result, ParallelGroup)
             assert result.task_id == "my_group"
@@ -92,10 +90,7 @@ class TestWithExecution:
             task2 = Task("task2")
             group = ParallelGroup([task1, task2])
 
-            group.with_execution(
-                backend=CoordinationBackend.THREADING,
-                backend_config={"thread_count": 2}
-            )
+            group.with_execution(backend=CoordinationBackend.THREADING, backend_config={"thread_count": 2})
 
             assert group._execution_config["backend"] == CoordinationBackend.THREADING
             assert group._execution_config["backend_config"]["thread_count"] == 2
@@ -128,7 +123,7 @@ class TestWithExecutionRunBehavior:
             group.set_execution_context(context)
 
             # Mock the static GroupExecutor.execute_parallel_group method
-            mock_execute = mocker.patch('graflow.core.task.GroupExecutor.execute_parallel_group')
+            mock_execute = mocker.patch("graflow.core.task.GroupExecutor.execute_parallel_group")
 
             group.run()
 
@@ -156,7 +151,7 @@ class TestWithExecutionRunBehavior:
             group.set_execution_context(context)
 
             # Mock the static GroupExecutor.execute_parallel_group method
-            mock_execute = mocker.patch('graflow.core.task.GroupExecutor.execute_parallel_group')
+            mock_execute = mocker.patch("graflow.core.task.GroupExecutor.execute_parallel_group")
 
             group.run()
 
@@ -173,17 +168,14 @@ class TestWithExecutionRunBehavior:
             task2 = Task("task2")
             group = ParallelGroup([task1, task2])
 
-            group.with_execution(
-                backend=CoordinationBackend.THREADING,
-                backend_config={"thread_count": 4}
-            )
+            group.with_execution(backend=CoordinationBackend.THREADING, backend_config={"thread_count": 4})
 
             graph = TaskGraph()
             context = ExecutionContext(graph)
             group.set_execution_context(context)
 
             # Mock the static GroupExecutor.execute_parallel_group method
-            mock_execute = mocker.patch('graflow.core.task.GroupExecutor.execute_parallel_group')
+            mock_execute = mocker.patch("graflow.core.task.GroupExecutor.execute_parallel_group")
 
             group.run()
 

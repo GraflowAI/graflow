@@ -21,6 +21,7 @@ def test_task_run():
 
 def test_decorator():
     """Test @task decorator functionality."""
+
     @task
     def test_func():
         return "test_result"
@@ -31,6 +32,7 @@ def test_decorator():
 
 def test_decorator_with_name():
     """Test @task decorator with custom name."""
+
     @task(id="custom_name")
     def test_func():
         return "test_result"
@@ -76,6 +78,7 @@ def test_parallel_operator():
 
 def test_decorator_chaining():
     """Test chaining decorated functions."""
+
     @task
     def func1():
         return "result1"
@@ -93,6 +96,7 @@ def test_decorator_chaining():
 def test_workflow_context():
     """Test workflow context functionality."""
     with workflow("test_workflow") as ctx:
+
         @task
         def task1():
             return "task1_result"
@@ -101,7 +105,7 @@ def test_workflow_context():
         def task2():
             return "task2_result"
 
-        task1 >> task2 # type: ignore
+        task1 >> task2  # type: ignore
 
         assert "task1" in ctx.graph.nodes
         assert "task2" in ctx.graph.nodes

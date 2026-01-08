@@ -45,7 +45,7 @@ pydantic_agent = create_pydantic_ai_agent_with_litellm(
 
 
 # Register tools with the agent
-@pydantic_agent.tool # type: ignore
+@pydantic_agent.tool  # type: ignore
 def get_weather(ctx: RunContext[int], city: str) -> dict:
     """Get current weather for a city.
 
@@ -72,8 +72,8 @@ def get_weather(ctx: RunContext[int], city: str) -> dict:
     }
 
 
-@pydantic_agent.tool # type: ignore
-def get_forecast(ctx: RunContext[int],city: str, days: int = 3) -> dict:
+@pydantic_agent.tool  # type: ignore
+def get_forecast(ctx: RunContext[int], city: str, days: int = 3) -> dict:
     """Get weather forecast for a city.
 
     Args:
@@ -87,10 +87,7 @@ def get_forecast(ctx: RunContext[int],city: str, days: int = 3) -> dict:
     return {
         "location": city,
         "days": days,
-        "forecast": [
-            {"day": i + 1, "temp": 15 + i * 0.5, "condition": "Partly cloudy"}
-            for i in range(days)
-        ],
+        "forecast": [{"day": i + 1, "temp": 15 + i * 0.5, "condition": "Partly cloudy"} for i in range(days)],
     }
 
 
@@ -106,7 +103,6 @@ def main() -> None:
 
     # Create and execute workflow
     with workflow("weather_assistant") as wf:
-
         # Define task that uses automatic keyword argument resolution
         # Both 'query' and 'history' are automatically resolved from channel
         @task(inject_context=True)
@@ -128,11 +124,18 @@ def main() -> None:
             channel.set("last_messages", result["metadata"]["messages"])
 
         ask_tokyo = ask_weather(task_id="ask_tokyo", query="What's the weather in Tokyo?")
-        ask_multi_city = ask_weather(task_id="ask_multi_city", query="Compare the weather in Tokyo, New York, and London")
+        ask_multi_city = ask_weather(
+            task_id="ask_multi_city", query="Compare the weather in Tokyo, New York, and London"
+        )
         ask_multi_turn = ask_weather(task_id="ask_multi_turn", query="What's the weather in Paris?")
-        ask_follow_up = ask_weather(task_id="ask_follow_up", query="And what about the 5-day forecast?", history=ask_multi_turn.outputs["metadata"]["messages"])
+        ask_follow_up = ask_weather(
+            task_id="ask_follow_up",
+            query="And what about the 5-day forecast?",
+            history=ask_multi_turn.outputs["metadata"]["messages"],
+        )
         _ = ask_tokyo >> ask_multi_city >> ask_multi_turn >> ask_follow_up
         wf.execute()
+
 
 if __name__ == "__main__":
     main()

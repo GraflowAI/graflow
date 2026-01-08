@@ -15,10 +15,7 @@ def test_worker_main_help():
 
     try:
         result = subprocess.run(
-            ["python3", "worker_main.py", "--help"],
-            check=False, capture_output=True,
-            text=True,
-            timeout=10
+            ["python3", "worker_main.py", "--help"], check=False, capture_output=True, text=True, timeout=10
         )
 
         assert result.returncode == 0, f"Help command failed: {result.stderr}"
@@ -38,14 +35,25 @@ def test_worker_main_memory_queue():
 
     try:
         # Start worker process with memory queue
-        process = subprocess.Popen([
-            "python3", "worker_main.py",
-            "--queue-type", "memory",
-            "--worker-id", "test_worker",
-            "--max-concurrent-tasks", "2",
-            "--poll-interval", "0.1",
-            "--log-level", "INFO"
-        ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        process = subprocess.Popen(
+            [
+                "python3",
+                "worker_main.py",
+                "--queue-type",
+                "memory",
+                "--worker-id",
+                "test_worker",
+                "--max-concurrent-tasks",
+                "2",
+                "--poll-interval",
+                "0.1",
+                "--log-level",
+                "INFO",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
 
         # Let it run for a few seconds
         time.sleep(3.0)
@@ -63,17 +71,19 @@ def test_worker_main_memory_queue():
 
         # Check that it started and stopped gracefully
         assert "TaskWorker test_worker starting..." in stdout, "Worker did not start properly"
-        assert "graceful shutdown" in stdout.lower() or process.returncode in [0, -15], "Worker did not shut down gracefully"
+        assert "graceful shutdown" in stdout.lower() or process.returncode in [0, -15], (
+            "Worker did not shut down gracefully"
+        )
 
         print("✅ Memory queue test passed!")
 
     except subprocess.TimeoutExpired:
-        if 'process' in locals():
-            process.kill() # type: ignore
+        if "process" in locals():
+            process.kill()  # type: ignore
         print("❌ Memory queue test timed out")
     except Exception as e:
-        if 'process' in locals():
-            process.kill() # type: ignore
+        if "process" in locals():
+            process.kill()  # type: ignore
         print(f"❌ Memory queue test failed: {e}")
 
 
@@ -83,10 +93,13 @@ def test_worker_main_invalid_args():
 
     try:
         # Test with invalid queue type
-        result = subprocess.run([
-            "python3", "worker_main.py",
-            "--queue-type", "invalid"
-        ], check=False, capture_output=True, text=True, timeout=10)
+        result = subprocess.run(
+            ["python3", "worker_main.py", "--queue-type", "invalid"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
 
         # Should fail with non-zero exit code
         assert result.returncode != 0, "Invalid queue type should cause failure"

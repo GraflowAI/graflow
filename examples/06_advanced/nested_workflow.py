@@ -174,7 +174,6 @@ def scenario_2_reusable_components():
         return process_batch
 
     with workflow("batch_processing") as outer:
-
         # Create multiple batch processors using the reusable pattern
         batch_1 = create_batch_processor(1)
         batch_2 = create_batch_processor(2)

@@ -49,6 +49,7 @@ def test_dynamic_task_with_successors():
     runtime_graph = tracer.get_runtime_graph()
     assert runtime_graph is not None
     from graflow.utils.graph import draw_ascii
+
     print(f"Runtime graph after execution:\n{draw_ascii(runtime_graph)}")
 
     # Verify execution via stored results in the context channel
@@ -100,6 +101,7 @@ def test_dynamic_task_with_manual_successors():
     runtime_graph = tracer.get_runtime_graph()
     assert runtime_graph is not None
     from graflow.utils.graph import draw_ascii
+
     print(f"Runtime graph after execution:\n{draw_ascii(runtime_graph)}")
 
     # Verify execution via stored results in the context channel

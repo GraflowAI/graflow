@@ -21,6 +21,7 @@ class TestDefaultStrictMode:
     def test_all_tasks_succeed_with_threading(self):
         """Test that all tasks succeeding works with threading backend."""
         with workflow("test") as wf:
+
             @task
             def task_a():
                 return "result_a"
@@ -34,9 +35,7 @@ class TestDefaultStrictMode:
                 return "result_c"
 
             # Create parallel group with threading backend
-            parallel = (task_a | task_b | task_c).with_execution(
-                backend=CoordinationBackend.THREADING
-            )
+            parallel = (task_a | task_b | task_c).with_execution(backend=CoordinationBackend.THREADING)
 
             @task
             def final_task():
@@ -58,6 +57,7 @@ class TestDefaultStrictMode:
     def test_one_task_fails_raises_error_with_threading(self):
         """Test that one task failure raises ParallelGroupError with threading."""
         with workflow("test") as wf:
+
             @task
             def task_a():
                 return "result_a"
@@ -71,9 +71,7 @@ class TestDefaultStrictMode:
                 return "result_c"
 
             # Create parallel group with threading backend
-            parallel = (task_a | task_b | task_c).with_execution(
-                backend=CoordinationBackend.THREADING
-            )
+            parallel = (task_a | task_b | task_c).with_execution(backend=CoordinationBackend.THREADING)
 
             engine = WorkflowEngine()
             context = ExecutionContext.create(wf.graph, parallel.task_id)
@@ -92,6 +90,7 @@ class TestDefaultStrictMode:
     def test_all_tasks_fail_with_threading(self):
         """Test that all tasks failing raises ParallelGroupError."""
         with workflow("test") as wf:
+
             @task
             def task_a():
                 raise ValueError("Task A failed!")
@@ -104,9 +103,7 @@ class TestDefaultStrictMode:
             def task_c():
                 raise TypeError("Task C failed!")
 
-            parallel = (task_a | task_b | task_c).with_execution(
-                backend=CoordinationBackend.THREADING
-            )
+            parallel = (task_a | task_b | task_c).with_execution(backend=CoordinationBackend.THREADING)
 
             engine = WorkflowEngine()
             context = ExecutionContext.create(wf.graph, parallel.task_id)
@@ -121,6 +118,7 @@ class TestDefaultStrictMode:
     def test_strict_mode_with_direct_backend(self):
         """Test strict mode with direct execution backend."""
         with workflow("test") as wf:
+
             @task
             def task_a():
                 return "a"
@@ -129,9 +127,7 @@ class TestDefaultStrictMode:
             def task_b():
                 raise Exception("Failed!")
 
-            parallel = (task_a | task_b).with_execution(
-                backend=CoordinationBackend.DIRECT
-            )
+            parallel = (task_a | task_b).with_execution(backend=CoordinationBackend.DIRECT)
 
             engine = WorkflowEngine()
             context = ExecutionContext.create(wf.graph, parallel.task_id)
@@ -151,6 +147,7 @@ class TestCustomHandlers:
         """Test that best-effort handler continues even when tasks fail."""
 
         with workflow("test") as wf:
+
             @task
             def task_a():
                 return "success"
@@ -169,8 +166,7 @@ class TestCustomHandlers:
 
             # Use best-effort handler
             parallel = (task_a | task_b | task_c).with_execution(
-                backend=CoordinationBackend.THREADING,
-                policy="best_effort"
+                backend=CoordinationBackend.THREADING, policy="best_effort"
             )
 
             parallel >> final_task
@@ -192,6 +188,7 @@ class TestCustomHandlers:
 
         # Test 1: 3 out of 4 succeed (min=2) - should pass
         with workflow("test1") as wf1:
+
             @task
             def task_a():
                 return "a"
@@ -209,8 +206,7 @@ class TestCustomHandlers:
                 raise Exception("Failed!")
 
             parallel = (task_a | task_b | task_c | task_d).with_execution(
-                backend=CoordinationBackend.THREADING,
-                policy=AtLeastNGroupPolicy(min_success=2)
+                backend=CoordinationBackend.THREADING, policy=AtLeastNGroupPolicy(min_success=2)
             )
 
             engine = WorkflowEngine()
@@ -221,6 +217,7 @@ class TestCustomHandlers:
 
         # Test 2: 1 out of 4 succeed (min=2) - should fail
         with workflow("test2") as wf2:
+
             @task
             def task_e():
                 return "e"
@@ -238,8 +235,7 @@ class TestCustomHandlers:
                 raise Exception("Failed!")
 
             parallel2 = (task_e | task_f | task_g | task_h).with_execution(
-                backend=CoordinationBackend.THREADING,
-                policy=AtLeastNGroupPolicy(min_success=2)
+                backend=CoordinationBackend.THREADING, policy=AtLeastNGroupPolicy(min_success=2)
             )
 
             engine2 = WorkflowEngine()
@@ -257,6 +253,7 @@ class TestCustomHandlers:
 
         # Test 1: Critical task succeeds, optional task fails - should pass
         with workflow("test1") as wf1:
+
             @task
             def critical_task():
                 return "critical success"
@@ -266,8 +263,7 @@ class TestCustomHandlers:
                 raise Exception("Optional task failed!")
 
             parallel = (critical_task | optional_task).with_execution(
-                backend=CoordinationBackend.THREADING,
-                policy=CriticalGroupPolicy(critical_task_ids=["critical_task"])
+                backend=CoordinationBackend.THREADING, policy=CriticalGroupPolicy(critical_task_ids=["critical_task"])
             )
 
             engine = WorkflowEngine()
@@ -279,6 +275,7 @@ class TestCustomHandlers:
 
         # Test 2: Critical task fails - should fail
         with workflow("test2") as wf2:
+
             @task
             def critical_task2():
                 raise Exception("Critical task failed!")
@@ -288,8 +285,7 @@ class TestCustomHandlers:
                 return "optional success"
 
             parallel2 = (critical_task2 | optional_task2).with_execution(
-                backend=CoordinationBackend.THREADING,
-                policy=CriticalGroupPolicy(critical_task_ids=["critical_task2"])
+                backend=CoordinationBackend.THREADING, policy=CriticalGroupPolicy(critical_task_ids=["critical_task2"])
             )
 
             engine2 = WorkflowEngine()
@@ -309,6 +305,7 @@ class TestErrorPropagation:
     def test_error_details_preserved(self):
         """Test that error details are preserved in ParallelGroupError."""
         with workflow("test") as wf:
+
             @task
             def task_a():
                 raise ValueError("Specific error message from task_a")
@@ -321,9 +318,7 @@ class TestErrorPropagation:
             def task_c():
                 return "success"
 
-            parallel = (task_a | task_b | task_c).with_execution(
-                backend=CoordinationBackend.THREADING
-            )
+            parallel = (task_a | task_b | task_c).with_execution(backend=CoordinationBackend.THREADING)
 
             engine = WorkflowEngine()
             context = ExecutionContext.create(wf.graph, parallel.task_id)
@@ -334,12 +329,18 @@ class TestErrorPropagation:
             error = exc_info.value
             # Check that specific error messages are preserved
             failed_task_dict = dict(error.failed_tasks)
-            assert failed_task_dict["task_a"] is not None and "Specific error message from task_a" in failed_task_dict["task_a"]
-            assert failed_task_dict["task_b"] is not None and "Different error from task_b" in failed_task_dict["task_b"]
+            assert (
+                failed_task_dict["task_a"] is not None
+                and "Specific error message from task_a" in failed_task_dict["task_a"]
+            )
+            assert (
+                failed_task_dict["task_b"] is not None and "Different error from task_b" in failed_task_dict["task_b"]
+            )
 
     def test_successor_not_executed_on_failure(self):
         """Test that successor tasks are not executed when parallel group fails."""
         with workflow("test") as wf:
+
             @task
             def task_a():
                 return "a"
@@ -352,9 +353,7 @@ class TestErrorPropagation:
             def successor_task():
                 return "should not execute"
 
-            parallel = (task_a | task_b).with_execution(
-                backend=CoordinationBackend.THREADING
-            )
+            parallel = (task_a | task_b).with_execution(backend=CoordinationBackend.THREADING)
 
             parallel >> successor_task
 
@@ -390,6 +389,7 @@ class TestHandlerWithDifferentBackends:
                     )
 
         with workflow("test") as wf:
+
             @task
             def task_a():
                 return "a"
@@ -423,9 +423,7 @@ class TestHandlerWithDifferentBackends:
                 success_count = sum(1 for r in results.values() if r.success)
                 success_rate = success_count / len(results)
                 if success_rate < self.min_percentage:
-                    failed = [
-                        (tid, r.error_message) for tid, r in results.items() if not r.success
-                    ]
+                    failed = [(tid, r.error_message) for tid, r in results.items() if not r.success]
                     raise ParallelGroupError(
                         f"Success rate {success_rate:.1%} < {self.min_percentage:.1%}",
                         group_id=group_id,
@@ -434,6 +432,7 @@ class TestHandlerWithDifferentBackends:
                     )
 
         with workflow("test") as wf:
+
             @task
             def task_a():
                 return "a"

@@ -3,8 +3,10 @@
 import base64
 import logging
 import pathlib
+import sys
 from typing import Any, Optional
 
+from cloudpickle import __version__ as cloudpickle_version
 from docker.types import DeviceRequest
 
 import graflow
@@ -66,15 +68,13 @@ class DockerTaskHandler(TaskHandler):
         self.auto_remove = auto_remove
         self.environment = environment or {}
         self.device_requests = device_requests or []
+        self._warn_on_python_major_mismatch()
 
         # Auto-detect and mount graflow source if running from source
         self.volumes = volumes or {}
         if auto_mount_graflow:
             # Check if /graflow_src is already bound in any volume
-            has_graflow_mount = any(
-                vol_config.get("bind") == "/graflow_src"
-                for vol_config in self.volumes.values()
-            )
+            has_graflow_mount = any(vol_config.get("bind") == "/graflow_src" for vol_config in self.volumes.values())
             if not has_graflow_mount:
                 self._auto_mount_graflow_source()
 
@@ -105,7 +105,7 @@ class DockerTaskHandler(TaskHandler):
                 )
                 print(
                     f"📂 [DockerTaskHandler] Using user-provided graflow mount: {graflow_path} -> {container_path}",
-                    flush=True
+                    flush=True,
                 )
             else:
                 # Add our own mount to /graflow_src
@@ -196,6 +196,35 @@ class DockerTaskHandler(TaskHandler):
         context.set_result(task_id, result)
         logger.info(f"[DockerTaskHandler] Task {task_id} completed successfully")
         return result
+
+    def _warn_on_python_major_mismatch(self) -> None:
+        """Warn when the container image Python major version differs from the host."""
+        if not self.image.startswith("python:"):
+            return
+
+        tag = self.image[len("python:") :]
+        if not tag:
+            return
+
+        version_part = tag.split("-", 1)[0]
+        version_parts = version_part.split(".", 2)
+        major_str = version_parts[0]
+        minor_str = version_parts[1] if len(version_parts) > 1 else None
+        if not major_str.isdigit() or (minor_str is not None and not minor_str.isdigit()):
+            return
+
+        image_major = int(major_str)
+        image_minor = int(minor_str) if minor_str is not None else None
+        host_major = sys.version_info.major
+        host_minor = sys.version_info.minor
+        if image_major != host_major or (image_minor is not None and image_minor != host_minor):
+            logger.warning(
+                "[DockerTaskHandler] Python version mismatch (host=%s.%s, image=%s). "
+                "Unpickling may fail across Python versions.",
+                host_major,
+                host_minor,
+                self.image,
+            )
 
     def _serialize_task(self, task: Executable) -> str:
         """Serialize entire task object for Docker execution using cloudpickle.
@@ -337,5 +366,9 @@ class DockerTaskHandler(TaskHandler):
 
         # Render with variables
         return template.render(
-            task_code=task_code, context_code=context_code, task_id=task_id, graflow_version=graflow_version
+            task_code=task_code,
+            context_code=context_code,
+            task_id=task_id,
+            graflow_version=graflow_version,
+            cloudpickle_version=cloudpickle_version,
         )

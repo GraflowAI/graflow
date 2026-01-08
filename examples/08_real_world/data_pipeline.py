@@ -147,26 +147,17 @@ def main():
 
             # Transform customers - add email domain
             customers = channel.get("customers_valid")
-            customers_transformed = [
-                {**r, "email_domain": r["email"].split("@")[1]}
-                for r in customers
-            ]
+            customers_transformed = [{**r, "email_domain": r["email"].split("@")[1]} for r in customers]
             print("   ✅ Added email domains to customers")
 
             # Transform orders - calculate totals with tax
             orders = channel.get("orders_valid")
-            orders_transformed = [
-                {**r, "tax": r["amount"] * 0.1, "total": r["amount"] * 1.1}
-                for r in orders
-            ]
+            orders_transformed = [{**r, "tax": r["amount"] * 0.1, "total": r["amount"] * 1.1} for r in orders]
             print("   ✅ Calculated order totals with tax")
 
             # Transform products - apply discounts
             products = channel.get("products_valid")
-            products_transformed = [
-                {**r, "discounted_price": r["price"] * 0.9}
-                for r in products
-            ]
+            products_transformed = [{**r, "discounted_price": r["price"] * 0.9} for r in products]
             print("   ✅ Applied discounts to products\n")
 
             # Store transformed data

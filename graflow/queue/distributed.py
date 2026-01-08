@@ -16,9 +16,15 @@ from graflow.queue.base import TaskQueue, TaskSpec, TaskStatus
 class DistributedTaskQueue(TaskQueue):
     """Redis distributed task queue with TaskSpec support."""
 
-    def __init__(self, redis_client: Optional['Redis'] = None,
-                 host: str = "localhost", port: int = 6379, db: int = 0,
-                 key_prefix: str = "graflow", graph_store: Optional['GraphStore'] = None):
+    def __init__(
+        self,
+        redis_client: Optional["Redis"] = None,
+        host: str = "localhost",
+        port: int = 6379,
+        db: int = 0,
+        key_prefix: str = "graflow",
+        graph_store: Optional["GraphStore"] = None,
+    ):
         """Initialize Redis task queue.
 
         Args:
@@ -76,7 +82,7 @@ class DistributedTaskQueue(TaskQueue):
 
         # Phase 3: Metrics
         if self.enable_metrics:
-            self.metrics['enqueued'] += 1
+            self.metrics["enqueued"] += 1
 
         return True
 
@@ -90,8 +96,8 @@ class DistributedTaskQueue(TaskQueue):
         # Check if it's a SerializedTaskRecord (JSON)
         try:
             # Try to parse as JSON
-            data = json.loads(item) # type: ignore
-            if isinstance(data, dict) and 'graph_hash' in data:
+            data = json.loads(item)  # type: ignore
+            if isinstance(data, dict) and "graph_hash" in data:
                 # It's a SerializedTaskRecord
                 return self._dequeue_record(data)
         except (json.JSONDecodeError, TypeError):
@@ -109,7 +115,7 @@ class DistributedTaskQueue(TaskQueue):
             # For now, log error and return None (task lost)
             self._logger.error(
                 "GraphStore not configured in DistributedTaskQueue, cannot process SerializedTaskRecord",
-                extra={"queue_key": self.queue_key, "task_data_keys": list(data.keys())}
+                extra={"queue_key": self.queue_key, "task_data_keys": list(data.keys())},
             )
             return None
 
@@ -121,10 +127,7 @@ class DistributedTaskQueue(TaskQueue):
             context, task = ExecutionContextFactory.create_from_record(record, self.graph_store)
 
             task_spec = TaskSpec(
-                executable=task,
-                execution_context=context,
-                status=TaskStatus.RUNNING,
-                created_at=record.created_at
+                executable=task, execution_context=context, status=TaskStatus.RUNNING, created_at=record.created_at
             )
 
             if record.group_id:
@@ -135,7 +138,7 @@ class DistributedTaskQueue(TaskQueue):
             self._task_specs[record.task_id] = task_spec
 
             if self.enable_metrics:
-                self.metrics['dequeued'] += 1
+                self.metrics["dequeued"] += 1
 
             return task_spec
 
@@ -144,7 +147,7 @@ class DistributedTaskQueue(TaskQueue):
                 "Error processing SerializedTaskRecord: %s",
                 str(e),
                 exc_info=True,
-                extra={"queue_key": self.queue_key, "record_data": data}
+                extra={"queue_key": self.queue_key, "record_data": data},
             )
             return None
 
@@ -173,6 +176,7 @@ class DistributedTaskQueue(TaskQueue):
         """
         if group_id:
             from graflow.coordination.redis_coordinator import record_task_completion
+
             record_task_completion(
                 self.redis_client,
                 self.key_prefix,

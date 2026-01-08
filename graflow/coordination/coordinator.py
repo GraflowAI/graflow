@@ -12,20 +12,18 @@ if TYPE_CHECKING:
 
 class CoordinationBackend(Enum):
     """Types of coordination backends for parallel execution."""
+
     REDIS = "redis"
     THREADING = "threading"
     DIRECT = "direct"
+
 
 class TaskCoordinator(ABC):
     """Abstract base class for task coordination."""
 
     @abstractmethod
     def execute_group(
-        self,
-        group_id: str,
-        tasks: List[Executable],
-        execution_context: ExecutionContext,
-        policy: GroupExecutionPolicy
+        self, group_id: str, tasks: List[Executable], execution_context: ExecutionContext, policy: GroupExecutionPolicy
     ) -> None:
         """Execute parallel group with policy.
 

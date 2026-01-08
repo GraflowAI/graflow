@@ -107,10 +107,7 @@ def create_feedback_api(
 
     # Initialize feedback manager
     feedback_config = feedback_config or {}
-    feedback_manager = FeedbackManager(
-        backend=feedback_backend,
-        backend_config=feedback_config
-    )
+    feedback_manager = FeedbackManager(backend=feedback_backend, backend_config=feedback_config)
 
     # Store in app state
     app.state.feedback_manager = feedback_manager
@@ -130,10 +127,12 @@ def create_feedback_api(
 
             # Include feedback UI router
             from graflow.api.endpoints.feedback_ui import router as feedback_ui_router
+
             app.include_router(feedback_ui_router)
 
     # Import and include API router
     from graflow.api.endpoints.feedback import router as feedback_router
+
     app.include_router(feedback_router)
 
     # Add root endpoint
@@ -149,7 +148,7 @@ def create_feedback_api(
                 "list_feedback": "GET /api/feedback",
                 "get_feedback": "GET /api/feedback/{feedback_id}",
                 "respond_feedback": "POST /api/feedback/{feedback_id}/respond",
-                "cancel_feedback": "DELETE /api/feedback/{feedback_id}"
+                "cancel_feedback": "DELETE /api/feedback/{feedback_id}",
             }
         }
 
@@ -159,7 +158,7 @@ def create_feedback_api(
                 "feedback_form": "GET /ui/feedback/{feedback_id}",
                 "submit_feedback": "POST /ui/feedback/{feedback_id}/submit",
                 "success_page": "GET /ui/feedback/{feedback_id}/success",
-                "expired_page": "GET /ui/feedback/{feedback_id}/expired"
+                "expired_page": "GET /ui/feedback/{feedback_id}/expired",
             }
 
         return {
@@ -171,7 +170,7 @@ def create_feedback_api(
             "openapi": "/openapi.json",
             "health": "/health",
             "web_ui_enabled": enable_web_ui,
-            "endpoints": endpoints_info
+            "endpoints": endpoints_info,
         }
 
     # Add health check endpoint
@@ -186,21 +185,13 @@ def create_feedback_api(
         if hasattr(feedback_manager._backend, "__class__"):
             backend_type = feedback_manager._backend.__class__.__name__
 
-        return {
-            "status": "healthy",
-            "service": "graflow-feedback-api",
-            "version": version,
-            "backend": backend_type
-        }
+        return {"status": "healthy", "service": "graflow-feedback-api", "version": version, "backend": backend_type}
 
     return app
 
 
 def create_feedback_api_with_redis(
-    redis_host: str = "localhost",
-    redis_port: int = 6379,
-    redis_db: int = 0,
-    **kwargs
+    redis_host: str = "localhost", redis_port: int = 6379, redis_db: int = 0, **kwargs
 ) -> FastAPI:
     """Convenience function to create feedback API with Redis backend.
 
@@ -227,23 +218,11 @@ def create_feedback_api_with_redis(
     try:
         import redis
     except ImportError:
-        raise ImportError(
-            "Redis is required for Redis backend. "
-            "Install with: uv sync --all-extras"
-        )
+        raise ImportError("Redis is required for Redis backend. Install with: uv sync --all-extras")
 
-    redis_client = redis.Redis(
-        host=redis_host,
-        port=redis_port,
-        db=redis_db,
-        decode_responses=True
-    )
+    redis_client = redis.Redis(host=redis_host, port=redis_port, db=redis_db, decode_responses=True)
 
-    return create_feedback_api(
-        feedback_backend="redis",
-        feedback_config={"redis_client": redis_client},
-        **kwargs
-    )
+    return create_feedback_api(feedback_backend="redis", feedback_config={"redis_client": redis_client}, **kwargs)
 
 
 # Export main factory function

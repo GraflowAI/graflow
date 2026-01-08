@@ -150,7 +150,7 @@ class RedisFeedbackBackend(FeedbackBackend):
                     "Failed to read feedback request from key %s: %s. Skipping.",
                     key,
                     str(e),
-                    extra={"key": key, "error": str(e)}
+                    extra={"key": key, "error": str(e)},
                 )
                 continue
 
@@ -190,7 +190,7 @@ class RedisFeedbackBackend(FeedbackBackend):
                     "Failed to read feedback request from key %s: %s. Skipping.",
                     key,
                     str(e),
-                    extra={"key": key, "error": str(e)}
+                    extra={"key": key, "error": str(e)},
                 )
                 continue
 

@@ -135,7 +135,7 @@ def main():
             for epoch in range(1, num_epochs + 1):
                 time.sleep(0.15)
                 # Simulate decreasing loss
-                loss = initial_loss * (0.6 ** epoch) + random.uniform(0, 0.05)
+                loss = initial_loss * (0.6**epoch) + random.uniform(0, 0.05)
                 print(f"   Epoch {epoch}/{num_epochs}: loss={loss:.3f}")
 
             print("   ✅ Training complete\n")
@@ -228,7 +228,15 @@ def main():
             print("✅ ML pipeline completed successfully")
 
         # Define pipeline workflow
-        prepare_data >> engineer_features >> train_model >> evaluate_model >> tune_hyperparameters >> deploy_model >> generate_report
+        (
+            prepare_data
+            >> engineer_features
+            >> train_model
+            >> evaluate_model
+            >> tune_hyperparameters
+            >> deploy_model
+            >> generate_report
+        )
 
         # Execute pipeline
         ctx.execute("prepare_data")

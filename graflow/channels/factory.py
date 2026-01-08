@@ -10,6 +10,7 @@ from graflow.exceptions import ConfigError
 
 try:
     from graflow.channels.redis_channel import RedisChannel
+
     REDIS_AVAILABLE = True
 except ImportError:
     RedisChannel = None

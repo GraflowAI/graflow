@@ -25,7 +25,7 @@ except ImportError as e:
     PYDANTIC_AI_AVAILABLE = False
 
 # Type variable for Agent output type (matches Pydantic AI's definition)
-OutputDataT = TypeVar("OutputDataT", default=str, covariant=True)  # noqa: PLC0105
+OutputDataT_co = TypeVar("OutputDataT_co", default=str, covariant=True)
 """Covariant type variable for the output data type of a run."""
 
 # Global flag to track if instrumentation has been set up
@@ -179,7 +179,7 @@ def create_pydantic_ai_agent_with_litellm(
     return Agent(llm_model, **agent_kwargs)
 
 
-class PydanticLLMAgent(LLMAgent, Generic[OutputDataT]):
+class PydanticLLMAgent(LLMAgent, Generic[OutputDataT_co]):
     """Wrapper for Pydantic AI Agent with type-safe output handling.
 
     This class wraps Pydantic AI's Agent and provides Graflow integration.
@@ -245,7 +245,7 @@ class PydanticLLMAgent(LLMAgent, Generic[OutputDataT]):
 
     def __init__(
         self,
-        agent: Agent[Any, OutputDataT],
+        agent: Agent[Any, OutputDataT_co],
         name: Optional[str] = None,
         enable_tracing: bool = True,
     ):
@@ -287,7 +287,7 @@ class PydanticLLMAgent(LLMAgent, Generic[OutputDataT]):
         if not isinstance(agent, Agent):
             raise TypeError(f"Expected pydantic_ai.Agent instance, got {type(agent)}")
 
-        self._agent: Agent[Any, OutputDataT] = agent
+        self._agent: Agent[Any, OutputDataT_co] = agent
         self._name = name or "pydantic-agent"
         self._enable_tracing = enable_tracing
 

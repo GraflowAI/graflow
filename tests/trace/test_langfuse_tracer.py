@@ -15,11 +15,7 @@ class TestLangFuseTracerBasics:
         mock_client = MagicMock()
         mock_langfuse_class.return_value = mock_client
 
-        tracer = LangFuseTracer(
-            public_key="pk-test",
-            secret_key="sk-test",
-            enabled=True
-        )
+        tracer = LangFuseTracer(public_key="pk-test", secret_key="sk-test", enabled=True)
 
         assert tracer.enabled is True
         assert tracer.client == mock_client
@@ -44,11 +40,14 @@ class TestLangFuseTracerBasics:
         mock_client = MagicMock()
         mock_langfuse_class.return_value = mock_client
 
-        with patch.dict("os.environ", {
-            "LANGFUSE_PUBLIC_KEY": "pk-env",
-            "LANGFUSE_SECRET_KEY": "sk-env",
-            "LANGFUSE_HOST": "https://test.langfuse.com"
-        }):
+        with patch.dict(
+            "os.environ",
+            {
+                "LANGFUSE_PUBLIC_KEY": "pk-env",
+                "LANGFUSE_SECRET_KEY": "sk-env",
+                "LANGFUSE_HOST": "https://test.langfuse.com",
+            },
+        ):
             tracer = LangFuseTracer()
 
         mock_load_env.assert_called_once()
@@ -326,10 +325,7 @@ class TestLangFuseTracerAttachToTrace:
         # Should create root span with trace_id and parent_span_id
         mock_client.start_span.assert_called_once()
         call_kwargs = mock_client.start_span.call_args.kwargs
-        assert call_kwargs["trace_context"] == {
-            "trace_id": "trace_123",
-            "parent_span_id": "span_456"
-        }
+        assert call_kwargs["trace_context"] == {"trace_id": "trace_123", "parent_span_id": "span_456"}
 
 
 class TestLangFuseTracerFlush:
@@ -380,12 +376,7 @@ class TestLangFuseTracerRuntimeGraph:
         mock_client.start_span.return_value = mock_root_span
         mock_langfuse_class.return_value = mock_client
 
-        tracer = LangFuseTracer(
-            public_key="pk",
-            secret_key="sk",
-            enabled=True,
-            enable_runtime_graph=True
-        )
+        tracer = LangFuseTracer(public_key="pk", secret_key="sk", enabled=True, enable_runtime_graph=True)
         tracer.trace_start("workflow")
         tracer.span_start("task_1")
         tracer.span_end("task_1")
@@ -406,11 +397,6 @@ class TestLangFuseTracerRuntimeGraph:
         mock_client = MagicMock()
         mock_langfuse_class.return_value = mock_client
 
-        tracer = LangFuseTracer(
-            public_key="pk",
-            secret_key="sk",
-            enabled=True,
-            enable_runtime_graph=False
-        )
+        tracer = LangFuseTracer(public_key="pk", secret_key="sk", enabled=True, enable_runtime_graph=False)
 
         assert tracer.get_runtime_graph() is None

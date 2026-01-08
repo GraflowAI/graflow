@@ -18,9 +18,7 @@ from graflow.hitl.types import FeedbackResponse, FeedbackType
 
 # Configure logging to show INFO level messages from graflow.hitl
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
 )
 
 
@@ -64,7 +62,7 @@ def main():
                     options=["low_cost", "balanced", "high_performance"],
                     channel_key="processing_mode",  # Write to channel
                     write_to_channel=True,
-                    timeout=3.0
+                    timeout=3.0,
                 )
 
                 print(f"[Task 1] Configuration received: {response.selected}")
@@ -110,11 +108,7 @@ def main():
             print(f"[Task 3] Mode: {config}")
             print(f"[Task 3] Duration: {result['duration']:.2f}s")
 
-            return {
-                "configuration": config,
-                "result": result,
-                "timestamp": time.time()
-            }
+            return {"configuration": config, "result": result, "timestamp": time.time()}
 
         # Define workflow
         request_config >> process_with_config >> generate_report

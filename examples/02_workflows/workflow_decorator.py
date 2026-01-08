@@ -47,10 +47,7 @@ def main():
         def extract_data():
             """Step 1: Extract data from a source."""
             print("📥 Extracting data from source...")
-            data = {
-                "records": 1000,
-                "source": "database"
-            }
+            data = {"records": 1000, "source": "database"}
             print(f"Data extracted: {data}\n")
             return data
 
@@ -75,7 +72,7 @@ def main():
 
         # Define the workflow execution order
         # >> operator means "then" (sequential execution)
-        extract_data >> transform_data >> load_data # type: ignore
+        extract_data >> transform_data >> load_data  # type: ignore
 
         # Execute the workflow starting from the first task
         # The workflow engine will execute tasks in dependency order:

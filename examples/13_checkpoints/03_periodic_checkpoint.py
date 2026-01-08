@@ -80,12 +80,10 @@ def main():
                 if epoch % checkpoint_frequency == 0:
                     print(f"   📸 Checkpoint milestone (epoch {epoch})")
                     checkpoint_path = os.path.join(tmpdir, f"checkpoint_epoch_{epoch}")
-                    task_ctx.checkpoint(path=checkpoint_path, metadata={
-                        "epoch": epoch,
-                        "loss": loss,
-                        "accuracy": accuracy,
-                        "milestone": f"epoch_{epoch}"
-                    })
+                    task_ctx.checkpoint(
+                        path=checkpoint_path,
+                        metadata={"epoch": epoch, "loss": loss, "accuracy": accuracy, "milestone": f"epoch_{epoch}"},
+                    )
 
                 # Check convergence or cycle limit
                 # Note: max_cycles defaults to 10, so stop at epoch 10 to stay within limit
@@ -121,7 +119,9 @@ def main():
 
         # Get latest checkpoint
         # Find the latest checkpoint file
-        checkpoint_files = sorted([f for f in os.listdir(tmpdir) if f.startswith("checkpoint_epoch_") and f.endswith(".pkl")])
+        checkpoint_files = sorted(
+            [f for f in os.listdir(tmpdir) if f.startswith("checkpoint_epoch_") and f.endswith(".pkl")]
+        )
         if checkpoint_files:
             latest_checkpoint_file = checkpoint_files[-1]
             checkpoint_path = os.path.join(tmpdir, latest_checkpoint_file)
@@ -168,7 +168,9 @@ def main():
 
         print("\n💾 Checkpoints Created:")
         # List all checkpoint files
-        checkpoint_files = sorted([f for f in os.listdir(tmpdir) if f.startswith("checkpoint_epoch_") and f.endswith(".pkl")])
+        checkpoint_files = sorted(
+            [f for f in os.listdir(tmpdir) if f.startswith("checkpoint_epoch_") and f.endswith(".pkl")]
+        )
         for i, checkpoint_file in enumerate(checkpoint_files, 1):
             # Extract epoch number from filename
             epoch_num = int(checkpoint_file.split("_")[-1].replace(".pkl", ""))

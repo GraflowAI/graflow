@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from graflow.core.handlers.group_policy import GroupExecutionPolicy
     from graflow.core.workflow import WorkflowContext
 
+
 def _reconstruct_task_wrapper(
     task_id: str,
     original_func: Callable,
@@ -24,7 +25,7 @@ def _reconstruct_task_wrapper(
     inject_llm_client: bool,
     inject_llm_agent: Optional[str],
     handler_type: Optional[str],
-    resolve_keyword_args: bool = True
+    resolve_keyword_args: bool = True,
 ) -> TaskWrapper:
     """Reconstruct TaskWrapper from serialized components.
 
@@ -61,7 +62,7 @@ def _reconstruct_task_wrapper(
         inject_llm_agent=inject_llm_agent,
         register_to_context=False,  # Don't re-register during deserialization
         handler_type=handler_type,
-        resolve_keyword_args=resolve_keyword_args
+        resolve_keyword_args=resolve_keyword_args,
     )
 
     return task_wrapper
@@ -88,7 +89,7 @@ class Executable(ABC):
     def get_execution_context(self) -> ExecutionContext:
         """Get the execution context for this executable."""
 
-        if not hasattr(self, '_execution_context'):
+        if not hasattr(self, "_execution_context"):
             raise GraflowRuntimeError("Execution context not set. Call set_execution_context() first.")
 
         return self._execution_context
@@ -98,8 +99,8 @@ class Executable(ABC):
         state = self.__dict__.copy()
         # Remove execution context as it contains runtime state (connections, etc.)
         # and should be re-injected on the worker side.
-        if '_execution_context' in state:
-            del state['_execution_context']
+        if "_execution_context" in state:
+            del state["_execution_context"]
 
         # Replace redis_client with connection configuration
         if "_execution_config" in state and "backend_config" in state["_execution_config"]:
@@ -110,10 +111,7 @@ class Executable(ABC):
                 del backend_config["redis_client"]
 
             # Create a new execution_config with cleaned backend_config
-            state["_execution_config"] = {
-                **state["_execution_config"],
-                "backend_config": backend_config
-            }
+            state["_execution_config"] = {**state["_execution_config"], "backend_config": backend_config}
 
         return state
 
@@ -202,13 +200,12 @@ class Executable(ABC):
             other._add_dependency_edge(self)
             return other
         else:
-            raise TypeError(
-                f"Can only combine with Task, TaskWrapper, SequentialTask, or ParallelGroup: {type(other)}"
-            )
+            raise TypeError(f"Can only combine with Task, TaskWrapper, SequentialTask, or ParallelGroup: {type(other)}")
 
     def _add_dependency_edge(self, to_task: Executable) -> None:
         """Add dependency edge from self to to_task in current context."""
         from .workflow import current_workflow_context
+
         current_context = current_workflow_context()
         self._ensure_registered(current_context)
         to_task._ensure_registered(current_context)
@@ -222,11 +219,12 @@ class Executable(ABC):
     def _register_to_context(self) -> None:
         """Register this root task to current workflow context."""
         from .workflow import get_current_workflow_context
+
         current_context = get_current_workflow_context()
         if current_context is None:
             self._pending_registration = True
             return
-        current_context.add_node(self.task_id, self)
+        current_context.add_node(self.task_id, self, skip_if_exists=False)
         self._pending_registration = False
 
 
@@ -364,9 +362,7 @@ class SequentialTask(Executable):
             other.tasks.insert(0, self.leftmost)
             return other
         else:
-            raise TypeError(
-                f"Can only combine with Task, TaskWrapper, SequentialTask, or ParallelGroup: {type(other)}"
-            )
+            raise TypeError(f"Can only combine with Task, TaskWrapper, SequentialTask, or ParallelGroup: {type(other)}")
 
     def __len__(self) -> int:
         """Return the number of tasks in the chain."""
@@ -407,8 +403,9 @@ class Task(Executable):
     @property
     def _logger(self):
         """Get logger instance (lazy initialization to avoid module-level import)."""
-        if not hasattr(self, '_logger_instance'):
+        if not hasattr(self, "_logger_instance"):
             import logging
+
             self._logger_instance = logging.getLogger(__name__)
         return self._logger_instance
 
@@ -468,6 +465,7 @@ class ParallelGroup(Executable):
 
         # Rename the node in the workflow context
         from .workflow import current_workflow_context
+
         current_context = current_workflow_context()
         current_context.rename_node(old_task_id, name)
 
@@ -525,7 +523,7 @@ class ParallelGroup(Executable):
 
             # Remove redis_client before storing (contains unpicklable locks)
             # Connection params have already been extracted by ensure_redis_connection_params()
-            cleaned_config = {k: v for k, v in backend_config.items() if k != 'redis_client'}
+            cleaned_config = {k: v for k, v in backend_config.items() if k != "redis_client"}
             self._execution_config["backend_config"].update(cleaned_config)
 
         from graflow.core.handlers.group_policy import canonicalize_group_policy
@@ -650,9 +648,7 @@ class ParallelGroup(Executable):
                 other._remove_from_context()
                 return self
         else:
-            raise TypeError(
-                f"Can only combine with Task, TaskWrapper, SequentialTask, or ParallelGroup: {type(other)}"
-            )
+            raise TypeError(f"Can only combine with Task, TaskWrapper, SequentialTask, or ParallelGroup: {type(other)}")
 
     def __repr__(self) -> str:
         """Return string representation of this parallel group."""
@@ -666,6 +662,7 @@ class ParallelGroup(Executable):
             True if this group has successors (dependencies), False otherwise
         """
         from .workflow import current_workflow_context
+
         try:
             current_context = current_workflow_context()
             graph = current_context.graph
@@ -680,12 +677,14 @@ class ParallelGroup(Executable):
     def _get_group_name(self) -> str:
         """Get group name from current context or global counter."""
         from .workflow import current_workflow_context
+
         current_context = current_workflow_context()
         return current_context.get_next_group_name()
 
     def _remove_from_context(self) -> None:
         """Remove this parallel group from the current workflow context."""
         from .workflow import current_workflow_context
+
         current_context = current_workflow_context()
         graph = current_context.graph._graph
         if graph.has_node(self.task_id):
@@ -709,7 +708,7 @@ class TaskWrapper(Executable):
         inject_llm_agent: Optional[str] = None,
         register_to_context: bool = True,
         handler_type: Optional[str] = None,
-        resolve_keyword_args: bool = True
+        resolve_keyword_args: bool = True,
     ) -> None:
         """Initialize a task wrapper with task_id and function.
 
@@ -737,14 +736,14 @@ class TaskWrapper(Executable):
 
         # Store reference to original unwrapped function for serialization
         # functools.wraps preserves this in __wrapped__ attribute
-        self._original_func = getattr(func, '__wrapped__', func)
+        self._original_func = getattr(func, "__wrapped__", func)
 
         # Add serialization attributes required for checkpoint/resume
         # These may be overwritten by @task decorator if used
-        self.__name__ = getattr(func, '__name__', task_id)
-        self.__module__ = getattr(func, '__module__', self.__class__.__module__)
-        self.__qualname__ = getattr(func, '__qualname__', task_id)
-        self.__doc__ = getattr(func, '__doc__', None)
+        self.__name__ = getattr(func, "__name__", task_id)
+        self.__module__ = getattr(func, "__module__", self.__class__.__module__)
+        self.__qualname__ = getattr(func, "__qualname__", task_id)
+        self.__doc__ = getattr(func, "__doc__", None)
 
         # Set handler_type attribute (from Executable base class)
         if handler_type is not None:
@@ -779,11 +778,11 @@ class TaskWrapper(Executable):
                 self.inject_llm_client,
                 self.inject_llm_agent,
                 self.handler_type,
-                self.resolve_keyword_args
+                self.resolve_keyword_args,
             ),
             state,  # Additional state to restore
-            None,   # listitems
-            None    # dictitems
+            None,  # listitems
+            None,  # dictitems
         )
 
     def __getstate__(self):
@@ -797,8 +796,8 @@ class TaskWrapper(Executable):
         state = super().__getstate__()
 
         # Remove wrapper function - it will be recreated from _original_func
-        if 'func' in state:
-            del state['func']
+        if "func" in state:
+            del state["func"]
         return state
 
     def __setstate__(self, state):
@@ -810,7 +809,7 @@ class TaskWrapper(Executable):
         super().__setstate__(state)
 
         # Preserve the wrapper function that was already created
-        existing_func = getattr(self, 'func', None)
+        existing_func = getattr(self, "func", None)
 
         # Restore the wrapper function (don't overwrite with None)
         if existing_func is not None:
@@ -845,9 +844,9 @@ class TaskWrapper(Executable):
 
         # Skip injected kwargs
         if self.inject_llm_client:
-            skip_params.add('llm_client')
+            skip_params.add("llm_client")
         if self.inject_llm_agent:
-            skip_params.add('llm_agent')
+            skip_params.add("llm_agent")
 
         # Get channel
         channel = exec_context.get_channel()
@@ -880,7 +879,7 @@ class TaskWrapper(Executable):
 
         # LLMClient injection
         if self.inject_llm_client:
-            injection_kwargs['llm_client'] = exec_context.llm_client
+            injection_kwargs["llm_client"] = exec_context.llm_client
 
         # LLMAgent injection
         if self.inject_llm_agent:
@@ -891,7 +890,7 @@ class TaskWrapper(Executable):
                     f"Task '{self._task_id}' requires LLMAgent '{self.inject_llm_agent}', but it's not registered. "
                     f"Register it with: context.register_llm_agent('{self.inject_llm_agent}', agent)"
                 )
-            injection_kwargs['llm_agent'] = agent
+            injection_kwargs["llm_agent"] = agent
 
         return injection_kwargs
 
@@ -910,10 +909,10 @@ class TaskWrapper(Executable):
         - Stores bound parameters for later execution
         - With no parameters, executes the task directly (testing convenience)
         """
-        if not hasattr(self, '_execution_context'):
+        if not hasattr(self, "_execution_context"):
             # Check if this is instance creation mode (has task_id or binding params)
             # vs direct execution mode (no params)
-            has_task_id = 'task_id' in kwargs
+            has_task_id = "task_id" in kwargs
             has_binding_params = bool(kwargs and not has_task_id) or bool(args)
 
             if has_task_id or has_binding_params:
@@ -927,11 +926,11 @@ class TaskWrapper(Executable):
                     )
 
                 # Extract or generate task_id
-                if 'task_id' in kwargs:
-                    new_task_id = kwargs.pop('task_id')
+                if "task_id" in kwargs:
+                    new_task_id = kwargs.pop("task_id")
                 else:
                     # Auto-generate task_id when binding params provided
-                    func_name = getattr(self.func, '__name__', 'task')
+                    func_name = getattr(self.func, "__name__", "task")
                     new_task_id = f"{func_name}_{uuid.uuid4().hex[:8]}"
 
                 # Create new TaskWrapper instance
@@ -942,8 +941,8 @@ class TaskWrapper(Executable):
                     inject_llm_client=self.inject_llm_client,
                     inject_llm_agent=self.inject_llm_agent,
                     register_to_context=True,  # Uses _register_to_context() internally
-                    handler_type=getattr(self, 'handler_type', None),
-                    resolve_keyword_args=self.resolve_keyword_args
+                    handler_type=getattr(self, "handler_type", None),
+                    resolve_keyword_args=self.resolve_keyword_args,
                 )
 
                 # Store bound parameters (remaining kwargs after task_id extraction)
@@ -962,7 +961,7 @@ class TaskWrapper(Executable):
         resolved_kwargs = self._resolve_keyword_args_from_channel(exec_context)
 
         # Get bound kwargs (creation-time parameters)
-        bound_kwargs = getattr(self, '_bound_kwargs', {})
+        bound_kwargs = getattr(self, "_bound_kwargs", {})
 
         # Prepare injection kwargs
         injection_kwargs = self._prepare_injection_kwargs(exec_context)
@@ -1000,7 +999,7 @@ class TaskWrapper(Executable):
         to allow direct task execution (testing convenience).
         """
         temp_context = None
-        if hasattr(self, '_execution_context'):
+        if hasattr(self, "_execution_context"):
             exec_context = self.get_execution_context()
         else:
             graph = TaskGraph()
@@ -1014,7 +1013,7 @@ class TaskWrapper(Executable):
             resolved_kwargs = self._resolve_keyword_args_from_channel(exec_context)
 
             # Get bound kwargs (creation-time parameters)
-            bound_kwargs = getattr(self, '_bound_kwargs', {})
+            bound_kwargs = getattr(self, "_bound_kwargs", {})
 
             # Prepare injection kwargs
             injection_kwargs = self._prepare_injection_kwargs(exec_context)
@@ -1034,8 +1033,8 @@ class TaskWrapper(Executable):
             # No context injection - just pass all kwargs
             return self.func(*args, **all_kwargs)
         finally:
-            if temp_context is not None and hasattr(self, '_execution_context'):
-                delattr(self, '_execution_context')
+            if temp_context is not None and hasattr(self, "_execution_context"):
+                delattr(self, "_execution_context")
 
     def __repr__(self) -> str:
         """Return string representation of this task wrapper."""

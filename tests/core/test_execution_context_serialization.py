@@ -30,6 +30,7 @@ from graflow.core.task import Task
 def global_test_func():
     return "test"
 
+
 @task
 def global_math_func(x, y):
     return x + y
@@ -75,11 +76,7 @@ class TestExecutionContextSerialization:
         graph.add_node(Task("test_task", register_to_context=False), "test_task")
 
         context = ExecutionContext.create(
-            graph=graph,
-            start_node="test_task",
-            max_steps=15,
-            default_max_retries=5,
-            channel_backend="memory"
+            graph=graph, start_node="test_task", max_steps=15, default_max_retries=5, channel_backend="memory"
         )
 
         # Set some state
@@ -119,12 +116,7 @@ class TestExecutionContextSerialization:
         graph = TaskGraph()
         graph.add_node(Task("test_task", register_to_context=False), "test_task")
 
-        context = ExecutionContext.create(
-            graph=graph,
-            start_node="test_task",
-            max_steps=10,
-            channel_backend="memory"
-        )
+        context = ExecutionContext.create(graph=graph, start_node="test_task", max_steps=10, channel_backend="memory")
 
         # Set some channel data
         context.channel.set("test_key", "test_value")
@@ -168,16 +160,12 @@ class TestExecutionContextSerialization:
         redis_config = {
             "host": clean_redis.connection_pool.connection_kwargs.get("host", "localhost"),
             "port": clean_redis.connection_pool.connection_kwargs.get("port", 6379),
-            "db": clean_redis.connection_pool.connection_kwargs.get("db", 0)
+            "db": clean_redis.connection_pool.connection_kwargs.get("db", 0),
         }
 
         # Create context with Redis backend using the Docker Redis
         context = ExecutionContext.create(
-            graph=graph,
-            start_node="test_task",
-            max_steps=10,
-            channel_backend="redis",
-            config=redis_config
+            graph=graph, start_node="test_task", max_steps=10, channel_backend="redis", config=redis_config
         )
 
         # Set some channel data
@@ -216,18 +204,10 @@ class TestExecutionContextSerialization:
         graph = TaskGraph()
         graph.add_node(Task("test_task", register_to_context=False), "test_task")
 
-        custom_config = {
-            "custom_param": "custom_value",
-            "timeout": 30,
-            "key_prefix": "test_"
-        }
+        custom_config = {"custom_param": "custom_value", "timeout": 30, "key_prefix": "test_"}
 
         context = ExecutionContext.create(
-            graph=graph,
-            start_node="test_task",
-            max_steps=10,
-            channel_backend="memory",
-            config=custom_config
+            graph=graph, start_node="test_task", max_steps=10, channel_backend="memory", config=custom_config
         )
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -260,12 +240,7 @@ class TestExecutionContextSerialization:
         simple_task = Task("sample_task", register_to_context=False)
         graph.add_node(simple_task, "sample_task")
 
-        context = ExecutionContext.create(
-            graph=graph,
-            start_node="sample_task",
-            max_steps=20,
-            default_max_retries=3
-        )
+        context = ExecutionContext.create(graph=graph, start_node="sample_task", max_steps=20, default_max_retries=3)
 
         # Set various execution states
         context.set_result("sample_task", "task_result")
@@ -299,12 +274,7 @@ class TestExecutionContextSerialization:
         graph = TaskGraph()
         graph.add_node(Task("test_task", register_to_context=False), "test_task")
 
-        context = ExecutionContext.create(
-            graph=graph,
-            start_node="test_task",
-            max_steps=10,
-            channel_backend="memory"
-        )
+        context = ExecutionContext.create(graph=graph, start_node="test_task", max_steps=10, channel_backend="memory")
 
         # Test that queue can be serialized and reconstructed
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -340,11 +310,7 @@ class TestExecutionContextSerialization:
         graph = TaskGraph()
         graph.add_node(Task("test_task", register_to_context=False), "test_task")
 
-        context = ExecutionContext.create(
-            graph=graph,
-            start_node="test_task",
-            max_steps=10
-        )
+        context = ExecutionContext.create(graph=graph, start_node="test_task", max_steps=10)
 
         # Test saving to invalid path
         with pytest.raises((OSError, PermissionError, FileNotFoundError)):
@@ -415,6 +381,7 @@ class TestExecutionContextSerialization:
         def create_task():
             def inner_task(x):
                 return x * multiplier  # References outer scope variable
+
             return inner_task
 
         closure_task = TaskWrapper("closure_task", create_task())
@@ -447,7 +414,6 @@ class TestExecutionContextSerialization:
         from graflow.queue.base import TaskSpec
 
         graph = TaskGraph()
-
 
         # Create lambda task (cloudpickle allows this)
         lambda_task = TaskWrapper("test_task", lambda: 42)
@@ -514,11 +480,7 @@ class TestExecutionContextLLMSerialization:
         # Create explicit LLMClient with custom configuration
         llm_client = LLMClient(model="gpt-4o", temperature=0.7, max_tokens=1000)
 
-        context = ExecutionContext.create(
-            graph=graph,
-            max_steps=10,
-            llm_client=llm_client
-        )
+        context = ExecutionContext.create(graph=graph, max_steps=10, llm_client=llm_client)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             context_path = os.path.join(tmpdir, "context.pkl")
@@ -549,10 +511,7 @@ class TestExecutionContextLLMSerialization:
         graph.add_node(Task("test_task", register_to_context=False), "test_task")
 
         # Create context WITHOUT explicit LLMClient
-        context = ExecutionContext.create(
-            graph=graph,
-            max_steps=10
-        )
+        context = ExecutionContext.create(graph=graph, max_steps=10)
 
         # Don't access llm_client property yet
         assert context._llm_client is None
@@ -592,16 +551,10 @@ class TestExecutionContextLLMSerialization:
         graph = TaskGraph()
         graph.add_node(Task("test_task", register_to_context=False), "test_task")
 
-        context = ExecutionContext.create(
-            graph=graph,
-            max_steps=10
-        )
+        context = ExecutionContext.create(graph=graph, max_steps=10)
 
         # Create and register ADK agent
-        adk_agent = LlmAgent(
-            name="test_supervisor",
-            model="gemini-2.5-flash"
-        )
+        adk_agent = LlmAgent(name="test_supervisor", model="gemini-2.5-flash")
         agent = AdkLLMAgent(adk_agent, app_name=context.session_id)
 
         context.register_llm_agent("supervisor", agent)
@@ -646,10 +599,7 @@ class TestExecutionContextLLMSerialization:
         graph = TaskGraph()
         graph.add_node(Task("test_task", register_to_context=False), "test_task")
 
-        context = ExecutionContext.create(
-            graph=graph,
-            max_steps=10
-        )
+        context = ExecutionContext.create(graph=graph, max_steps=10)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             context_path = os.path.join(tmpdir, "context.pkl")
@@ -680,24 +630,12 @@ class TestExecutionContextLLMSerialization:
         graph = TaskGraph()
         graph.add_node(Task("test_task", register_to_context=False), "test_task")
 
-        context = ExecutionContext.create(
-            graph=graph,
-            max_steps=10
-        )
+        context = ExecutionContext.create(graph=graph, max_steps=10)
 
         # Register multiple agents
-        agent1 = AdkLLMAgent(
-            LlmAgent(name="agent1", model="gemini-2.5-flash"),
-            app_name=context.session_id
-        )
-        agent2 = AdkLLMAgent(
-            LlmAgent(name="agent2", model="gemini-2.5-flash"),
-            app_name=context.session_id
-        )
-        agent3 = AdkLLMAgent(
-            LlmAgent(name="agent3", model="gemini-2.5-flash"),
-            app_name=context.session_id
-        )
+        agent1 = AdkLLMAgent(LlmAgent(name="agent1", model="gemini-2.5-flash"), app_name=context.session_id)
+        agent2 = AdkLLMAgent(LlmAgent(name="agent2", model="gemini-2.5-flash"), app_name=context.session_id)
+        agent3 = AdkLLMAgent(LlmAgent(name="agent3", model="gemini-2.5-flash"), app_name=context.session_id)
 
         context.register_llm_agent("agent1", agent1)
         context.register_llm_agent("agent2", agent2)
@@ -746,11 +684,7 @@ class TestExecutionContextLLMSerialization:
         # Create context with LLMClient
         llm_client = LLMClient(model="gpt-4o", temperature=0.5)
 
-        context = ExecutionContext.create(
-            graph=graph,
-            max_steps=10,
-            llm_client=llm_client
-        )
+        context = ExecutionContext.create(graph=graph, max_steps=10, llm_client=llm_client)
 
         # Register agent
         adk_agent = LlmAgent(name="supervisor", model="gemini-2.5-flash")
@@ -786,27 +720,24 @@ class TestExecutionContextLLMSerialization:
         graph = TaskGraph()
         graph.add_node(Task("test_task", register_to_context=False), "test_task")
 
-        context = ExecutionContext.create(
-            graph=graph,
-            max_steps=10
-        )
+        context = ExecutionContext.create(graph=graph, max_steps=10)
 
         # Manually create a "legacy" state without LLM attributes
         state = context.__getstate__()
 
         # Remove LLM attributes to simulate old checkpoint
-        state.pop('_llm_client', None)
-        state.pop('_llm_agents', None)
-        state.pop('_llm_agents_yaml', None)
+        state.pop("_llm_client", None)
+        state.pop("_llm_agents", None)
+        state.pop("_llm_agents_yaml", None)
 
         # Create new context and restore legacy state
         new_context = ExecutionContext.__new__(ExecutionContext)
         new_context.__setstate__(state)
 
         # Verify LLM attributes are initialized
-        assert hasattr(new_context, '_llm_client')
-        assert hasattr(new_context, '_llm_agents')
-        assert hasattr(new_context, '_llm_agents_yaml')
+        assert hasattr(new_context, "_llm_client")
+        assert hasattr(new_context, "_llm_agents")
+        assert hasattr(new_context, "_llm_agents_yaml")
 
         assert new_context._llm_client is None
         assert new_context._llm_agents == {}
@@ -836,12 +767,7 @@ class TestExecutionContextLLMSerialization:
         llm_client = LLMClient(model="claude-3-5-sonnet-20241022", temperature=0.3)
 
         # Create context with LLMClient
-        context = ExecutionContext.create(
-            graph=graph,
-            start_node="test_task",
-            max_steps=10,
-            llm_client=llm_client
-        )
+        context = ExecutionContext.create(graph=graph, start_node="test_task", max_steps=10, llm_client=llm_client)
 
         # Pickle and unpickle the entire context
         pickled = pickle.dumps(context)
@@ -876,10 +802,7 @@ class TestExecutionContextLLMSerialization:
             pytest.skip("google-adk not available")
 
         # Create original ADK agent
-        original_agent = LlmAgent(
-            name="yaml_test_agent",
-            model="gemini-2.5-flash"
-        )
+        original_agent = LlmAgent(name="yaml_test_agent", model="gemini-2.5-flash")
 
         # Serialize to YAML
         yaml_str = agent_to_yaml(original_agent)

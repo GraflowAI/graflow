@@ -16,6 +16,7 @@ class TaskResult:
     accessed via context.get_result(task_id) or channels if needed.
     This dataclass focuses on execution status, not result values.
     """
+
     task_id: str
     success: bool
     error: Optional[Exception] = None

@@ -92,8 +92,8 @@ class TestConsoleTracerOutput:
         captured = capsys.readouterr()
         lines = captured.out.split("\n")
         # Child should have more indentation than parent
-        parent_line = [l for l in lines if "parent" in l and "child" not in l]
-        child_line = [l for l in lines if "child" in l]
+        parent_line = [line for line in lines if "parent" in line and "child" not in line]
+        child_line = [line for line in lines if "child" in line]
         if parent_line and child_line:
             # Simple check: child line should have more leading spaces
             parent_indent = len(parent_line[0]) - len(parent_line[0].lstrip())
@@ -168,7 +168,7 @@ class TestConsoleTracerCloning:
         cloned = tracer.clone("trace_123")
 
         # Original tracer should have task_1
-        assert "task_1" in tracer.get_runtime_graph().nodes # type: ignore
+        assert "task_1" in tracer.get_runtime_graph().nodes  # type: ignore
 
         # Cloned tracer should have runtime graph disabled
         # (branch tracers don't track runtime graph, parent does)
@@ -226,7 +226,7 @@ class TestConsoleTracerHooks:
 
         captured = capsys.readouterr()
         assert "failing_task" in captured.out
-        assert ("error" in captured.out.lower() or "✗" in captured.out or "failed" in captured.out.lower())
+        assert "error" in captured.out.lower() or "✗" in captured.out or "failed" in captured.out.lower()
 
     def test_on_dynamic_task_added(self, capsys):
         """Test dynamic task added event."""
@@ -235,13 +235,10 @@ class TestConsoleTracerHooks:
 
         tracer = ConsoleTracer(enable_colors=False)
         graph = TaskGraph()
-        context = ExecutionContext(graph=graph, tracer=tracer)
+        _context = ExecutionContext(graph=graph, tracer=tracer)
 
         tracer.on_dynamic_task_added(
-            task_id="dynamic_task",
-            parent_task_id="parent",
-            is_iteration=False,
-            metadata={"task_type": "Task"}
+            task_id="dynamic_task", parent_task_id="parent", is_iteration=False, metadata={"task_type": "Task"}
         )
 
         captured = capsys.readouterr()

@@ -63,11 +63,7 @@ def main():
 
                 # Initialize order data if not set (first execution)
                 if not order_data:
-                    order_data = {
-                        "id": "ORD-2024-001",
-                        "amount": 99.99,
-                        "customer": "alice@example.com"
-                    }
+                    order_data = {"id": "ORD-2024-001", "amount": 99.99, "customer": "alice@example.com"}
                     channel.set("order_data", order_data)
                     channel.set("order_state", "NEW")
 
@@ -87,10 +83,10 @@ def main():
 
                         # Checkpoint after validation
                         checkpoint_path = os.path.join(tmpdir, "checkpoint_validated")
-                        task_ctx.checkpoint(path=checkpoint_path, metadata={
-                            "stage": "validation_complete",
-                            "order_id": order_data["id"]
-                        })
+                        task_ctx.checkpoint(
+                            path=checkpoint_path,
+                            metadata={"stage": "validation_complete", "order_id": order_data["id"]},
+                        )
                         print("   📸 Checkpoint requested: validation_complete")
 
                         # Re-queue self for next state
@@ -110,11 +106,14 @@ def main():
 
                     # Checkpoint after payment
                     checkpoint_path = os.path.join(tmpdir, "checkpoint_paid")
-                    task_ctx.checkpoint(path=checkpoint_path, metadata={
-                        "stage": "payment_complete",
-                        "order_id": order_data["id"],
-                        "amount": order_data["amount"]
-                    })
+                    task_ctx.checkpoint(
+                        path=checkpoint_path,
+                        metadata={
+                            "stage": "payment_complete",
+                            "order_id": order_data["id"],
+                            "amount": order_data["amount"],
+                        },
+                    )
                     print("   📸 Checkpoint requested: payment_complete")
 
                     # Re-queue self for next state

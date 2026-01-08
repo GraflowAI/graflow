@@ -15,6 +15,7 @@ def test_goto_true_with_new_task():
     @task("main_task", inject_context=True)
     def main_task(task_ctx):
         execution_log.append("main_task")
+
         # Create a NEW task with goto=True (should skip successors)
         @task("new_dynamic_task")
         def new_dynamic_task():
@@ -55,6 +56,7 @@ def test_goto_false_with_new_task():
     @task("main_task2", inject_context=True)
     def main_task2(task_ctx):
         execution_log.append("main_task2")
+
         # Create a NEW task with goto=False (should allow successors)
         @task("new_normal_task")
         def new_normal_task():
@@ -97,6 +99,7 @@ def test_mixed_goto_behaviors():
     @task("dispatcher", inject_context=True)
     def dispatcher(task_ctx):
         execution_log.append("dispatcher")
+
         # Create new task with goto=False (normal processing)
         @task("worker_normal")
         def worker_normal():

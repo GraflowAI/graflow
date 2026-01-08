@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 try:
     from redis import Redis as _Redis  # Runtime import
+
     REDIS_AVAILABLE = True
 except ImportError:
     REDIS_AVAILABLE = False
@@ -20,15 +21,16 @@ except ImportError:
 
 # Redis connection parameters with their defaults
 _REDIS_PARAMS = {
-    'host': 'localhost',
-    'port': 6379,
-    'db': 0,
-    'decode_responses': False,
-    'password': None,
-    'username': None,
-    'socket_timeout': None,
-    'ssl': None,
+    "host": "localhost",
+    "port": 6379,
+    "db": 0,
+    "decode_responses": False,
+    "password": None,
+    "username": None,
+    "socket_timeout": None,
+    "ssl": None,
 }
+
 
 def extract_redis_config(redis_client: "Redis") -> Dict[str, Any]:
     """Extract connection parameters from Redis client.
@@ -63,7 +65,7 @@ def extract_redis_config(redis_client: "Redis") -> Dict[str, Any]:
     for key, default_value in _REDIS_PARAMS.items():
         value = conn_kwargs.get(key, default_value)
         # Only include non-None values or required params
-        if value is not None or key in {'host', 'port', 'db', 'decode_responses'}:
+        if value is not None or key in {"host", "port", "db", "decode_responses"}:
             config[key] = value
 
     return config
@@ -102,12 +104,10 @@ def create_redis_client(config: Dict[str, Any]) -> "Redis":
         raise ImportError("Redis package is not available")
 
     # If redis_client already exists, validate and return it
-    if 'redis_client' in config:
-        redis_client = config['redis_client']
+    if "redis_client" in config:
+        redis_client = config["redis_client"]
 
-        assert isinstance(redis_client, _Redis), (
-            f"Expected Redis instance, got {type(redis_client).__name__}"
-        )
+        assert isinstance(redis_client, _Redis), f"Expected Redis instance, got {type(redis_client).__name__}"
 
         return redis_client
 
@@ -153,18 +153,16 @@ def ensure_redis_connection_params(config: Dict[str, Any]) -> None:
         >>> 'redis_client' in config  # Still present until serialization
         True
     """
-    if 'redis_client' not in config:
+    if "redis_client" not in config:
         return
 
-    redis_client = config['redis_client']
+    redis_client = config["redis_client"]
 
     # Validate redis_client type
     if not REDIS_AVAILABLE or _Redis is None:
         raise ImportError("Redis package is not available")
 
-    assert isinstance(redis_client, _Redis), (
-        f"Expected Redis instance, got {type(redis_client).__name__}"
-    )
+    assert isinstance(redis_client, _Redis), f"Expected Redis instance, got {type(redis_client).__name__}"
 
     try:
         redis_config = extract_redis_config(redis_client)
@@ -175,6 +173,4 @@ def ensure_redis_connection_params(config: Dict[str, Any]) -> None:
     except Exception as e:
         # Fail fast: Don't silently use defaults
         # Silent defaults could connect to wrong Redis instance
-        raise ValueError(
-            f"Failed to extract Redis connection parameters from redis_client: {e}"
-        ) from e
+        raise ValueError(f"Failed to extract Redis connection parameters from redis_client: {e}") from e

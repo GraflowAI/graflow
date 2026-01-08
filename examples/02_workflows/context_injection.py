@@ -68,10 +68,7 @@ def main():
 
             # Store configuration data in the channel
             # Channels allow tasks to share data without passing parameters
-            config = {
-                "source": "database",
-                "batch_size": 100
-            }
+            config = {"source": "database", "batch_size": 100}
             channel = context.get_channel()
             channel.set("config", config)
             print("   Stored config in channel\n")
@@ -94,10 +91,7 @@ def main():
             print(f"   Processing with batch size: {batch_size}")
 
             # Simulate processing and store metrics
-            metrics = {
-                "processed": 500,
-                "errors": 0
-            }
+            metrics = {"processed": 500, "errors": 0}
             channel.set("metrics", metrics)
             print("   Stored metrics in channel\n")
 
@@ -125,7 +119,7 @@ def main():
             return "report_complete"
 
         # Define workflow: setup -> process -> report
-        setup >> process >> report # type: ignore
+        setup >> process >> report  # type: ignore
 
         # Execute the workflow
         ctx.execute("setup")
@@ -199,7 +193,7 @@ def demo_keyword_args_resolution():
             print("   ✅ Workflow completed\n")
 
         # Define workflow
-        setup >> greet >> process_user >> report # type: ignore
+        setup >> greet >> process_user >> report  # type: ignore
 
         # Execute
         ctx.execute("setup")

@@ -57,8 +57,10 @@ def create_multiplier(factor: int):
     The returned function captures 'factor' from the outer scope,
     demonstrating cloudpickle's ability to serialize closures.
     """
+
     def multiply(x: int) -> int:
         return x * factor  # Captures 'factor' from outer scope
+
     return multiply
 
 
@@ -67,11 +69,7 @@ def create_operation(operation_name: str):
 
     Demonstrates capturing both data and functions from outer scope.
     """
-    operations = {
-        "double": lambda x: x * 2,
-        "square": lambda x: x ** 2,
-        "increment": lambda x: x + 1
-    }
+    operations = {"double": lambda x: x * 2, "square": lambda x: x**2, "increment": lambda x: x + 1}
 
     operation = operations.get(operation_name)
 
@@ -91,7 +89,8 @@ def main():
     print("Step 1: Creating tasks from lambdas and closures")
 
     # Simple lambda task
-    lambda_func = lambda: 42
+    def lambda_func():
+        return 42
 
     # Closure that captures a value
     double_func = create_operation("double")

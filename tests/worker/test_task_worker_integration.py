@@ -21,6 +21,7 @@ def _create_execution_context() -> ExecutionContext:
 
 def _create_registered_task(execution_context: ExecutionContext, task_id: str) -> TaskWrapper:
     """Create TaskWrapper registered with the execution context."""
+
     def task_fn():
         return f"result:{task_id}"
 
@@ -72,7 +73,7 @@ def test_task_worker_rejects_non_redis_queue():
     queue = MockTaskQueue()
 
     with pytest.raises(ValueError, match="RedisTaskQueue"):
-        TaskWorker(queue=queue, worker_id="invalid") # type: ignore
+        TaskWorker(queue=queue, worker_id="invalid")  # type: ignore
 
 
 def test_task_worker_processes_tasks_with_redis_queue(clean_redis: Any):
@@ -89,12 +90,7 @@ def test_task_worker_processes_tasks_with_redis_queue(clean_redis: Any):
         for idx in range(3):
             queue.enqueue(_create_task_spec(execution_context, f"task_{idx}"))
 
-        worker = TaskWorker(
-            queue=queue,
-            worker_id="redis_worker",
-            max_concurrent_tasks=2,
-            poll_interval=0.05
-        )
+        worker = TaskWorker(queue=queue, worker_id="redis_worker", max_concurrent_tasks=2, poll_interval=0.05)
 
         worker.start()
 

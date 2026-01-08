@@ -27,10 +27,10 @@ if TYPE_CHECKING:
     from graflow.llm.client import LLMClient
     from graflow.trace.base import Tracer
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 # Compiled regex pattern for iteration task detection (performance optimization)
-_ITERATION_PATTERN: re.Pattern[str] = re.compile(r'(_cycle_\d+_[0-9a-f]+)+$')
+_ITERATION_PATTERN: re.Pattern[str] = re.compile(r"(_cycle_\d+_[0-9a-f]+)+$")
 
 
 class TaskExecutionContext:
@@ -55,8 +55,9 @@ class TaskExecutionContext:
     @property
     def _logger(self):
         """Get logger instance (lazy initialization to avoid module-level import)."""
-        if not hasattr(self, '_logger_instance'):
+        if not hasattr(self, "_logger_instance"):
             import logging
+
             self._logger_instance = logging.getLogger(__name__)
         return self._logger_instance
 
@@ -83,8 +84,7 @@ class TaskExecutionContext:
         """Register a cycle execution and return new count."""
         if not self.can_iterate():
             raise ValueError(
-                f"Cycle limit exceeded for task {self.task_id}: "
-                f"{self.cycle_count}/{self.max_cycles} cycles"
+                f"Cycle limit exceeded for task {self.task_id}: {self.cycle_count}/{self.max_cycles} cycles"
             )
         self.cycle_count += 1
         # Also register with the global cycle controller for consistency
@@ -273,6 +273,7 @@ class TaskExecutionContext:
         # Convert string to enum
         if isinstance(feedback_type, str):
             from graflow.hitl.types import FeedbackType
+
             feedback_type = FeedbackType(feedback_type)
 
         # Get feedback manager from execution context
@@ -281,7 +282,7 @@ class TaskExecutionContext:
         # Check if we're resuming from a checkpoint with an existing feedback_id
         # This allows reusing the same feedback_id after checkpoint resume
         existing_feedback_id = None
-        if hasattr(self.execution_context, 'checkpoint_metadata') and self.execution_context.checkpoint_metadata:
+        if hasattr(self.execution_context, "checkpoint_metadata") and self.execution_context.checkpoint_metadata:
             # Check if this task has a pending feedback_id in checkpoint metadata
             user_metadata = self.execution_context.checkpoint_metadata.get("user_metadata", {})
             checkpoint_task_id = user_metadata.get("task_id")
@@ -331,6 +332,7 @@ class TaskExecutionContext:
             True if approved, False if rejected
         """
         from graflow.hitl.types import FeedbackType
+
         response = self.request_feedback(
             feedback_type=FeedbackType.APPROVAL,
             prompt=prompt,
@@ -351,6 +353,7 @@ class TaskExecutionContext:
     ) -> str:
         """Request free-form text input."""
         from graflow.hitl.types import FeedbackType
+
         response = self.request_feedback(
             feedback_type=FeedbackType.TEXT,
             prompt=prompt,
@@ -372,6 +375,7 @@ class TaskExecutionContext:
     ) -> str:
         """Request selection from provided options."""
         from graflow.hitl.types import FeedbackType
+
         response = self.request_feedback(
             feedback_type=FeedbackType.SELECTION,
             prompt=prompt,
@@ -386,11 +390,7 @@ class TaskExecutionContext:
     # === Checkpointing ===
 
     def checkpoint(
-        self,
-        metadata: Optional[dict[str, Any]] = None,
-        *,
-        path: Optional[str] = None,
-        deferred: bool = True
+        self, metadata: Optional[dict[str, Any]] = None, *, path: Optional[str] = None, deferred: bool = True
     ) -> Optional[tuple[str, Any]]:
         """Create or request a checkpoint from within the task.
 
@@ -459,7 +459,7 @@ class ExecutionContext:
         session_id: Optional[str] = None,
         trace_id: Optional[str] = None,
         tracer: Optional[Tracer] = None,
-        llm_client: Optional[LLMClient] = None
+        llm_client: Optional[LLMClient] = None,
     ):
         """Initialize ExecutionContext with configurable queue backend."""
         self.parent_context = parent_context
@@ -488,19 +488,16 @@ class ExecutionContext:
 
         # Ensure redis_client has connection parameters for serialization
         from graflow.utils.redis_utils import ensure_redis_connection_params
+
         ensure_redis_connection_params(base_config)
 
         # Create channel using factory with same config (before removing redis_client)
         # ChannelFactory.create_channel() may use redis_client if present
-        self.channel = ChannelFactory.create_channel(
-            backend=channel_backend,
-            name=self.session_id,
-            **base_config
-        )
+        self.channel = ChannelFactory.create_channel(backend=channel_backend, name=self.session_id, **base_config)
 
         # Remove redis_client from base_config after channel creation
         # (contains unpicklable locks and is no longer needed after extraction)
-        base_config.pop('redis_client', None)
+        base_config.pop("redis_client", None)
 
         if parent_context is not None:
             # Prefill branch context channel with parent state
@@ -546,16 +543,15 @@ class ExecutionContext:
         # Use same backend as channel for consistency (redis for distributed, filesystem for local)
         feedback_backend = "redis" if channel_backend == "redis" else "filesystem"
         self.feedback_manager = FeedbackManager(
-            backend=feedback_backend,
-            backend_config=base_config,
-            channel_manager=self.channel
+            backend=feedback_backend, backend_config=base_config, channel_manager=self.channel
         )
 
     @property
     def _logger(self):
         """Get logger instance (lazy initialization to avoid module-level import)."""
-        if not hasattr(self, '_logger_instance'):
+        if not hasattr(self, "_logger_instance"):
             import logging
+
             self._logger_instance = logging.getLogger(__name__)
         return self._logger_instance
 
@@ -625,7 +621,7 @@ class ExecutionContext:
         channel_backend: str = "memory",
         config: Optional[Dict[str, Any]] = None,
         tracer: Optional[Tracer] = None,
-        llm_client: Optional[LLMClient] = None
+        llm_client: Optional[LLMClient] = None,
     ) -> ExecutionContext:
         """Create a new execution context with configurable channel backend.
 
@@ -667,7 +663,7 @@ class ExecutionContext:
             # Find start nodes (nodes with no predecessors)
             candidate_nodes = graph.get_start_nodes()
             if candidate_nodes:
-                start_node = candidate_nodes[0] # REVIEWME: Choose first start node if multiple exist
+                start_node = candidate_nodes[0]  # REVIEWME: Choose first start node if multiple exist
 
         return cls(
             graph=graph,
@@ -698,7 +694,7 @@ class ExecutionContext:
         trace_id = self.trace_id
 
         # Parent span ID (currently executing task ID)
-        parent_span_id = self.current_task_id if hasattr(self, 'current_task_id') else None
+        parent_span_id = self.current_task_id if hasattr(self, "current_task_id") else None
 
         task_spec = TaskSpec(
             executable=executable,
@@ -1000,9 +996,7 @@ class ExecutionContext:
         self._terminate_called_in_current_task = True
         self.ctrl_message = message
         self._logger.info(
-            "Workflow termination requested: %s",
-            message,
-            extra={"session_id": self.session_id, "ctrl_msg": message}
+            "Workflow termination requested: %s", message, extra={"session_id": self.session_id, "ctrl_msg": message}
         )
 
     def cancel_workflow(self, message: str) -> None:
@@ -1031,17 +1025,10 @@ class ExecutionContext:
         self._cancel_called_in_current_task = True
         self.ctrl_message = message
         self._logger.warning(
-            "Workflow cancellation requested: %s",
-            message,
-            extra={"session_id": self.session_id, "ctrl_msg": message}
+            "Workflow cancellation requested: %s", message, extra={"session_id": self.session_id, "ctrl_msg": message}
         )
 
-    def next_task(
-        self,
-        executable: Executable,
-        goto: bool = False,
-        _is_iteration: bool = False
-    ) -> str:
+    def next_task(self, executable: Executable, goto: bool = False, _is_iteration: bool = False) -> str:
         """Generate a new task or jump to existing task node.
 
         For iteration/cycle tasks, use next_iteration() instead.
@@ -1064,7 +1051,7 @@ class ExecutionContext:
                 self._logger.debug(
                     "Goto: Creating new task (skip successors): %s",
                     task_id,
-                    extra={"session_id": self.session_id, "goto": True, "is_new": True}
+                    extra={"session_id": self.session_id, "goto": True, "is_new": True},
                 )
                 self.graph.add_node(executable, task_id)
             else:
@@ -1072,7 +1059,7 @@ class ExecutionContext:
                 self._logger.debug(
                     "Goto: Jumping to existing task: %s",
                     task_id,
-                    extra={"session_id": self.session_id, "goto": True, "is_new": False}
+                    extra={"session_id": self.session_id, "goto": True, "is_new": False},
                 )
             self.add_to_queue(executable)
             self._goto_called_in_current_task = True
@@ -1080,9 +1067,7 @@ class ExecutionContext:
         elif is_new_task:
             # New task: Create dynamic task (normal successor processing)
             self._logger.debug(
-                "Creating new dynamic task: %s",
-                task_id,
-                extra={"session_id": self.session_id, "is_dynamic": True}
+                "Creating new dynamic task: %s", task_id, extra={"session_id": self.session_id, "is_dynamic": True}
             )
             self.graph.add_node(executable, task_id)
             self.add_to_queue(executable)
@@ -1090,24 +1075,18 @@ class ExecutionContext:
         else:
             # Existing task: Jump to it (auto-detected, skip successors)
             self._logger.debug(
-                "Jumping to existing task: %s",
-                task_id,
-                extra={"session_id": self.session_id, "auto_goto": True}
+                "Jumping to existing task: %s", task_id, extra={"session_id": self.session_id, "auto_goto": True}
             )
             self.add_to_queue(executable)
             self._goto_called_in_current_task = True
 
         # Tracer: Dynamic task added
-        current_task_id = self.current_task_id if hasattr(self, 'current_task_id') else None
+        current_task_id = self.current_task_id if hasattr(self, "current_task_id") else None
         self.tracer.on_dynamic_task_added(
             task_id=task_id,
             parent_task_id=current_task_id,
             is_iteration=_is_iteration,
-            metadata={
-                "task_type": type(executable).__name__,
-                "is_new_task": is_new_task,
-                "goto": goto
-            }
+            metadata={"task_type": type(executable).__name__, "is_new_task": is_new_task, "goto": goto},
         )
 
         return task_id
@@ -1136,7 +1115,7 @@ class ExecutionContext:
 
         # Extract base task ID (strip _cycle_* suffix if present)
         # This handles nested iterations where task_id might be "task_cycle_1_abc_cycle_2_def"
-        base_task_id = _ITERATION_PATTERN.sub('', task_id)
+        base_task_id = _ITERATION_PATTERN.sub("", task_id)
         if base_task_id and base_task_id in self.graph.nodes:
             task_id = base_task_id
 
@@ -1151,9 +1130,7 @@ class ExecutionContext:
         # Use task context for cycle management
         if not task_ctx.can_iterate():
             raise CycleLimitExceededError(
-                task_id=task_id,
-                cycle_count=task_ctx.cycle_count,
-                max_cycles=task_ctx.max_cycles
+                task_id=task_id, cycle_count=task_ctx.cycle_count, max_cycles=task_ctx.max_cycles
             )
 
         # Register this cycle execution
@@ -1171,7 +1148,7 @@ class ExecutionContext:
             current_task.set_execution_context(task_ctx.execution_context)
 
             # Check if current_task has inject_context
-            inject_context = bool(getattr(current_task, 'inject_context', False))
+            inject_context = bool(getattr(current_task, "inject_context", False))
             if inject_context:
                 # Don't pass task_ctx, only pass data (TaskWrapper will inject context)
                 if data is not None:
@@ -1185,6 +1162,7 @@ class ExecutionContext:
                 return current_task(task_ctx)
 
         from .task import TaskWrapper
+
         iteration_task = TaskWrapper(iteration_id, iteration_func, inject_context=False)
 
         # Add iteration task via next_task with _is_iteration=True
@@ -1250,10 +1228,10 @@ class ExecutionContext:
         # For MemoryChannel: save the data dict
         # For RedisChannel: data persists in Redis, no need to save
         channel_data = {}
-        channel_backend_type = state.get('_channel_backend_type', 'memory')
+        channel_backend_type = state.get("_channel_backend_type", "memory")
 
         # Only save channel data for memory backend
-        if channel_backend_type == 'memory' and self.channel is not None:
+        if channel_backend_type == "memory" and self.channel is not None:
             try:
                 # Get all keys from channel and save their values
                 for key in self.channel.keys():
@@ -1261,30 +1239,30 @@ class ExecutionContext:
             except Exception:
                 # If getting keys fails, skip channel data preservation
                 pass
-        state['_channel_data'] = channel_data
+        state["_channel_data"] = channel_data
 
         # Remove un-serializable objects (will be reconstructed in __setstate__)
-        state.pop('task_queue', None)
-        state.pop('channel', None)
-        state.pop('feedback_manager', None)  # Will be reconstructed in __setstate__
+        state.pop("task_queue", None)
+        state.pop("channel", None)
+        state.pop("feedback_manager", None)  # Will be reconstructed in __setstate__
 
         # LLM: Exclude agent instances (only keep YAML for distributed execution)
-        state['_llm_agents'] = {}  # Agent instances not serialized
+        state["_llm_agents"] = {}  # Agent instances not serialized
 
         # Ensure backend config is saved (should already be set in __init__)
-        if '_channel_backend_type' not in state:
-            state['_channel_backend_type'] = 'memory'
-        if '_original_config' not in state:
-            state['_original_config'] = {}
+        if "_channel_backend_type" not in state:
+            state["_channel_backend_type"] = "memory"
+        if "_original_config" not in state:
+            state["_original_config"] = {}
 
         # Remove redis_client from _original_config (connection params were already extracted in __init__)
         # The redis_client object contains unpicklable thread locks (RLock)
-        original_config = state.get('_original_config', None)
+        original_config = state.get("_original_config", None)
         if original_config:
             cleaned_config = original_config.copy()
-            if 'redis_client' in cleaned_config:
-                del cleaned_config['redis_client']
-            state['_original_config'] = cleaned_config
+            if "redis_client" in cleaned_config:
+                del cleaned_config["redis_client"]
+            state["_original_config"] = cleaned_config
 
         return state
 
@@ -1299,60 +1277,55 @@ class ExecutionContext:
         self.__dict__.update(state)
 
         # Get backend configuration
-        channel_backend_type = state.get('_channel_backend_type', 'memory')
-        config = state.get('_original_config', {})
+        channel_backend_type = state.get("_channel_backend_type", "memory")
+        config = state.get("_original_config", {})
 
         # Add start_node to config for queue
         if self.start_node:
-            config = {**config, 'start_node': self.start_node}
+            config = {**config, "start_node": self.start_node}
 
         # Reconstruct TaskQueue (always in-memory after simplification)
         from graflow.channels.factory import ChannelFactory
 
-        queue_start_node = config.get('start_node')
+        queue_start_node = config.get("start_node")
         self.task_queue = LocalTaskQueue(self, queue_start_node)
 
         # Reconstruct Channel
-        self.channel = ChannelFactory.create_channel(
-            backend=channel_backend_type,
-            name=self.session_id,
-            **config
-        )
+        self.channel = ChannelFactory.create_channel(backend=channel_backend_type, name=self.session_id, **config)
 
         # Restore channel data (for MemoryChannel)
         # For RedisChannel, data already exists in Redis
-        channel_data = state.get('_channel_data', {})
+        channel_data = state.get("_channel_data", {})
         if channel_data:
             for key, value in channel_data.items():
                 self.channel.set(key, value)
 
         # Ensure checkpoint attributes exist for older checkpoints
-        if not hasattr(self, 'completed_tasks') or self.completed_tasks is None:
+        if not hasattr(self, "completed_tasks") or self.completed_tasks is None:
             self.completed_tasks = []
-        if not hasattr(self, 'checkpoint_metadata') or self.checkpoint_metadata is None:
+        if not hasattr(self, "checkpoint_metadata") or self.checkpoint_metadata is None:
             self.checkpoint_metadata = {}
-        if not hasattr(self, 'last_checkpoint_path'):
+        if not hasattr(self, "last_checkpoint_path"):
             self.last_checkpoint_path = None
         self.checkpoint_requested = False
         self.checkpoint_request_metadata = None
         self.checkpoint_request_path = None
 
         # Ensure LLM attributes exist for older checkpoints
-        if not hasattr(self, '_llm_client'):
+        if not hasattr(self, "_llm_client"):
             self._llm_client = None
-        if not hasattr(self, '_llm_agents'):
+        if not hasattr(self, "_llm_agents"):
             self._llm_agents = {}
-        if not hasattr(self, '_llm_agents_yaml'):
+        if not hasattr(self, "_llm_agents_yaml"):
             self._llm_agents_yaml = {}
 
         # Reconstruct FeedbackManager
         # Use same backend as channel for consistency (redis for distributed, filesystem for local)
         feedback_backend = "redis" if channel_backend_type == "redis" else "filesystem"
         from graflow.hitl.manager import FeedbackManager
+
         self.feedback_manager = FeedbackManager(
-            backend=feedback_backend,
-            backend_config=config,
-            channel_manager=self.channel
+            backend=feedback_backend, backend_config=config, channel_manager=self.channel
         )
 
     def save(self, path: str = "execution_context.pkl") -> None:
@@ -1365,6 +1338,7 @@ class ExecutionContext:
             Uses cloudpickle for better support of lambdas and closures.
         """
         from graflow.core.serialization import dump
+
         with open(path, "wb") as f:
             dump(self, f)
 
@@ -1379,13 +1353,13 @@ class ExecutionContext:
             Loaded ExecutionContext instance
         """
         from graflow.core.serialization import load
+
         with open(path, "rb") as f:
             return load(f)
 
+
 def create_execution_context(
-    start_node: str = "ROOT",
-    max_steps: int = 10,
-    tracer: Optional[Tracer] = None
+    start_node: str = "ROOT", max_steps: int = 10, tracer: Optional[Tracer] = None
 ) -> ExecutionContext:
     """Create an initial execution context with a single root node.
 
@@ -1403,6 +1377,7 @@ def create_execution_context(
     # Add dummy task for start_node to satisfy validation
     graph.add_node(Task(start_node), start_node)
     return ExecutionContext.create(graph, start_node, max_steps=max_steps, tracer=tracer)
+
 
 def execute_with_cycles(graph: TaskGraph, start_node: str, max_steps: int = 10) -> None:
     """Execute tasks allowing cycles from global graph."""

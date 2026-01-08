@@ -100,9 +100,7 @@ from graflow.trace.langfuse import LangFuseTracer
 # Configure logging FIRST to capture all logs including imports
 # This must be done BEFORE any graflow imports
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    stream=sys.stdout
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", stream=sys.stdout
 )
 
 # Enable DEBUG for ADK agent logger to see trace propagation logs
@@ -115,6 +113,7 @@ logger.setLevel(logging.INFO)  # Keep workflow logs at INFO to avoid clutter
 # Check for optional dependencies availability
 try:
     from tavily import TavilyClient  # type: ignore
+
     TAVILY_AVAILABLE = True
 except ImportError as e:
     logger.warning("tavily-python is not installed. Web search will not be available.", exc_info=e)
@@ -123,6 +122,7 @@ except ImportError as e:
 
 try:
     import textstat  # type: ignore
+
     TEXTSTAT_AVAILABLE = True
 except ImportError as e:
     logger.warning("textstat is not installed. Readability assessment will not be available.", exc_info=e)
@@ -155,6 +155,7 @@ DEFAULT_IMAGE_URL = "https://images.unsplash.com/photo-1542281286-9e0a16bb7366"
 # Tool Functions for Research Agent
 # ============================================================================
 
+
 def web_search(query: str) -> str:
     """
     Search the web using Tavily API.
@@ -173,13 +174,8 @@ def web_search(query: str) -> str:
         return json.dumps({"error": "TAVILY_API_KEY not set", "results": [], "image": DEFAULT_IMAGE_URL})
 
     try:
-        client = TavilyClient(api_key=api_key) # type: ignore
-        results = client.search(
-            query=query,
-            topic="news",
-            max_results=5,
-            include_images=True
-        )
+        client = TavilyClient(api_key=api_key)  # type: ignore
+        results = client.search(query=query, topic="news", max_results=5, include_images=True)
 
         sources = results.get("results", [])
         images = results.get("images", [])
@@ -188,18 +184,16 @@ def web_search(query: str) -> str:
         # Format for agent consumption
         formatted_sources = []
         for src in sources:
-            formatted_sources.append({
-                "title": src.get("title", ""),
-                "url": src.get("url", ""),
-                "content": src.get("content", "")[:500],  # Truncate for context
-                "score": src.get("score", 0.0)
-            })
+            formatted_sources.append(
+                {
+                    "title": src.get("title", ""),
+                    "url": src.get("url", ""),
+                    "content": src.get("content", "")[:500],  # Truncate for context
+                    "score": src.get("score", 0.0),
+                }
+            )
 
-        return json.dumps({
-            "results": formatted_sources,
-            "image": image,
-            "query": query
-        })
+        return json.dumps({"results": formatted_sources, "image": image, "query": query})
     except Exception as e:
         return json.dumps({"error": str(e), "results": [], "image": DEFAULT_IMAGE_URL})
 
@@ -258,7 +252,7 @@ def refine_search_query(original_query: str, findings: str) -> str:
         f"{original_query} latest developments",
         f"{original_query} expert analysis",
         f"{original_query} statistics and data",
-        f"{original_query} impact and implications"
+        f"{original_query} impact and implications",
     ]
 
     # Return suggestions as formatted text
@@ -268,6 +262,7 @@ def refine_search_query(original_query: str, findings: str) -> str:
 # ============================================================================
 # Tool Functions for Editorial Agent
 # ============================================================================
+
 
 def check_factual_claims(article_json: str, sources_json: str) -> str:
     """
@@ -299,7 +294,7 @@ def check_factual_claims(article_json: str, sources_json: str) -> str:
         claims_unverified = []
 
         # Extract sentences as potential claims
-        sentences = re.split(r'[.!?]+', content)
+        sentences = re.split(r"[.!?]+", content)
         for sent in sentences[:5]:  # Check first 5 sentences
             sent_stripped = sent.strip()
             if len(sent_stripped) < 20:
@@ -315,21 +310,21 @@ def check_factual_claims(article_json: str, sources_json: str) -> str:
                 overlap = len(words & src_words)
                 if overlap > 3:  # Arbitrary threshold
                     matched = True
-                    claims_verified.append({
-                        "claim": sent_stripped[:100],
-                        "source": src.get("title", ""),
-                        "confidence": "medium"
-                    })
+                    claims_verified.append(
+                        {"claim": sent_stripped[:100], "source": src.get("title", ""), "confidence": "medium"}
+                    )
                     break
 
             if not matched and len(sent_stripped) > 30:
                 claims_unverified.append(sent_stripped[:100])
 
-        return json.dumps({
-            "verified_claims": claims_verified[:3],
-            "unverified_claims": claims_unverified[:3],
-            "verification_rate": len(claims_verified) / max(len(claims_verified) + len(claims_unverified), 1)
-        })
+        return json.dumps(
+            {
+                "verified_claims": claims_verified[:3],
+                "unverified_claims": claims_unverified[:3],
+                "verification_rate": len(claims_verified) / max(len(claims_verified) + len(claims_unverified), 1),
+            }
+        )
 
     except json.JSONDecodeError:
         return json.dumps({"error": "Invalid JSON data", "verified_claims": [], "unverified_claims": []})
@@ -346,11 +341,7 @@ def assess_readability(text: str) -> str:
         JSON string with readability metrics
     """
     if not TEXTSTAT_AVAILABLE or textstat is None:
-        return json.dumps({
-            "error": "textstat not installed",
-            "flesch_score": None,
-            "grade_level": None
-        })
+        return json.dumps({"error": "textstat not installed", "flesch_score": None, "grade_level": None})
 
     try:
         flesch_score = textstat.flesch_reading_ease(text)
@@ -372,14 +363,16 @@ def assess_readability(text: str) -> str:
         else:
             interpretation = "Difficult to read"
 
-        return json.dumps({
-            "flesch_reading_ease": round(flesch_score, 1),
-            "interpretation": interpretation,
-            "grade_level": round(grade_level, 1),
-            "word_count": word_count,
-            "sentence_count": sentence_count,
-            "avg_words_per_sentence": round(word_count / max(sentence_count, 1), 1)
-        })
+        return json.dumps(
+            {
+                "flesch_reading_ease": round(flesch_score, 1),
+                "interpretation": interpretation,
+                "grade_level": round(grade_level, 1),
+                "word_count": word_count,
+                "sentence_count": sentence_count,
+                "avg_words_per_sentence": round(word_count / max(sentence_count, 1), 1),
+            }
+        )
 
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -418,8 +411,14 @@ def verify_sources(sources_json: str) -> str:
 
             # Check for known credible domains (simplified)
             credible_domains = [
-                "nytimes.com", "washingtonpost.com", "bbc.com", "reuters.com",
-                "apnews.com", "theguardian.com", "wsj.com", "npr.org"
+                "nytimes.com",
+                "washingtonpost.com",
+                "bbc.com",
+                "reuters.com",
+                "apnews.com",
+                "theguardian.com",
+                "wsj.com",
+                "npr.org",
             ]
 
             domain_found = any(domain in url for domain in credible_domains)
@@ -435,25 +434,19 @@ def verify_sources(sources_json: str) -> str:
 
             if issues:
                 # Source has credibility issues
-                flagged_sources.append({
-                    "url": url,
-                    "title": title,
-                    "issues": issues
-                })
+                flagged_sources.append({"url": url, "title": title, "issues": issues})
             else:
                 # Source is credible
-                verified_sources.append({
-                    "url": url,
-                    "title": title,
-                    "score": score
-                })
+                verified_sources.append({"url": url, "title": title, "score": score})
 
-        return json.dumps({
-            "verified_sources": len(verified_sources),
-            "flagged_sources": len(flagged_sources),
-            "credibility_rate": len(verified_sources) / max(len(sources), 1),
-            "flagged_details": flagged_sources[:2]  # Show first 2 flagged
-        })
+        return json.dumps(
+            {
+                "verified_sources": len(verified_sources),
+                "flagged_sources": len(flagged_sources),
+                "credibility_rate": len(verified_sources) / max(len(sources), 1),
+                "flagged_details": flagged_sources[:2],  # Show first 2 flagged
+            }
+        )
 
     except json.JSONDecodeError:
         return json.dumps({"error": "Invalid sources JSON"})
@@ -494,7 +487,7 @@ def suggest_improvements(article_json: str, issues: str) -> str:
         if len(content) > 2000:
             suggestions.append("Consider condensing to focus on key points")
 
-        return "\n".join(f"{i+1}. {s}" for i, s in enumerate(suggestions))
+        return "\n".join(f"{i + 1}. {s}" for i, s in enumerate(suggestions))
 
     except json.JSONDecodeError:
         return "Unable to parse article data for suggestions"
@@ -503,6 +496,7 @@ def suggest_improvements(article_json: str, issues: str) -> str:
 # ============================================================================
 # Workflow Definition
 # ============================================================================
+
 
 def create_article_workflow(query: str, article_id: str, output_dir: str, tracer=None):
     """
@@ -525,15 +519,13 @@ def create_article_workflow(query: str, article_id: str, output_dir: str, tracer
     """
     if not ADK_AVAILABLE:
         raise RuntimeError(
-            "Google ADK not installed. Install with: uv add google-adk\n"
-            "This workflow requires LLMAgent support."
+            "Google ADK not installed. Install with: uv add google-adk\nThis workflow requires LLMAgent support."
         )
 
     # Initialize non-LLM agents
     designer_agent = DesignerAgent(output_dir)
 
     with workflow(f"article_agent_{article_id}", tracer=tracer) as wf:
-
         # Helper functions
         def _safe_get_result(context: TaskExecutionContext, task_id: str) -> Dict[str, Any] | None:
             try:
@@ -566,29 +558,25 @@ def create_article_workflow(query: str, article_id: str, output_dir: str, tracer
 
             # Research Agent - Autonomous researcher with search tools
             research_agent = LlmAgent(
-                name="researcher",
-                model=agent_model,
-                tools=[web_search, extract_key_facts, refine_search_query]
+                name="researcher", model=agent_model, tools=[web_search, extract_key_facts, refine_search_query]
             )
-            wrapped_researcher = AdkLLMAgent(
-                research_agent,
-                app_name=exec_context.session_id
-            )
+            wrapped_researcher = AdkLLMAgent(research_agent, app_name=exec_context.session_id)
             exec_context.register_llm_agent("researcher", wrapped_researcher)  # type: ignore[attr-defined]
-            print(f"[{article_id}] ✅ Researcher agent registered (tools: web_search, extract_key_facts, refine_search_query)")
+            print(
+                f"[{article_id}] ✅ Researcher agent registered (tools: web_search, extract_key_facts, refine_search_query)"
+            )
 
             # Editorial Agent - Quality control with verification tools
             editorial_agent = LlmAgent(
                 name="editor",
                 model=agent_model,
-                tools=[check_factual_claims, assess_readability, verify_sources, suggest_improvements]
+                tools=[check_factual_claims, assess_readability, verify_sources, suggest_improvements],
             )
-            wrapped_editor = AdkLLMAgent(
-                editorial_agent,
-                app_name=exec_context.session_id
-            )
+            wrapped_editor = AdkLLMAgent(editorial_agent, app_name=exec_context.session_id)
             exec_context.register_llm_agent("editor", wrapped_editor)  # type: ignore[attr-defined]
-            print(f"[{article_id}] ✅ Editorial agent registered (tools: check_factual_claims, assess_readability, verify_sources, suggest_improvements)")
+            print(
+                f"[{article_id}] ✅ Editorial agent registered (tools: check_factual_claims, assess_readability, verify_sources, suggest_improvements)"
+            )
 
         # ====================================================================
         # Task Definitions
@@ -636,7 +624,7 @@ def create_article_workflow(query: str, article_id: str, output_dir: str, tracer
                 f"5. Provide a structured summary with key findings and sources\n\n"
                 f"Focus on: factual information, recent developments, expert perspectives, data/statistics.",
                 trace_id=context.trace_id,
-                session_id=context.session_id
+                session_id=context.session_id,
             )
 
             # Extract agent output
@@ -659,12 +647,7 @@ def create_article_workflow(query: str, article_id: str, output_dir: str, tracer
 
             print(f"[{article_id}] ✅ Research complete: {len(research_summary)} chars summary, {len(sources)} sources")
 
-            return {
-                "summary": research_summary,
-                "sources": sources,
-                "image": image,
-                "query": query
-            }
+            return {"summary": research_summary, "sources": sources, "image": image, "query": query}
 
         @task(id=f"curate_{article_id}", inject_context=True)
         def curate_task(context: TaskExecutionContext) -> Dict:
@@ -682,19 +665,16 @@ def create_article_workflow(query: str, article_id: str, output_dir: str, tracer
                 research = {
                     "summary": context.get_channel().get("research_summary", ""),
                     "sources": context.get_channel().get("research_sources", []),
-                    "image": context.get_channel().get("image", DEFAULT_IMAGE_URL)
+                    "image": context.get_channel().get("image", DEFAULT_IMAGE_URL),
                 }
 
             messages = [
-                {
-                    "role": "system",
-                    "content": "You organize research into a clear article structure with sections."
-                },
+                {"role": "system", "content": "You organize research into a clear article structure with sections."},
                 {
                     "role": "user",
                     "content": f"Organize this research into article sections:\n\n{research['summary']}\n\n"
-                               f"Create: 1) Headline, 2) Lead paragraph, 3) 3-4 body sections with headings"
-                }
+                    f"Create: 1) Headline, 2) Lead paragraph, 3) 3-4 body sections with headings",
+                },
             ]
 
             structured = llm.completion_text(messages, model=Config.DEFAULT_MODEL)
@@ -703,7 +683,7 @@ def create_article_workflow(query: str, article_id: str, output_dir: str, tracer
                 "structure": structured,
                 "sources": research.get("sources", []),
                 "image": research.get("image", DEFAULT_IMAGE_URL),
-                "query": query
+                "query": query,
             }
 
             context.get_channel().set("curated", result)
@@ -774,7 +754,7 @@ def create_article_workflow(query: str, article_id: str, output_dir: str, tracer
                 "query": query,
                 "sources": curated.get("sources", []) if curated else [],
                 "image": channel.get("image", DEFAULT_IMAGE_URL),
-                "paragraphs": [p.strip() for p in content.split("\n\n") if p.strip()][:5]
+                "paragraphs": [p.strip() for p in content.split("\n\n") if p.strip()][:5],
             }
 
             channel.set("article", result)
@@ -810,15 +790,11 @@ def create_article_workflow(query: str, article_id: str, output_dir: str, tracer
                 raise ValueError(f"Article data missing for editorial task: {article_id}")
 
             # Prepare article and sources as JSON for tools
-            article_json = json.dumps({
-                "title": article.get("title", ""),
-                "content": article.get("content", ""),
-                "query": query
-            })
+            article_json = json.dumps(
+                {"title": article.get("title", ""), "content": article.get("content", ""), "query": query}
+            )
 
-            sources_json = json.dumps({
-                "results": article.get("sources", [])
-            })
+            sources_json = json.dumps({"results": article.get("sources", [])})
 
             review_prompt = (
                 "You are the lead editorial agent for GPT Newspaper.\n"
@@ -835,11 +811,7 @@ def create_article_workflow(query: str, article_id: str, output_dir: str, tracer
                 "- Otherwise REVISE with specific evidence-backed feedback."
             )
 
-            agent_input = (
-                f"{review_prompt}\n\n"
-                f"Article JSON:\n{article_json}\n\n"
-                f"Sources JSON:\n{sources_json}"
-            )
+            agent_input = f"{review_prompt}\n\nArticle JSON:\n{article_json}\n\nSources JSON:\n{sources_json}"
 
             # Agent performs editorial review with tools (per docs/llm_integration_design.md)
             # Note: trace_id is set during agent initialization (via app_name), not passed at runtime
@@ -874,14 +846,16 @@ def create_article_workflow(query: str, article_id: str, output_dir: str, tracer
                 "issues": issues,
                 "iteration": iteration,
                 "confidence": confidence,
-                "raw_output": raw_output
+                "raw_output": raw_output,
             }
 
             print(f"[{article_id}] 📊 Editorial decision: {decision.upper()}")
 
             # Decide whether to loop back for revision
             if decision == "revise" and iteration < MAX_REVISION_ITERATIONS:
-                print(f"[{article_id}] 🔄 Revision needed, looping back to writer (iteration {iteration + 1}/{MAX_REVISION_ITERATIONS})")
+                print(
+                    f"[{article_id}] 🔄 Revision needed, looping back to writer (iteration {iteration + 1}/{MAX_REVISION_ITERATIONS})"
+                )
 
                 # Store feedback in article
                 article["editorial_feedback"] = editorial_result
@@ -923,7 +897,7 @@ def create_article_workflow(query: str, article_id: str, output_dir: str, tracer
         # Build workflow graph
         # Linear flow: intake >> research >> curate >> write >> editorial >> design
         # Editorial agent controls loop-back to write task
-        topic_intake_task >> research_task >> curate_task >> write_task >> editorial_task >> design_task # type: ignore
+        topic_intake_task >> research_task >> curate_task >> write_task >> editorial_task >> design_task  # type: ignore
 
         return wf
 
@@ -957,7 +931,7 @@ def execute_article_workflow(query: str, article_id: str, output_dir: str) -> Di
     wf = create_article_workflow(query, article_id, output_dir, tracer=tracer)
     result = wf.execute(
         f"topic_intake_{article_id}",
-        max_steps=20  # Allow for write-editorial cycles
+        max_steps=20,  # Allow for write-editorial cycles
     )
 
     # Shutdown tracer to flush remaining traces
@@ -1029,6 +1003,7 @@ def run_newspaper_workflow(
         except Exception as e:
             print(f"\n❌ Error processing article {article_id}: {e}")
             import traceback
+
             traceback.print_exc()
 
     if not completed_articles:
@@ -1042,6 +1017,7 @@ def run_newspaper_workflow(
     print(f"{'=' * 80}\n")
 
     from agents import EditorAgent
+
     editor_agent = EditorAgent(layout)
     newspaper_html = editor_agent.run(completed_articles)
 
@@ -1103,10 +1079,7 @@ def main():
     ]
 
     # Run workflow
-    run_newspaper_workflow(
-        queries=queries,
-        layout="layout_1.html"
-    )
+    run_newspaper_workflow(queries=queries, layout="layout_1.html")
 
 
 if __name__ == "__main__":

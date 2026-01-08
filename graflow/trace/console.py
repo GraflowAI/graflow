@@ -41,7 +41,7 @@ class ConsoleTracer(Tracer):
         enable_runtime_graph: bool = True,
         enable_colors: bool = True,
         show_metadata: bool = True,
-        indent_size: int = 2
+        indent_size: int = 2,
     ):
         """Initialize ConsoleTracer.
 
@@ -99,7 +99,7 @@ class ConsoleTracer(Tracer):
         if duration < 1000:
             return f"{duration:.0f}ms"
         else:
-            return f"{duration/1000:.2f}s"
+            return f"{duration / 1000:.2f}s"
 
     def _format_metadata(self, metadata: Optional[Dict[str, Any]]) -> str:
         """Format metadata dict for display."""
@@ -128,12 +128,7 @@ class ConsoleTracer(Tracer):
 
     # === Output methods (implement console output) ===
 
-    def _output_trace_start(
-        self,
-        name: str,
-        trace_id: Optional[str],
-        metadata: Optional[Dict[str, Any]]
-    ) -> None:
+    def _output_trace_start(self, name: str, trace_id: Optional[str], metadata: Optional[Dict[str, Any]]) -> None:
         """Output trace start to console."""
         self._span_start_times[name] = datetime.now()
         meta_str = self._format_metadata({"trace_id": trace_id, **(metadata or {})})
@@ -141,12 +136,7 @@ class ConsoleTracer(Tracer):
         self._print(message, icon="→", color="cyan")
         self._indent_level += 1
 
-    def _output_trace_end(
-        self,
-        name: str,
-        output: Optional[Any],
-        metadata: Optional[Dict[str, Any]]
-    ) -> None:
+    def _output_trace_end(self, name: str, output: Optional[Any], metadata: Optional[Dict[str, Any]]) -> None:
         """Output trace end to console."""
         self._indent_level -= 1
         duration_str = ""
@@ -158,12 +148,7 @@ class ConsoleTracer(Tracer):
         message = self._colorize(f"TRACE END: {name}{duration_str}", "cyan")
         self._print(message, icon="✓", color="green")
 
-    def _output_span_start(
-        self,
-        name: str,
-        parent_name: Optional[str],
-        metadata: Optional[Dict[str, Any]]
-    ) -> None:
+    def _output_span_start(self, name: str, parent_name: Optional[str], metadata: Optional[Dict[str, Any]]) -> None:
         """Output span start to console."""
         self._span_start_times[name] = datetime.now()
         meta_str = self._format_metadata(metadata)
@@ -171,12 +156,7 @@ class ConsoleTracer(Tracer):
         self._print(message, icon="→", color="blue")
         self._indent_level += 1
 
-    def _output_span_end(
-        self,
-        name: str,
-        output: Optional[Any],
-        metadata: Optional[Dict[str, Any]]
-    ) -> None:
+    def _output_span_end(self, name: str, output: Optional[Any], metadata: Optional[Dict[str, Any]]) -> None:
         """Output span end to console."""
         self._indent_level -= 1
         error = metadata.get("error") if metadata else None
@@ -193,27 +173,15 @@ class ConsoleTracer(Tracer):
             message = self._colorize(f"SPAN END: {name}{duration_str}", "blue")
             self._print(message, icon="✓", color="green")
 
-    def _output_event(
-        self,
-        name: str,
-        parent_span: Optional[str],
-        metadata: Optional[Dict[str, Any]]
-    ) -> None:
+    def _output_event(self, name: str, parent_span: Optional[str], metadata: Optional[Dict[str, Any]]) -> None:
         """Output event to console."""
         meta_str = self._format_metadata(metadata)
         message = self._colorize(f"EVENT: {name}{meta_str}", "yellow")
         self._print(message, icon="⚡", color="yellow")
 
-    def _output_attach_to_trace(
-        self,
-        trace_id: str,
-        parent_span_id: Optional[str]
-    ) -> None:
+    def _output_attach_to_trace(self, trace_id: str, parent_span_id: Optional[str]) -> None:
         """Output attach to trace to console."""
-        message = self._colorize(
-            f"ATTACHED TO TRACE: {trace_id[:16]}... (parent: {parent_span_id or 'none'})",
-            "cyan"
-        )
+        message = self._colorize(f"ATTACHED TO TRACE: {trace_id[:16]}... (parent: {parent_span_id or 'none'})", "cyan")
         self._print(message, icon="🔗", color="cyan")
 
     def clone(self, trace_id: str) -> ConsoleTracer:
@@ -235,7 +203,7 @@ class ConsoleTracer(Tracer):
             enable_runtime_graph=False,  # Branch doesn't track runtime graph
             enable_colors=self.enable_colors,
             show_metadata=self.show_metadata,
-            indent_size=self.indent_size
+            indent_size=self.indent_size,
         )
 
         # Inherit indentation so branch spans appear nested under their parent.
@@ -248,42 +216,27 @@ class ConsoleTracer(Tracer):
 
     # === Overridden hooks for event logging ===
 
-    def on_parallel_group_start(
-        self,
-        group_id: str,
-        member_ids: List[str],
-        context: ExecutionContext
-    ) -> None:
+    def on_parallel_group_start(self, group_id: str, member_ids: List[str], context: ExecutionContext) -> None:
         """Parallel group start hook (override to add event output)."""
         # Log event
-        self.event(
-            f"parallel_group_start: {group_id}",
-            metadata={"members": len(member_ids)}
-        )
+        self.event(f"parallel_group_start: {group_id}", metadata={"members": len(member_ids)})
 
         # Call parent implementation for graph tracking
         super().on_parallel_group_start(group_id, member_ids, context)
 
     def on_parallel_group_end(
-        self,
-        group_id: str,
-        member_ids: List[str],
-        context: ExecutionContext,
-        results: Optional[Dict[str, Any]] = None
+        self, group_id: str, member_ids: List[str], context: ExecutionContext, results: Optional[Dict[str, Any]] = None
     ) -> None:
         """Parallel group end hook (override to add event output)."""
         success_count = len(results) if results else 0
-        self.event(
-            f"parallel_group_end: {group_id}",
-            metadata={"completed": success_count, "total": len(member_ids)}
-        )
+        self.event(f"parallel_group_end: {group_id}", metadata={"completed": success_count, "total": len(member_ids)})
 
     def on_dynamic_task_added(
         self,
         task_id: str,
         parent_task_id: Optional[str] = None,
         is_iteration: bool = False,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Override to print dynamic task addition event."""
         task_type = "iteration" if is_iteration else "dynamic"

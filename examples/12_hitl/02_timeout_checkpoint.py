@@ -21,9 +21,7 @@ from graflow.core.workflow import workflow
 
 # Configure logging to show INFO level messages from graflow.hitl
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
 )
 
 
@@ -42,11 +40,7 @@ def main():
             """Analyze data and prepare report."""
             print("\n[Task 1] Analyzing data...")
             time.sleep(0.5)
-            report = {
-                "anomalies_detected": 3,
-                "confidence": 0.85,
-                "recommendation": "manual_review"
-            }
+            report = {"anomalies_detected": 3, "confidence": 0.85, "recommendation": "manual_review"}
             print(f"[Task 1] Analysis complete: {report}")
             return report
 
@@ -65,7 +59,7 @@ def main():
                 response = context.request_feedback(
                     feedback_type="text",
                     prompt=f"Review findings: {report['anomalies_detected']} anomalies. Provide your assessment:",
-                    timeout=2.0  # Short timeout for demo
+                    timeout=2.0,  # Short timeout for demo
                 )
 
                 print(f"[Task 2] Review received: {response.text}")

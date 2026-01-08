@@ -35,6 +35,7 @@ try:
     from google.adk.runners import Runner as AdkRunner
     from google.adk.sessions import InMemorySessionService
     from google.genai import types as genai_types
+
     ADK_AVAILABLE = True
 except ImportError as e:
     logger.warning("Google ADK is not installed. AdkLLMAgent will not be available.", exc_info=e)
@@ -43,6 +44,7 @@ except ImportError as e:
 # OpenInference instrumentation for ADK tracing
 try:
     from openinference.instrumentation.google_adk import GoogleADKInstrumentor  # type: ignore[import-not-found]
+
     OPENINFERENCE_AVAILABLE = True
 except ImportError as e:
     logger.warning("OpenInference instrumentation for Google ADK is not available.", exc_info=e)
@@ -51,7 +53,6 @@ except ImportError as e:
 
 # Global flag to track if instrumentation has been set up
 _adk_instrumented = False
-
 
 
 def _patch_passthrough_tracer() -> None:
@@ -72,7 +73,7 @@ def _patch_passthrough_tracer() -> None:
         )
 
         # Save original method if not already patched
-        if not hasattr(_PassthroughTracer, '_original_start_as_current_span'):
+        if not hasattr(_PassthroughTracer, "_original_start_as_current_span"):
             _PassthroughTracer._original_start_as_current_span = _PassthroughTracer.start_as_current_span
 
         @contextmanager
@@ -80,7 +81,7 @@ def _patch_passthrough_tracer() -> None:
             _self: Any,
             name: str,  # Add name parameter for logging
             *_args: Any,
-            **_kwargs: Any
+            **_kwargs: Any,
         ) -> Iterator[Span]:
             """Patched version that properly propagates OpenTelemetry context.
 
@@ -103,9 +104,7 @@ def _patch_passthrough_tracer() -> None:
             current_span = trace_api.get_current_span()
 
             # Attach current span to context and save token for cleanup
-            token = context_api.attach(
-                trace_api.set_span_in_context(current_span)
-            )
+            token = context_api.attach(trace_api.set_span_in_context(current_span))
 
             try:
                 # Yield current span without creating a new one
@@ -147,7 +146,7 @@ def _patch_runner_run_async() -> None:
         from openinference.instrumentation.helpers import get_span_id
 
         # Check if already patched
-        if hasattr(_RunnerRunAsync, '_graflow_patched'):
+        if hasattr(_RunnerRunAsync, "_graflow_patched"):
             logger.debug("_RunnerRunAsync already patched - skipping")
             return
 
@@ -163,9 +162,11 @@ def _patch_runner_run_async() -> None:
         ) -> Any:
             """Patched version that wraps tracer and fixes async generator compatibility."""
             # Wrap the tracer to rewrite invocation span names
-            if not hasattr(self._tracer, '_graflow_invocation_patched'):
+            if not hasattr(self._tracer, "_graflow_invocation_patched"):
+
                 class TracerWrapper(wrapt.ObjectProxy):
                     """Wrapper to rewrite invocation span names."""
+
                     _graflow_invocation_patched = True
 
                     def start_as_current_span(self, name, *args, **kwargs):
@@ -180,7 +181,7 @@ def _patch_runner_run_async() -> None:
                 self._tracer = TracerWrapper(self._tracer)
 
             # Call original to get the wrapped generator
-            result = original_call(self, wrapped, instance, args, kwargs) # type: ignore
+            result = original_call(self, wrapped, instance, args, kwargs)  # type: ignore
 
             # If result is already a proper async generator proxy, return it
             if isinstance(result, wrapt.ObjectProxy):
@@ -194,7 +195,9 @@ def _patch_runner_run_async() -> None:
         _RunnerRunAsync.__call__ = patched_call  # type: ignore[method-assign]
         _RunnerRunAsync._graflow_patched = True  # type: ignore[attr-defined]
 
-        logger.debug("Successfully patched _RunnerRunAsync.__call__ for async generator compatibility and span name rewriting")
+        logger.debug(
+            "Successfully patched _RunnerRunAsync.__call__ for async generator compatibility and span name rewriting"
+        )
 
     except ImportError as e:
         logger.warning(
@@ -230,7 +233,7 @@ def _patch_runner_run() -> None:
         def patched_run(self):
             """Restore context when thread runs."""
             # Get the captured context (if any)
-            ctx = getattr(self, '_otel_context', None)
+            ctx = getattr(self, "_otel_context", None)
 
             if ctx is not None:
                 # Run the original thread target within the captured context
@@ -263,7 +266,7 @@ def _patch_adk_llm_call_span_name() -> None:
         from openinference.instrumentation.helpers import get_span_id
 
         # Check if already patched by our custom wrapper (using marker attribute)
-        if hasattr(base_llm_flow.tracer, '_graflow_span_name_patched'):  # type: ignore[attr-defined]
+        if hasattr(base_llm_flow.tracer, "_graflow_span_name_patched"):  # type: ignore[attr-defined]
             logger.debug("base_llm_flow.tracer already patched - skipping")
             return
 
@@ -292,10 +295,7 @@ def _patch_adk_llm_call_span_name() -> None:
         logger.info("Successfully patched base_llm_flow.tracer to rewrite 'call_llm' span names")
 
     except (ImportError, AttributeError) as e:
-        logger.warning(
-            f"Could not patch base_llm_flow.tracer: {e}. "
-            "This is expected if google-adk is not installed."
-        )
+        logger.warning(f"Could not patch base_llm_flow.tracer: {e}. This is expected if google-adk is not installed.")
     except Exception as e:
         logger.error(f"Failed to patch base_llm_flow.tracer: {e}", exc_info=True)
 
@@ -333,7 +333,7 @@ def setup_adk_tracing() -> None:
           2. Then: GoogleADKInstrumentor().instrument() (OpenInference sets up its tracer)
           3. Finally: _patch_adk_llm_call_span_name(), _patch_adk_execute_tool_span_name() (wrap OpenInference's tracers)
     """
-    global _adk_instrumented
+    global _adk_instrumented  # noqa: PLW0603
 
     if _adk_instrumented:
         logger.debug("Google ADK instrumentation already set up")
@@ -366,9 +366,9 @@ def setup_adk_tracing() -> None:
         if GoogleADKInstrumentor is not None:
             # Phase 1: Apply infrastructure patches BEFORE ADK instrumentation
             # These patches fix context propagation and async compatibility issues
-            _patch_runner_run()          # Propagates context across the thread boundary created by Runner.run()
+            _patch_runner_run()  # Propagates context across the thread boundary created by Runner.run()
             _patch_passthrough_tracer()  # Fixes a bug in OpenInference instrumentation's _PassthroughTracer
-            _patch_runner_run_async()    # Fixes async generator protocol (aclose() method), required for run_async()
+            _patch_runner_run_async()  # Fixes async generator protocol (aclose() method), required for run_async()
 
             # Phase 2: Instrument ADK with OpenInference (this sets base_llm_flow.tracer)
             GoogleADKInstrumentor().instrument()
@@ -377,16 +377,13 @@ def setup_adk_tracing() -> None:
             # These wrap the tracers that OpenInference just installed
             # IMPORTANT: Must be done AFTER instrument() because OpenInference's
             # _patch_trace_call_llm() does: setattr(base_llm_flow, "tracer", self._tracer)
-            _patch_adk_llm_call_span_name()         # Patch 'call_llm' spans
+            _patch_adk_llm_call_span_name()  # Patch 'call_llm' spans
             # _patch_adk_execute_tool_span_name()   # Patch 'execute_tool' spans
 
             _adk_instrumented = True
             logger.info("Google ADK instrumentation enabled for tracing")
         else:
-            logger.warning(
-                "GoogleADKInstrumentor is None. "
-                "Cannot instrument Google ADK for tracing."
-            )
+            logger.warning("GoogleADKInstrumentor is None. Cannot instrument Google ADK for tracing.")
     except Exception as e:
         logger.warning(f"Failed to instrument Google ADK: {e}")
 
@@ -406,6 +403,7 @@ def _sanitize_adk_app_name(app_name: str) -> str:
             sanitized = f"app_{sanitized}"
 
     return sanitized
+
 
 class AdkLLMAgent(LLMAgent):
     """Wrapper for Google ADK LlmAgent.
@@ -526,10 +524,7 @@ class AdkLLMAgent(LLMAgent):
             and is ADK's recommended pattern.
         """
         if not ADK_AVAILABLE:
-            raise RuntimeError(
-                "Google ADK is not installed. "
-                "Install with: pip install google-adk"
-            )
+            raise RuntimeError("Google ADK is not installed. Install with: pip install google-adk")
 
         # Handle both App and LlmAgent inputs
         if isinstance(adk_agent_or_app, App):
@@ -541,30 +536,31 @@ class AdkLLMAgent(LLMAgent):
             # Pattern 2: User provided LlmAgent (create App internally)
             if app_name is None:
                 raise ValueError(
-                    "app_name is required when providing LlmAgent. "
-                    "Pass an App instance instead to use App's name."
+                    "app_name is required when providing LlmAgent. Pass an App instance instead to use App's name."
                 )
             self._adk_agent = adk_agent_or_app
             self._app_name = _sanitize_adk_app_name(app_name)
             # Create App instance internally
-            context_cache_config = ContextCacheConfig(
-                min_tokens=2048,    # Minimum tokens to trigger caching
-                ttl_seconds=600,    # Store for up to 10 minutes
-                cache_intervals=5,  # Refresh after 5 uses
-            ) if enable_caching else None
+            context_cache_config = (
+                ContextCacheConfig(
+                    min_tokens=2048,  # Minimum tokens to trigger caching
+                    ttl_seconds=600,  # Store for up to 10 minutes
+                    cache_intervals=5,  # Refresh after 5 uses
+                )
+                if enable_caching
+                else None
+            )
             self._app = App(  # type: ignore
                 name=self._app_name,
                 root_agent=adk_agent_or_app,
                 events_compaction_config=EventsCompactionConfig(
                     compaction_interval=3,  # Trigger compaction every 3 new invocations.
-                    overlap_size=1          # Include last invocation from the previous window.
+                    overlap_size=1,  # Include last invocation from the previous window.
                 ),
-                context_cache_config=context_cache_config
+                context_cache_config=context_cache_config,
             )
         else:
-            raise TypeError(
-                f"Expected LlmAgent or App instance, got {type(adk_agent_or_app)}"
-            )
+            raise TypeError(f"Expected LlmAgent or App instance, got {type(adk_agent_or_app)}")
 
         # Setup tracing if enabled (idempotent - safe to call multiple times)
         if enable_tracing:
@@ -579,8 +575,7 @@ class AdkLLMAgent(LLMAgent):
 
         # Create Runner with App
         self._runner: AdkRunner = AdkRunner(  # type: ignore
-            app=self._app,
-            session_service=session_service
+            app=self._app, session_service=session_service
         )
 
         # Store user_id for ADK execution
@@ -592,7 +587,7 @@ class AdkLLMAgent(LLMAgent):
         user_id: Optional[str] = None,
         trace_id: Optional[str] = None,
         session_id: Optional[str] = None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> AgentResult:
         """Run the ADK agent synchronously.
 
@@ -638,29 +633,20 @@ class AdkLLMAgent(LLMAgent):
             # Create session in session service (async in ADK 1.0+)
             # Use asyncio.run() to execute async session creation synchronously
             asyncio.run(
-                self._session_service.create_session(
-                    app_name=self._app_name,
-                    user_id=user_id,
-                    session_id=session_id
-                )
+                self._session_service.create_session(app_name=self._app_name, user_id=user_id, session_id=session_id)
             )
 
             # Create Content from input text
             content = genai_types.Content(  # type: ignore
                 role="user",
-                parts=[genai_types.Part(text=input_text)]  # type: ignore
+                parts=[genai_types.Part(text=input_text)],  # type: ignore
             )
 
             # Run agent via Runner (synchronous)
             # Note: Runner.run() creates a separate thread for async execution.
             # OpenTelemetry context is propagated via ThreadingInstrumentor (if available).
             # The app_name (set in __init__) identifies the agent in traces.
-            events = self._runner.run(
-                user_id=user_id,
-                session_id=session_id,
-                new_message=content,
-                **kwargs
-            )
+            events = self._runner.run(user_id=user_id, session_id=session_id, new_message=content, **kwargs)
 
             # Collect all events and extract final response
             final_event = None
@@ -686,7 +672,7 @@ class AdkLLMAgent(LLMAgent):
         user_id: Optional[str] = None,
         trace_id: Optional[str] = None,
         session_id: Optional[str] = None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> AsyncIterator[Any]:
         """Run the ADK agent asynchronously with streaming events.
 
@@ -739,16 +725,13 @@ class AdkLLMAgent(LLMAgent):
             # Create Content for ADK
             content = genai_types.Content(  # type: ignore
                 role="user",
-                parts=[genai_types.Part(text=input_text)]  # type: ignore
+                parts=[genai_types.Part(text=input_text)],  # type: ignore
             )
 
             # Run agent via Runner (asynchronous)
             # Runner.run_async() returns an async generator of events
             async for event in self._runner.run_async(
-                user_id=user_id,
-                session_id=session_id,
-                new_message=content,
-                **kwargs
+                user_id=user_id, session_id=session_id, new_message=content, **kwargs
             ):
                 yield event
 
@@ -773,7 +756,7 @@ class AdkLLMAgent(LLMAgent):
             "name": self.name,
             "model": getattr(self._adk_agent, "model", None),
             "tools_count": len(self.tools),
-            "framework": "google-adk"
+            "framework": "google-adk",
         }
 
     @classmethod
@@ -832,10 +815,7 @@ class AdkLLMAgent(LLMAgent):
             # Add content if available
             if hasattr(event, "content") and event.content:
                 if hasattr(event.content, "parts") and event.content.parts:
-                    step["content"] = [
-                        getattr(part, "text", str(part))
-                        for part in event.content.parts
-                    ]
+                    step["content"] = [getattr(part, "text", str(part)) for part in event.content.parts]
             steps.append(step)
 
         return {
@@ -844,5 +824,5 @@ class AdkLLMAgent(LLMAgent):
             "metadata": {
                 "agent_name": self.name,
                 "event_count": len(all_events),
-            }
+            },
         }

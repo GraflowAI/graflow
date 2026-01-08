@@ -286,26 +286,27 @@ class TestSequentialTaskGraphStructure:
 
             # Verify: fetch -> ParallelGroup
             fetch_successors = list(graph.successors("fetch"))
-            assert group_id in fetch_successors, \
-                f"fetch should connect to ParallelGroup, got: {fetch_successors}"
+            assert group_id in fetch_successors, f"fetch should connect to ParallelGroup, got: {fetch_successors}"
 
             # Verify: ParallelGroup membership via API
             members = ctx.graph.get_parallel_group_members(group_id)
-            assert set(members) == {"transform_a", "transform_b"}, \
+            assert set(members) == {"transform_a", "transform_b"}, (
                 f"ParallelGroup members should be transform_a/transform_b, got: {members}"
+            )
 
             group_successors = list(graph.successors(group_id))
-            assert group_successors == ["store"], \
+            assert group_successors == ["store"], (
                 f"ParallelGroup should have only store as external successor, got: {group_successors}"
+            )
 
             # Verify: transform_a -> subtask_a
             transform_a_successors = list(graph.successors("transform_a"))
-            assert "subtask_a" in transform_a_successors, \
+            assert "subtask_a" in transform_a_successors, (
                 f"transform_a should connect to subtask_a, got: {transform_a_successors}"
+            )
 
             # Verify: ParallelGroup -> store
-            assert "store" in group_successors, \
-                f"ParallelGroup should connect to store, got: {group_successors}"
+            assert "store" in group_successors, f"ParallelGroup should connect to store, got: {group_successors}"
 
     def test_complex_chain_combination(self):
         """Test complex chain: (a >> b) >> (c >> d)."""
@@ -342,7 +343,7 @@ class TestSequentialTaskGraphStructure:
             task_e = Task("task_e")
 
             # Create: ((a >> b) | (c >> d)) >> e
-            _ =((task_a >> task_b) | (task_c >> task_d)) >> task_e
+            _ = ((task_a >> task_b) | (task_c >> task_d)) >> task_e
 
             graph = ctx.graph._graph
 
@@ -397,6 +398,7 @@ class TestSequentialTaskExecution:
     def test_sequential_task_call(self, execution_context):
         """Test SequentialTask.__call__() executes leftmost task."""
         with WorkflowContext("test"):
+
             def task_func():
                 return "result"
 
@@ -417,6 +419,7 @@ class TestSequentialTaskWithTaskWrapper:
     def test_sequential_task_with_task_wrapper(self):
         """Test SequentialTask works with TaskWrapper."""
         with WorkflowContext("test"):
+
             def task_func():
                 return "result"
 
@@ -432,6 +435,7 @@ class TestSequentialTaskWithTaskWrapper:
     def test_parallel_with_task_wrapper_chain(self):
         """Test ParallelGroup creation with TaskWrapper chains."""
         with WorkflowContext("test"):
+
             def func_a():
                 return "a"
 
@@ -482,8 +486,9 @@ class TestSequentialTaskEdgeCases:
 
             # SequentialTask itself should not be a node
             sequential_nodes = [n for n in graph.nodes() if n.startswith("SequentialTask")]
-            assert len(sequential_nodes) == 0, \
+            assert len(sequential_nodes) == 0, (
                 f"SequentialTask should not be registered in graph, found: {sequential_nodes}"
+            )
 
             # But individual tasks should be registered
             assert "task_a" in graph.nodes()
@@ -517,6 +522,7 @@ class TestSequentialTaskEngineExecution:
         execution_order = []
 
         with WorkflowContext("test") as ctx:
+
             @task
             def task_a():
                 execution_order.append("task_a")
@@ -555,6 +561,7 @@ class TestSequentialTaskEngineExecution:
         execution_order = []
 
         with WorkflowContext("test") as ctx:
+
             def func_a(x: int) -> int:
                 execution_order.append("func_a")
                 return x * 2
@@ -595,6 +602,7 @@ class TestSequentialTaskEngineExecution:
         execution_order = []
 
         with WorkflowContext("test") as ctx:
+
             @task
             def start():
                 execution_order.append("start")
@@ -639,6 +647,7 @@ class TestSequentialTaskEngineExecution:
         execution_order: list[str] = []
 
         with WorkflowContext("test") as ctx:
+
             @task
             def fetch():
                 execution_order.append("fetch")
@@ -697,6 +706,7 @@ class TestSequentialTaskEngineExecution:
         execution_order = []
 
         with WorkflowContext("test") as ctx:
+
             @task
             def task_a():
                 execution_order.append("a")
@@ -742,6 +752,7 @@ class TestSequentialTaskEngineExecution:
             # Create 10 tasks in a chain
             tasks = []
             for i in range(10):
+
                 @task(id=f"task_{i}")
                 def task_func(idx=i):
                     execution_order.append(f"task_{idx}")

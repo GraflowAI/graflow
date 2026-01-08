@@ -30,8 +30,7 @@ class TestLLMClientInjection:
                 @task(inject_llm_client=True)
                 def generate_text(llm_client: LLMClient):
                     response = llm_client.completion_text(
-                        messages=[{"role": "user", "content": "Say hello"}],
-                        max_tokens=50
+                        messages=[{"role": "user", "content": "Say hello"}], max_tokens=50
                     )
                     return response
 
@@ -45,34 +44,23 @@ class TestLLMClientInjection:
 
         with patch("graflow.llm.client.LLMClient") as patching_llm_client:
             mock_client = Mock(spec=LLMClient)
-            mock_client.completion_text.side_effect = [
-                "Greeting message",
-                "Answer to question",
-                "Summary text"
-            ]
+            mock_client.completion_text.side_effect = ["Greeting message", "Answer to question", "Summary text"]
             patching_llm_client.return_value = mock_client
 
             with workflow("multi_llm") as wf:
 
                 @task(inject_llm_client=True)
                 def task1(llm_client: LLMClient):
-                    return llm_client.completion_text(
-                        messages=[{"role": "user", "content": "Greet"}],
-                        max_tokens=50
-                    )
+                    return llm_client.completion_text(messages=[{"role": "user", "content": "Greet"}], max_tokens=50)
 
                 @task(inject_llm_client=True)
                 def task2(llm_client: LLMClient):
-                    return llm_client.completion_text(
-                        messages=[{"role": "user", "content": "Answer"}],
-                        max_tokens=50
-                    )
+                    return llm_client.completion_text(messages=[{"role": "user", "content": "Answer"}], max_tokens=50)
 
                 @task(inject_llm_client=True)
                 def task3(llm_client: LLMClient):
                     return llm_client.completion_text(
-                        messages=[{"role": "user", "content": "Summarize"}],
-                        max_tokens=50
+                        messages=[{"role": "user", "content": "Summarize"}], max_tokens=50
                     )
 
                 task1 >> task2 >> task3  # type: ignore
@@ -100,17 +88,13 @@ class TestLLMClientInjection:
                     channel.set("prompt_used", prompt)
 
                     response = llm_client.completion_text(
-                        messages=[{"role": "user", "content": prompt}],
-                        max_tokens=100
+                        messages=[{"role": "user", "content": prompt}], max_tokens=100
                     )
 
                     channel.set("llm_response", response)
                     return response
 
-                _, ctx = wf.execute(
-                    ret_context=True,
-                    initial_channel={"prompt": "Explain Python"}
-                )
+                _, ctx = wf.execute(ret_context=True, initial_channel={"prompt": "Explain Python"})
 
             result = ctx.get_result("process_with_llm")
             assert result == "AI response"
@@ -123,20 +107,14 @@ class TestLLMClientInjection:
         mock_client = Mock(spec=LLMClient)
         mock_client.completion_text.return_value = "Context-accessed response"
 
-        with patch.object(
-            TaskExecutionContext,
-            "llm_client",
-            new_callable=PropertyMock,
-            return_value=mock_client
-        ):
+        with patch.object(TaskExecutionContext, "llm_client", new_callable=PropertyMock, return_value=mock_client):
             with workflow("context_llm") as wf:
 
                 @task(inject_context=True)
                 def use_llm_via_context(ctx: TaskExecutionContext):
                     # Access LLM client through context
                     response = ctx.llm_client.completion_text(
-                        messages=[{"role": "user", "content": "Test"}],
-                        max_tokens=50
+                        messages=[{"role": "user", "content": "Test"}], max_tokens=50
                     )
                     return response
 
@@ -180,9 +158,9 @@ class TestLLMAgentInjection:
             "metadata": {
                 "tool_calls": [
                     {"tool": "search", "args": {"query": "test"}},
-                    {"tool": "calculate", "args": {"expr": "2+2"}}
+                    {"tool": "calculate", "args": {"expr": "2+2"}},
                 ]
-            }
+            },
         }
 
         with workflow("agent_tools") as wf:
@@ -212,18 +190,15 @@ class TestLLMAgentInjection:
             wf.register_llm_agent("analyzer", lambda ctx: mock_agent1)
             wf.register_llm_agent("summarizer", lambda ctx: mock_agent2)
 
-            @task(inject_llm_agent="analyzer")
+            @task(id="analyze", inject_llm_agent="analyzer")
             def analyze(llm_agent: LLMAgent):
                 return llm_agent.run("Analyze this")["output"]
 
-            @task(inject_llm_agent="summarizer")
+            @task(id="summarize", inject_llm_agent="summarizer")
             def summarize(llm_agent: LLMAgent):
                 return llm_agent.run("Summarize this")["output"]
 
-            analyze_task = analyze(task_id="analyze")
-            summarize_task = summarize(task_id="summarize")
-
-            analyze_task >> summarize_task  # type: ignore
+            analyze >> summarize  # type: ignore
 
             _, ctx = wf.execute(ret_context=True)
 
@@ -280,16 +255,14 @@ class TestLLMIntegrationPatterns:
                 def quick_task(llm_client: LLMClient):
                     # Use cheap model for simple task
                     return llm_client.completion_text(
-                        messages=[{"role": "user", "content": "Quick question"}],
-                        model="gpt-4o-mini"
+                        messages=[{"role": "user", "content": "Quick question"}], model="gpt-4o-mini"
                     )
 
                 @task(inject_llm_client=True)
                 def complex_task(llm_client: LLMClient):
                     # Use expensive model for complex task
                     return llm_client.completion_text(
-                        messages=[{"role": "user", "content": "Complex analysis"}],
-                        model="gpt-4"
+                        messages=[{"role": "user", "content": "Complex analysis"}], model="gpt-4"
                     )
 
                 quick_task >> complex_task  # type: ignore
@@ -323,9 +296,7 @@ class TestLLMIntegrationPatterns:
                     attempts = channel.get("attempts", default=0)
 
                     try:
-                        response = llm_client.completion_text(
-                            messages=[{"role": "user", "content": "Test"}]
-                        )
+                        response = llm_client.completion_text(messages=[{"role": "user", "content": "Test"}])
                         return response
                     except Exception as e:
                         if attempts < 2:
@@ -351,9 +322,7 @@ class TestLLMIntegrationPatterns:
 
                 @task(inject_context=True, inject_llm_client=True)
                 def analyze(ctx: TaskExecutionContext, llm_client: LLMClient, text: str):
-                    response = llm_client.completion_text(
-                        messages=[{"role": "user", "content": f"Analyze: {text}"}]
-                    )
+                    response = llm_client.completion_text(messages=[{"role": "user", "content": f"Analyze: {text}"}])
                     # Store in channel for downstream
                     ctx.get_channel().set("analysis", response)
                     return response
@@ -366,10 +335,7 @@ class TestLLMIntegrationPatterns:
 
                 analyze >> process_analysis  # type: ignore
 
-                _, ctx = wf.execute(
-                    ret_context=True,
-                    initial_channel={"text": "Great product!"}
-                )
+                _, ctx = wf.execute(ret_context=True, initial_channel={"text": "Great product!"})
 
             result = ctx.get_result("process_analysis")
             assert result["processed"] is True

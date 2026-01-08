@@ -78,6 +78,7 @@ def check_docker_available():
     """Check if Docker is available."""
     try:
         import docker
+
         client = docker.from_env()
         client.ping()
         return True
@@ -169,12 +170,11 @@ def main():
         # DockerTaskHandler auto-detects if graflow is running from source
         # and mounts it automatically. If graflow is pip-installed, it will
         # install the same version from PyPI in the container.
-        engine.register_handler("docker", DockerTaskHandler(
-            image="python:3.11-slim"
-        ))
+        engine.register_handler("docker", DockerTaskHandler(image="python:3.11-slim"))
 
         # Create execution context
         from graflow.core.context import ExecutionContext
+
         exec_context = ExecutionContext.create(ctx.graph, "task_local", max_steps=10)
 
         # Execute with custom engine

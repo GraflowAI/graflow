@@ -15,13 +15,14 @@ if TYPE_CHECKING:
     from graflow.core.task import Executable
     from graflow.llm.agents.base import LLMAgent
 
-LLMAgentFactory = Callable[['ExecutionContext'], 'LLMAgent']
-LLMAgentProvider = Union['LLMAgent', LLMAgentFactory]
+LLMAgentFactory = Callable[["ExecutionContext"], "LLMAgent"]
+LLMAgentProvider = Union["LLMAgent", LLMAgentFactory]
 
 # Context variable for current workflow context
 _current_context: contextvars.ContextVar[Optional[WorkflowContext]] = contextvars.ContextVar(
-    'current_workflow', default=None
+    "current_workflow", default=None
 )
+
 
 class WorkflowContext:
     """
@@ -58,7 +59,7 @@ class WorkflowContext:
             _current_context.reset(self._token)
             self._token = None
 
-    def add_node(self, name: str, task: Executable, skip_if_exists: bool = True) -> None:
+    def add_node(self, name: str, task: Executable, skip_if_exists: bool = False) -> None:
         """Add a task node to this workflow's graph."""
         self.graph.add_node(task, name, skip_if_exists=skip_if_exists)
 
@@ -102,7 +103,13 @@ class WorkflowContext:
         """
         self._llm_agent_providers[name] = agent_or_factory
 
-    def execute(self, start_node: Optional[str] = None, max_steps: int = 10000, ret_context: bool = False, initial_channel: Optional[dict[str, Any]] = None) -> Any | tuple[Any, ExecutionContext]:
+    def execute(
+        self,
+        start_node: Optional[str] = None,
+        max_steps: int = 10000,
+        ret_context: bool = False,
+        initial_channel: Optional[dict[str, Any]] = None,
+    ) -> Any | tuple[Any, ExecutionContext]:
         """Execute the workflow starting from the specified node.
 
         Args:
@@ -129,6 +136,7 @@ class WorkflowContext:
 
         from graflow.core.context import ExecutionContext
         from graflow.core.engine import WorkflowEngine
+
         exec_context = ExecutionContext.create(self.graph, start_node, max_steps=max_steps, tracer=self._tracer)
 
         # Set initial channel values if provided
@@ -190,10 +198,9 @@ class WorkflowContext:
             elif callable(provider):
                 agent = provider(exec_context)
             else:
-                raise TypeError(
-                    f"LLMAgent provider for '{name}' must be LLMAgent or callable"
-                )
+                raise TypeError(f"LLMAgent provider for '{name}' must be LLMAgent or callable")
             exec_context.register_llm_agent(name, agent)
+
 
 def get_current_workflow_context(create_if_not_exist: bool = False) -> Optional[WorkflowContext]:
     """Get the current workflow context if it exists.
@@ -212,6 +219,7 @@ def get_current_workflow_context(create_if_not_exist: bool = False) -> Optional[
         _current_context.set(ctx)
     return ctx
 
+
 def current_workflow_context() -> WorkflowContext:
     """Get the current workflow context if any.
 
@@ -229,6 +237,7 @@ def current_workflow_context() -> WorkflowContext:
         _current_context.set(ctx)
     return ctx
 
+
 def require_workflow_context() -> WorkflowContext:
     """Get the current workflow context, raising an error if none exists.
 
@@ -242,13 +251,16 @@ def require_workflow_context() -> WorkflowContext:
         raise GraflowRuntimeError("No current workflow context exists")
     return ctx
 
+
 def set_current_workflow_context(context: WorkflowContext) -> None:
     """Set the current workflow context."""
     _current_context.set(context)
 
+
 def clear_workflow_context() -> None:
     """Clear the current workflow context."""
     _current_context.set(None)
+
 
 def workflow(name: str, tracer: Optional[Tracer] = None) -> WorkflowContext:
     """Context manager for creating a workflow.

@@ -35,7 +35,7 @@ class TestGraphSerialization:
         so that tasks can be serialized even when they have context references.
         """
         # Verify task has execution context set
-        assert hasattr(self.task, '_execution_context')
+        assert hasattr(self.task, "_execution_context")
         assert self.task.get_execution_context() is self.context
 
         # Save should succeed because __getstate__ strips _execution_context
@@ -43,5 +43,5 @@ class TestGraphSerialization:
         assert graph_hash is not None
 
         # Verify original task still has context (save shouldn't mutate it)
-        assert hasattr(self.task, '_execution_context')
+        assert hasattr(self.task, "_execution_context")
         assert self.task.get_execution_context() is self.context

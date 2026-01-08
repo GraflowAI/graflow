@@ -60,7 +60,7 @@ def main():
             print("End!")
 
         # Define sequential pipeline: start -> middle -> end
-        start >> middle >> end # type: ignore
+        start >> middle >> end  # type: ignore
 
         # Show workflow information
         print("Workflow Information:")

@@ -156,7 +156,9 @@ class TestParallelGroupTracing:
         tracer.on_task_start(task_b, context)
         tracer.on_task_end(task_b, context, result="result_b")
 
-        tracer.on_parallel_group_end(group_id, member_ids, context, results={"task_a": "result_a", "task_b": "result_b"})
+        tracer.on_parallel_group_end(
+            group_id, member_ids, context, results={"task_a": "result_a", "task_b": "result_b"}
+        )
         tracer.on_workflow_end("parallel_workflow", context)
 
         # Verify console output
@@ -190,7 +192,7 @@ class TestDynamicTaskTracing:
                 task_id=child_id,
                 parent_task_id="parent_task",
                 is_iteration=False,
-                metadata={"task_type": "TaskWrapper", "index": i}
+                metadata={"task_type": "TaskWrapper", "index": i},
             )
 
             # Execute dynamic child
@@ -234,7 +236,7 @@ class TestDynamicTaskTracing:
             task_id="dynamic_child",
             parent_task_id="parent_task",
             is_iteration=False,
-            metadata={"task_type": "TaskWrapper"}
+            metadata={"task_type": "TaskWrapper"},
         )
 
         child_task = TaskWrapper(task_id="dynamic_child", func=lambda: "child_result", register_to_context=False)
@@ -408,7 +410,7 @@ class TestTracerWithErrorHandling:
         # Verify error is displayed in console output
         captured = capsys.readouterr()
         assert "failing_task" in captured.out
-        assert ("error" in captured.out.lower() or "failed" in captured.out.lower() or "✗" in captured.out)
+        assert "error" in captured.out.lower() or "failed" in captured.out.lower() or "✗" in captured.out
 
 
 class TestLangFuseTracerIntegration:

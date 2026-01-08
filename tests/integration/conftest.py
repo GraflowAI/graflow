@@ -7,6 +7,7 @@ import redis
 
 try:
     import docker
+
     DOCKER_AVAILABLE = True
 except ImportError:
     docker = None
@@ -18,7 +19,7 @@ def redis_server():
     """Real Redis server - uses local Redis if available, otherwise auto-starts Docker container."""
     # First try to connect to existing local Redis
     try:
-        redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+        redis_client = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
         redis_client.ping()
         # Local Redis is available, use it
         yield redis_client
@@ -31,9 +32,7 @@ def redis_server():
     container = None
     try:
         if not DOCKER_AVAILABLE:
-            pytest.skip(
-                "Docker package not installed. Install with: pip install docker"
-            )
+            pytest.skip("Docker package not installed. Install with: pip install docker")
 
         assert docker is not None
 
@@ -43,22 +42,14 @@ def redis_server():
             client.ping()
         except Exception as docker_err:
             # Docker daemon not running
-            pytest.skip(
-                f"Docker daemon not running. Please start Docker Desktop.\n"
-                f"Error: {docker_err}"
-            )
+            pytest.skip(f"Docker daemon not running. Please start Docker Desktop.\nError: {docker_err}")
 
         # Start Redis container
-        container = client.containers.run(
-            "redis:7.2",
-            ports={'6379/tcp': 6379},
-            detach=True,
-            remove=True
-        )
+        container = client.containers.run("redis:7.2", ports={"6379/tcp": 6379}, detach=True, remove=True)
         time.sleep(2)  # Wait for Redis to be ready
 
         # Create Redis client and verify connection
-        redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+        redis_client = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
         try:
             redis_client.ping()
         except redis.ConnectionError:

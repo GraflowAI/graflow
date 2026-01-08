@@ -43,9 +43,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="GPT Newspaper API",
-    description="Generate personalized newspapers using AI agents",
-    version="1.0.0"
+    title="GPT Newspaper API", description="Generate personalized newspapers using AI agents", version="1.0.0"
 )
 
 # Enable CORS for frontend
@@ -94,9 +92,7 @@ class LogStreamManager:
             if not subscribers:
                 return
             self._subscribers[run_id] = [
-                (stored_queue, stored_loop)
-                for stored_queue, stored_loop in subscribers
-                if stored_queue is not queue
+                (stored_queue, stored_loop) for stored_queue, stored_loop in subscribers if stored_queue is not queue
             ]
             if not self._subscribers[run_id]:
                 self._subscribers.pop(run_id)
@@ -200,12 +196,12 @@ class NewspaperRequest(BaseModel):
         max_length=10,
         description="List of article topics",
         example=["AI developments", "Climate change"],
-    ) # type: ignore
+    )  # type: ignore
     layout: Literal["single", "two-column", "layout_1.html", "layout_2.html"] = Field(
         default="two-column",
         description="Layout template to use (friendly name or template file)",
         example="two-column",
-    ) # type: ignore
+    )  # type: ignore
     output_dir: str | None = Field(
         default=None,
         alias="outputDir",
@@ -229,7 +225,7 @@ class NewspaperRequest(BaseModel):
         default=DEFAULT_WORKFLOW,
         description="Workflow variant to execute: 'original' (simple LLM tasks), 'dynamic' (parallel execution), or 'agent' (LLM agents with tools)",
         example=DEFAULT_WORKFLOW,
-    ) # type: ignore
+    )  # type: ignore
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -244,7 +240,7 @@ class NewspaperResponse(BaseModel):
         alias="outputPath",
         description="Relative path to the generated newspaper HTML file",
         example="/outputs/run_1234567890/newspaper.html",
-    ) # type: ignore
+    )  # type: ignore
     html: str = Field(..., description="The rendered newspaper HTML content")
     created_at: str = Field(alias="createdAt", description="ISO timestamp of creation")
     layout: str = Field(description="Layout option used to generate the newspaper")
@@ -373,21 +369,12 @@ async def health_check():
     """
     # Check for required environment variables
     if not Config.TAVILY_API_KEY:
-        return HealthResponse(
-            status="warning",
-            message="TAVILY_API_KEY not configured"
-        )
+        return HealthResponse(status="warning", message="TAVILY_API_KEY not configured")
 
     if not Config.OPENAI_API_KEY and "api_base" not in Config.DEFAULT_MODEL_PARAMS:
-        return HealthResponse(
-            status="warning",
-            message="LLM credentials or API base not configured"
-        )
+        return HealthResponse(status="warning", message="LLM credentials or API base not configured")
 
-    return HealthResponse(
-        status="ok",
-        message="GPT Newspaper API is running"
-    )
+    return HealthResponse(status="ok", message="GPT Newspaper API is running")
 
 
 @app.post("/api/generate", response_model=NewspaperResponse, response_model_by_alias=True)
@@ -411,10 +398,7 @@ async def generate_newspaper(request: NewspaperRequest):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to generate newspaper: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to generate newspaper: {str(e)}")
 
 
 @app.post("/api/newspaper", response_model=NewspaperResponse, response_model_by_alias=True)
@@ -426,10 +410,7 @@ async def create_newspaper(request: NewspaperRequest):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to generate newspaper: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to generate newspaper: {str(e)}")
 
 
 @app.get("/api/newspaper", response_model=List[NewspaperSummary], response_model_by_alias=True)

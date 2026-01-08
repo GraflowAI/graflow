@@ -20,7 +20,6 @@ def test_cycle_controller_integration():
     # Create execution context
     graph = TaskGraph()
 
-
     @task(inject_context=True)
     def counting_task(ctx: TaskExecutionContext, data=None):
         if data is None:
@@ -58,7 +57,7 @@ def test_cycle_controller_integration():
     except ValueError as e:
         print(f"❌ Expected error: {e}")
 
-    task_ctx = context._task_contexts.get('counting_task')
+    task_ctx = context._task_contexts.get("counting_task")
     final_count = task_ctx.cycle_count if task_ctx else 0
     print(f"Final cycle count: {final_count}")
 
@@ -69,7 +68,6 @@ def test_custom_cycle_limits():
 
     # Create execution context with higher default
     graph = TaskGraph()
-
 
     @task(inject_context=True)
     def limited_task(ctx: TaskExecutionContext, data=None):
@@ -111,7 +109,7 @@ def test_custom_cycle_limits():
     except ValueError as e:
         print(f"❌ Expected error: {e}")
 
-    task_ctx = context._task_contexts.get('limited_task')
+    task_ctx = context._task_contexts.get("limited_task")
     final_count = task_ctx.cycle_count if task_ctx else 0
     print(f"Final cycle count: {final_count}")
 
@@ -185,7 +183,6 @@ def test_error_handling():
 
     graph = TaskGraph()
 
-
     @task(inject_context=True)
     def error_task(ctx: TaskExecutionContext, data=None):
         if data is None:
@@ -232,4 +229,5 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"❌ Test failed: {e}")
         import traceback
+
         traceback.print_exc()

@@ -7,6 +7,7 @@ from graflow.channels.typed import ChannelTypeRegistry
 
 class TaskResultMessage(TypedDict):
     """Standard message for task execution results."""
+
     task_id: str
     result: Any
     timestamp: float
@@ -15,6 +16,7 @@ class TaskResultMessage(TypedDict):
 
 class TaskProgressMessage(TypedDict):
     """Message for reporting task progress."""
+
     task_id: str
     progress: float
     message: str
@@ -23,6 +25,7 @@ class TaskProgressMessage(TypedDict):
 
 class TaskErrorMessage(TypedDict):
     """Message for reporting task errors."""
+
     task_id: str
     error_type: str
     error_message: str
@@ -31,6 +34,7 @@ class TaskErrorMessage(TypedDict):
 
 class WorkflowStateMessage(TypedDict):
     """Message for workflow state updates."""
+
     workflow_id: str
     state: str
     current_task: str
@@ -40,6 +44,7 @@ class WorkflowStateMessage(TypedDict):
 
 class DataTransferMessage(TypedDict):
     """Generic message for data transfer between tasks."""
+
     from_task: str
     to_task: str
     data: Any
@@ -49,6 +54,7 @@ class DataTransferMessage(TypedDict):
 
 class CycleNotificationMessage(TypedDict):
     """Message for cycle execution notifications."""
+
     task_id: str
     cycle_count: int
     max_cycles: int

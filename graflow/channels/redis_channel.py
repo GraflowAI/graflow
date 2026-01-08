@@ -136,7 +136,7 @@ class RedisChannel(Channel):
         # Cursor-based scan (non-blocking)
         for key in self.redis_client.scan_iter(match=pattern, count=100):
             # Remove key_prefix from the key
-            key_str = key.decode('utf-8') if isinstance(key, bytes) else key
+            key_str = key.decode("utf-8") if isinstance(key, bytes) else key
             matched_keys.append(key_str.replace(f"{self.key_prefix}", "", 1))
 
         return matched_keys

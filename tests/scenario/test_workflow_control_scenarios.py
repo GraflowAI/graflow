@@ -99,8 +99,9 @@ def test_cache_miss_executes_full_pipeline():
     context.execute()
 
     # Verify full pipeline executed (cache miss)
-    assert execution_log == ["check_cache", "fetch_data", "transform_data"], \
+    assert execution_log == ["check_cache", "fetch_data", "transform_data"], (
         f"Expected full pipeline, got {execution_log}"
+    )
     assert "check_cache" in context.completed_tasks
     assert "fetch_data" in context.completed_tasks
     assert "transform_data" in context.completed_tasks
@@ -148,8 +149,7 @@ def test_data_validation_failure_cancels_workflow():
     assert "validation failed" in str(exc_info.value).lower()
 
     # Verify validate_input was NOT marked as completed (cancellation)
-    assert "validate_input" not in context.completed_tasks, \
-        "validate_input should NOT be completed on cancellation"
+    assert "validate_input" not in context.completed_tasks, "validate_input should NOT be completed on cancellation"
 
     # Verify downstream tasks were not executed
     assert execution_log == ["validate_input"], f"Expected only validate_input, got {execution_log}"
@@ -192,8 +192,9 @@ def test_data_validation_success_continues_workflow():
     context.execute()
 
     # Verify full pipeline executed (validation passed)
-    assert execution_log == ["validate_input", "process_data", "store_result"], \
+    assert execution_log == ["validate_input", "process_data", "store_result"], (
         f"Expected full pipeline, got {execution_log}"
+    )
     assert "validate_input" in context.completed_tasks
     assert "process_data" in context.completed_tasks
     assert "store_result" in context.completed_tasks
@@ -248,8 +249,9 @@ def test_conditional_workflow_early_completion():
     context2.get_channel().set("workflow_status", "PENDING")
     context2.execute()
 
-    assert execution_log == ["check_status", "process_step1", "process_step2"], \
+    assert execution_log == ["check_status", "process_step1", "process_step2"], (
         f"Expected full pipeline, got {execution_log}"
+    )
 
 
 def test_parallel_tasks_with_termination():
@@ -351,8 +353,9 @@ def test_error_detection_cancels_workflow():
     assert "check_integrity" not in context.completed_tasks
 
     # Verify execution stopped at check_integrity
-    assert execution_log == ["prepare_data", "check_integrity"], \
+    assert execution_log == ["prepare_data", "check_integrity"], (
         f"Expected execution up to check_integrity, got {execution_log}"
+    )
     assert "process_data" not in execution_log
     assert "finalize" not in execution_log
 

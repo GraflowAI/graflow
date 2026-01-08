@@ -52,9 +52,7 @@ class FeedbackManager:
             from graflow.hitl.backend.filesystem import FilesystemFeedbackBackend
 
             backend_config = backend_config or {}
-            self._backend = FilesystemFeedbackBackend(
-                data_dir=backend_config.get("data_dir", "feedback_data")
-            )
+            self._backend = FilesystemFeedbackBackend(data_dir=backend_config.get("data_dir", "feedback_data"))
         elif backend == "redis":
             backend_config = backend_config or {}
             self._backend = RedisFeedbackBackend(
@@ -147,12 +145,7 @@ class FeedbackManager:
             "Created feedback request: %s - %s",
             feedback_id,
             prompt,
-            extra={
-                "feedback_id": feedback_id,
-                "task_id": task_id,
-                "session_id": session_id,
-                "timeout": timeout
-            }
+            extra={"feedback_id": feedback_id, "task_id": task_id, "session_id": session_id, "timeout": timeout},
         )
 
         # Call handler: on_request_created (before polling)
@@ -224,11 +217,7 @@ class FeedbackManager:
         # Get request
         request = self._backend.get_request(feedback_id)
         if not request:
-            logger.warning(
-                "Request %s not found",
-                feedback_id,
-                extra={"feedback_id": feedback_id}
-            )
+            logger.warning("Request %s not found", feedback_id, extra={"feedback_id": feedback_id})
             return False
 
         # Store response
@@ -244,11 +233,7 @@ class FeedbackManager:
         # Publish notification
         self._backend.publish(feedback_id)
 
-        logger.info(
-            "Feedback provided for %s",
-            feedback_id,
-            extra={"feedback_id": feedback_id}
-        )
+        logger.info("Feedback provided for %s", feedback_id, extra={"feedback_id": feedback_id})
         return True
 
     def _write_to_channel_if_needed(
@@ -279,31 +264,20 @@ class FeedbackManager:
                 self.channel_manager.set(request.channel_key, response.custom_data)
 
             # Also write full response object to {channel_key}.__feedback_response__
-            self.channel_manager.set(
-                f"{request.channel_key}.__feedback_response__",
-                response.to_dict()
-            )
+            self.channel_manager.set(f"{request.channel_key}.__feedback_response__", response.to_dict())
 
             logger.info(
                 "Wrote feedback to channel key: %s",
                 request.channel_key,
-                extra={
-                    "feedback_id": request.feedback_id,
-                    "channel_key": request.channel_key
-                }
+                extra={"feedback_id": request.feedback_id, "channel_key": request.channel_key},
             )
         except Exception as e:
             logger.error(
-                "Failed to write to channel: %s",
-                str(e),
-                extra={"feedback_id": request.feedback_id, "error": str(e)}
+                "Failed to write to channel: %s", str(e), extra={"feedback_id": request.feedback_id, "error": str(e)}
             )
             # Don't fail the entire operation if channel write fails
 
-    def list_pending_requests(
-        self,
-        session_id: Optional[str] = None
-    ) -> list[FeedbackRequest]:
+    def list_pending_requests(self, session_id: Optional[str] = None) -> list[FeedbackRequest]:
         """List pending feedback requests.
 
         Args:
@@ -314,11 +288,7 @@ class FeedbackManager:
         """
         return self._backend.list_pending_requests(session_id)
 
-    def list_requests(
-        self,
-        session_id: Optional[str] = None,
-        n_recent: int = 100
-    ) -> list[FeedbackRequest]:
+    def list_requests(self, session_id: Optional[str] = None, n_recent: int = 100) -> list[FeedbackRequest]:
         """List recent feedback requests (all statuses).
 
         Args:
@@ -352,13 +322,23 @@ class FeedbackManager:
         """
         return self._backend.get_response(feedback_id)
 
-    def update_request(self, request: FeedbackRequest) -> None:
-        """Update feedback request in backend.
+    def store_request(self, request: FeedbackRequest) -> None:
+        """Store or update a feedback request in backend.
+
+        Used for both creating new requests and updating existing request status.
 
         Args:
-            request: FeedbackRequest to update
+            request: FeedbackRequest to store or update
         """
         self._backend.store_request(request)
+
+    def store_response(self, response: FeedbackResponse) -> None:
+        """Store a feedback response in backend.
+
+        Args:
+            response: FeedbackResponse to store
+        """
+        self._backend.store_response(response)
 
     def _poll_for_response(
         self,
@@ -421,6 +401,7 @@ class FeedbackManager:
             pass
 
         return None
+
 
 @staticmethod
 def _generate_token(length: int = 16) -> str:

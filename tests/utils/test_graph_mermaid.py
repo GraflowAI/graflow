@@ -36,20 +36,11 @@ def test_draw_mermaid_nested_parallel_structure() -> None:
 
     lines = {line.strip() for line in mermaid.splitlines() if line.strip()}
 
-    assert any(
-        line.startswith("fetch") and f"--> {parallel_group_id}" in line
-        for line in lines
-    ), mermaid
+    assert any(line.startswith("fetch") and f"--> {parallel_group_id}" in line for line in lines), mermaid
 
-    assert any(
-        line.startswith(parallel_group_id) and "-->" in line and "store" in line
-        for line in lines
-    ), mermaid
+    assert any(line.startswith(parallel_group_id) and "-->" in line and "store" in line for line in lines), mermaid
 
-    assert any(
-        line.startswith("transform_a") and "-->" in line and "subtask_a" in line
-        for line in lines
-    ), mermaid
+    assert any(line.startswith("transform_a") and "-->" in line and "subtask_a" in line for line in lines), mermaid
 
     assert f"{parallel_group_id} --> transform_a;" not in lines
     assert f"{parallel_group_id} --> transform_b;" not in lines

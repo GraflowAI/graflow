@@ -23,18 +23,18 @@ class TestExtractRedisConfig:
         # Mock Redis client
         mock_client = Mock()
         mock_client.connection_pool.connection_kwargs = {
-            'host': 'localhost',
-            'port': 6379,
-            'db': 0,
+            "host": "localhost",
+            "port": 6379,
+            "db": 0,
         }
         mock_client.decode_responses = False
 
         config = extract_redis_config(mock_client)
 
-        assert config['host'] == 'localhost'
-        assert config['port'] == 6379
-        assert config['db'] == 0
-        assert config['decode_responses'] is False
+        assert config["host"] == "localhost"
+        assert config["port"] == 6379
+        assert config["db"] == 0
+        assert config["decode_responses"] is False
 
     def test_config_with_password(self) -> None:
         """Test extraction includes password when present."""
@@ -43,17 +43,17 @@ class TestExtractRedisConfig:
 
         mock_client = Mock()
         mock_client.connection_pool.connection_kwargs = {
-            'host': 'localhost',
-            'port': 6379,
-            'db': 1,
-            'password': 'secret123',
-            'decode_responses': True,
+            "host": "localhost",
+            "port": 6379,
+            "db": 1,
+            "password": "secret123",
+            "decode_responses": True,
         }
 
         config = extract_redis_config(mock_client)
 
-        assert config['password'] == 'secret123'
-        assert config['decode_responses'] is True
+        assert config["password"] == "secret123"
+        assert config["decode_responses"] is True
 
     def test_config_with_username(self) -> None:
         """Test extraction includes username when present."""
@@ -62,18 +62,18 @@ class TestExtractRedisConfig:
 
         mock_client = Mock()
         mock_client.connection_pool.connection_kwargs = {
-            'host': 'localhost',
-            'port': 6379,
-            'db': 0,
-            'username': 'myuser',
-            'password': 'mypass',
+            "host": "localhost",
+            "port": 6379,
+            "db": 0,
+            "username": "myuser",
+            "password": "mypass",
         }
         mock_client.decode_responses = False
 
         config = extract_redis_config(mock_client)
 
-        assert config['username'] == 'myuser'
-        assert config['password'] == 'mypass'
+        assert config["username"] == "myuser"
+        assert config["password"] == "mypass"
 
     def test_config_with_ssl(self) -> None:
         """Test extraction includes SSL parameters."""
@@ -82,16 +82,16 @@ class TestExtractRedisConfig:
 
         mock_client = Mock()
         mock_client.connection_pool.connection_kwargs = {
-            'host': 'secure.redis.com',
-            'port': 6380,
-            'db': 0,
-            'ssl': True,
+            "host": "secure.redis.com",
+            "port": 6380,
+            "db": 0,
+            "ssl": True,
         }
         mock_client.decode_responses = False
 
         config = extract_redis_config(mock_client)
 
-        assert config['ssl'] is True
+        assert config["ssl"] is True
 
     def test_config_with_socket_timeout(self) -> None:
         """Test extraction includes socket timeout."""
@@ -100,16 +100,16 @@ class TestExtractRedisConfig:
 
         mock_client = Mock()
         mock_client.connection_pool.connection_kwargs = {
-            'host': 'localhost',
-            'port': 6379,
-            'db': 0,
-            'socket_timeout': 5.0,
+            "host": "localhost",
+            "port": 6379,
+            "db": 0,
+            "socket_timeout": 5.0,
         }
         mock_client.decode_responses = False
 
         config = extract_redis_config(mock_client)
 
-        assert config['socket_timeout'] == 5.0
+        assert config["socket_timeout"] == 5.0
 
     def test_omits_none_password(self) -> None:
         """Test that None password is not included in config."""
@@ -118,22 +118,22 @@ class TestExtractRedisConfig:
 
         mock_client = Mock()
         mock_client.connection_pool.connection_kwargs = {
-            'host': 'localhost',
-            'port': 6379,
-            'db': 0,
-            'password': None,
+            "host": "localhost",
+            "port": 6379,
+            "db": 0,
+            "password": None,
         }
         mock_client.decode_responses = False
 
         config = extract_redis_config(mock_client)
 
-        assert 'password' not in config
+        assert "password" not in config
 
     def test_redis_not_available(self) -> None:
         """Test error when Redis is not installed."""
         if REDIS_AVAILABLE:
             # Simulate unavailable Redis
-            with patch('graflow.utils.redis_utils.REDIS_AVAILABLE', False):
+            with patch("graflow.utils.redis_utils.REDIS_AVAILABLE", False):
                 with pytest.raises(ImportError, match="Redis package is not available"):
                     extract_redis_config(Mock())
 
@@ -149,17 +149,17 @@ class TestCreateRedisClient:
         from redis import Redis
 
         config = {
-            'host': 'localhost',
-            'port': 6379,
-            'db': 0,
-            'decode_responses': False,
+            "host": "localhost",
+            "port": 6379,
+            "db": 0,
+            "decode_responses": False,
         }
 
-        with patch.object(Redis, '__init__', return_value=None) as mock_init:
-            client = create_redis_client(config)
+        with patch.object(Redis, "__init__", return_value=None) as mock_init:
+            _client = create_redis_client(config)
 
             mock_init.assert_called_once_with(
-                host='localhost',
+                host="localhost",
                 port=6379,
                 db=0,
                 decode_responses=False,
@@ -173,22 +173,22 @@ class TestCreateRedisClient:
         from redis import Redis
 
         config = {
-            'host': 'localhost',
-            'port': 6379,
-            'db': 1,
-            'password': 'secret',
-            'decode_responses': True,
+            "host": "localhost",
+            "port": 6379,
+            "db": 1,
+            "password": "secret",
+            "decode_responses": True,
         }
 
-        with patch.object(Redis, '__init__', return_value=None) as mock_init:
-            client = create_redis_client(config)
+        with patch.object(Redis, "__init__", return_value=None) as mock_init:
+            create_redis_client(config)
 
             mock_init.assert_called_once_with(
-                host='localhost',
+                host="localhost",
                 port=6379,
                 db=1,
                 decode_responses=True,
-                password='secret',
+                password="secret",
             )
 
     def test_client_with_all_options(self) -> None:
@@ -199,26 +199,26 @@ class TestCreateRedisClient:
         from redis import Redis
 
         config = {
-            'host': 'redis.example.com',
-            'port': 6380,
-            'db': 2,
-            'decode_responses': True,
-            'password': 'secret',
-            'username': 'user',
-            'socket_timeout': 10.0,
-            'ssl': True,
+            "host": "redis.example.com",
+            "port": 6380,
+            "db": 2,
+            "decode_responses": True,
+            "password": "secret",
+            "username": "user",
+            "socket_timeout": 10.0,
+            "ssl": True,
         }
 
-        with patch.object(Redis, '__init__', return_value=None) as mock_init:
-            client = create_redis_client(config)
+        with patch.object(Redis, "__init__", return_value=None) as mock_init:
+            create_redis_client(config)
 
             mock_init.assert_called_once_with(
-                host='redis.example.com',
+                host="redis.example.com",
                 port=6380,
                 db=2,
                 decode_responses=True,
-                password='secret',
-                username='user',
+                password="secret",
+                username="user",
                 socket_timeout=10.0,
                 ssl=True,
             )
@@ -232,11 +232,11 @@ class TestCreateRedisClient:
 
         config = {}  # Empty config
 
-        with patch.object(Redis, '__init__', return_value=None) as mock_init:
-            client = create_redis_client(config)
+        with patch.object(Redis, "__init__", return_value=None) as mock_init:
+            create_redis_client(config)
 
             mock_init.assert_called_once_with(
-                host='localhost',
+                host="localhost",
                 port=6379,
                 db=0,
                 decode_responses=False,
@@ -252,7 +252,7 @@ class TestCreateRedisClient:
         mock_client = Mock()
         mock_client.__class__ = Redis  # type: ignore # Make isinstance check pass
 
-        config = {'redis_client': mock_client}
+        config = {"redis_client": mock_client}
 
         result = create_redis_client(config)
 
@@ -264,7 +264,7 @@ class TestCreateRedisClient:
         if not REDIS_AVAILABLE:
             pytest.skip("Redis not available")
 
-        config = {'redis_client': "not_a_redis_client"}
+        config = {"redis_client": "not_a_redis_client"}
 
         with pytest.raises(AssertionError, match="Expected Redis instance"):
             create_redis_client(config)
@@ -273,7 +273,7 @@ class TestCreateRedisClient:
         """Test error when Redis is not installed."""
         if REDIS_AVAILABLE:
             # Simulate unavailable Redis
-            with patch('graflow.utils.redis_utils.REDIS_AVAILABLE', False):
+            with patch("graflow.utils.redis_utils.REDIS_AVAILABLE", False):
                 with pytest.raises(ImportError, match="Redis package is not available"):
                     create_redis_client({})
 
@@ -287,33 +287,34 @@ class TestEnsureRedisConnectionParams:
             pytest.skip("Redis not available")
 
         from redis import Redis
+
         mock_client = Mock()
         mock_client.__class__ = Redis  # type: ignore # Make isinstance check pass
         mock_client.connection_pool.connection_kwargs = {
-            'host': 'redis.example.com',
-            'port': 6380,
-            'db': 2,
-            'password': 'mypass',
-            'decode_responses': True,
+            "host": "redis.example.com",
+            "port": 6380,
+            "db": 2,
+            "password": "mypass",
+            "decode_responses": True,
         }
 
         config = {
-            'redis_client': mock_client,
-            'key_prefix': 'graflow',
+            "redis_client": mock_client,
+            "key_prefix": "graflow",
         }
 
         # Ensure connection params
         ensure_redis_connection_params(config)
 
         # Should contain both redis_client and extracted params
-        assert 'redis_client' in config  # Still present
-        assert config['redis_client'] is mock_client
-        assert config['host'] == 'redis.example.com'
-        assert config['port'] == 6380
-        assert config['db'] == 2
-        assert config['password'] == 'mypass'
-        assert config['decode_responses'] is True
-        assert config['key_prefix'] == 'graflow'
+        assert "redis_client" in config  # Still present
+        assert config["redis_client"] is mock_client
+        assert config["host"] == "redis.example.com"
+        assert config["port"] == 6380
+        assert config["db"] == 2
+        assert config["password"] == "mypass"
+        assert config["decode_responses"] is True
+        assert config["key_prefix"] == "graflow"
 
     def test_does_not_overwrite_existing_params(self) -> None:
         """Test that existing params are not overwritten."""
@@ -321,35 +322,36 @@ class TestEnsureRedisConnectionParams:
             pytest.skip("Redis not available")
 
         from redis import Redis
+
         mock_client = Mock()
         mock_client.__class__ = Redis  # type: ignore # Make isinstance check pass
         mock_client.connection_pool.connection_kwargs = {
-            'host': 'redis.example.com',
-            'port': 6380,
-            'db': 2,
-            'decode_responses': True,
+            "host": "redis.example.com",
+            "port": 6380,
+            "db": 2,
+            "decode_responses": True,
         }
 
         config = {
-            'redis_client': mock_client,
-            'host': 'custom.host.com',  # Already present - should not be overwritten
-            'key_prefix': 'graflow',
+            "redis_client": mock_client,
+            "host": "custom.host.com",  # Already present - should not be overwritten
+            "key_prefix": "graflow",
         }
 
         ensure_redis_connection_params(config)
 
         # Should keep custom host
-        assert config['host'] == 'custom.host.com'
+        assert config["host"] == "custom.host.com"
         # But add other params
-        assert config['port'] == 6380
-        assert config['db'] == 2
+        assert config["port"] == 6380
+        assert config["db"] == 2
 
     def test_no_redis_client_does_nothing(self) -> None:
         """Test that function does nothing if redis_client not present."""
         config = {
-            'host': 'localhost',
-            'port': 6379,
-            'key_prefix': 'test',
+            "host": "localhost",
+            "port": 6379,
+            "key_prefix": "test",
         }
         original_config = config.copy()
 
@@ -363,8 +365,8 @@ class TestEnsureRedisConnectionParams:
             pytest.skip("Redis not available")
 
         config = {
-            'redis_client': "not_a_redis_client",  # Invalid type
-            'key_prefix': 'test',
+            "redis_client": "not_a_redis_client",  # Invalid type
+            "key_prefix": "test",
         }
 
         with pytest.raises(AssertionError, match="Expected Redis instance"):
@@ -376,12 +378,13 @@ class TestEnsureRedisConnectionParams:
             pytest.skip("Redis not available")
 
         from redis import Redis
+
         # Mock client that will fail extraction
         mock_client = Mock()
         mock_client.__class__ = Redis  # type: ignore # Make isinstance check pass
         mock_client.connection_pool.connection_kwargs = None  # Will cause error
 
-        config = {'redis_client': mock_client}
+        config = {"redis_client": mock_client}
 
         with pytest.raises(ValueError, match="Failed to extract Redis connection parameters"):
             ensure_redis_connection_params(config)
@@ -399,10 +402,10 @@ class TestRoundTrip:
 
         # Create a real Redis client (won't actually connect)
         original_client = Redis(
-            host='redis.example.com',
+            host="redis.example.com",
             port=6380,
             db=2,
-            password='secret',
+            password="secret",
             decode_responses=True,
         )
 
@@ -410,14 +413,14 @@ class TestRoundTrip:
         config = extract_redis_config(original_client)
 
         # Recreate client
-        with patch.object(Redis, '__init__', return_value=None) as mock_init:
-            new_client = create_redis_client(config)
+        with patch.object(Redis, "__init__", return_value=None) as mock_init:
+            create_redis_client(config)
 
             # Verify same parameters used
             mock_init.assert_called_once_with(
-                host='redis.example.com',
+                host="redis.example.com",
                 port=6380,
                 db=2,
                 decode_responses=True,
-                password='secret',
+                password="secret",
             )

@@ -20,11 +20,7 @@ class MockLLMAgent(LLMAgent):
         self._name = name
 
     def run(self, input_text: str, **kwargs):
-        return {
-            "output": f"Mock response to: {input_text}",
-            "steps": [],
-            "metadata": {}
-        }
+        return {"output": f"Mock response to: {input_text}", "steps": [], "metadata": {}}
 
     def stream(self, input_text: str, **kwargs):
         yield f"Mock response to: {input_text}"
@@ -48,10 +44,7 @@ class TestLLMClientInjection:
         # Create LLMClient and inject
         graph = TaskGraph()
         llm_client = LLMClient(model="gpt-4o-mini")
-        context = ExecutionContext.create(
-            graph=graph,
-            llm_client=llm_client
-        )
+        context = ExecutionContext.create(graph=graph, llm_client=llm_client)
 
         # Set execution context
         test_task.set_execution_context(context)
@@ -75,10 +68,7 @@ class TestLLMClientInjection:
         # Create context with LLMClient
         graph = TaskGraph()
         llm_client = LLMClient(model="gpt-4o-mini")
-        context = ExecutionContext.create(
-            graph=graph,
-            llm_client=llm_client
-        )
+        context = ExecutionContext.create(graph=graph, llm_client=llm_client)
 
         # Set execution context
         task_a.set_execution_context(context)
@@ -104,7 +94,7 @@ class TestLLMClientInjection:
         graph = TaskGraph()
         context = ExecutionContext.create(
             graph=graph,
-            llm_client=custom_client  # Direct injection
+            llm_client=custom_client,  # Direct injection
         )
 
         # Set execution context
@@ -117,6 +107,7 @@ class TestLLMClientInjection:
 
     def test_inject_llm_client_auto_creates_default(self):
         """Test that LLMClient is auto-created with defaults if not set."""
+
         @task(inject_llm_client=True)
         def test_task(llm_client: LLMClient) -> str:
             # Verify LLMClient is auto-created
@@ -143,6 +134,7 @@ class TestLLMAgentInjection:
 
     def test_inject_llm_agent_basic(self):
         """Test basic LLMAgent injection."""
+
         @task(inject_llm_agent="test_agent")
         def test_task(llm_agent: LLMAgent) -> dict:
             return llm_agent.run("Hello")
@@ -162,6 +154,7 @@ class TestLLMAgentInjection:
 
     def test_inject_llm_agent_not_registered_raises_error(self):
         """Test that injection fails if agent not registered."""
+
         @task(inject_llm_agent="missing_agent")
         def test_task(llm_agent: LLMAgent) -> str:
             return "Should not reach here"
@@ -261,10 +254,7 @@ class TestTaskExecutionContextLLMAccessors:
         # Create context with LLMClient
         graph = TaskGraph()
         llm_client = LLMClient(model="gpt-4o-mini")
-        context = ExecutionContext.create(
-            graph=graph,
-            llm_client=llm_client
-        )
+        context = ExecutionContext.create(graph=graph, llm_client=llm_client)
 
         # Set execution context
         test_task.set_execution_context(context)
@@ -288,10 +278,7 @@ class TestTaskExecutionContextLLMAccessors:
         # Create context with LLMClient
         graph = TaskGraph()
         llm_client = LLMClient(model="gpt-4o-mini")
-        context = ExecutionContext.create(
-            graph=graph,
-            llm_client=llm_client
-        )
+        context = ExecutionContext.create(graph=graph, llm_client=llm_client)
 
         # Set execution context
         task_a.set_execution_context(context)
@@ -304,6 +291,7 @@ class TestTaskExecutionContextLLMAccessors:
 
     def test_context_get_llm_agent_accessor(self):
         """Test accessing LLMAgent through TaskExecutionContext.get_llm_agent()."""
+
         @task(inject_context=True)
         def test_task(context: TaskExecutionContext) -> dict:
             # Access agent through context
@@ -325,6 +313,7 @@ class TestTaskExecutionContextLLMAccessors:
 
     def test_context_get_llm_agent_not_registered_raises_error(self):
         """Test context.get_llm_agent() raises KeyError for unregistered agent."""
+
         @task(inject_context=True)
         def test_task(context: TaskExecutionContext) -> None:
             # Try to access non-existent agent
@@ -351,18 +340,12 @@ class TestTaskExecutionContextLLMAccessors:
             llm = context.llm_client
             agent = context.get_llm_agent("test_agent")
 
-            return {
-                "model": llm.model,
-                "agent_response": agent.run("test")["output"]
-            }
+            return {"model": llm.model, "agent_response": agent.run("test")["output"]}
 
         # Create context with both LLMClient and agent
         graph = TaskGraph()
         llm_client = LLMClient(model="gpt-4o-mini")
-        context = ExecutionContext.create(
-            graph=graph,
-            llm_client=llm_client
-        )
+        context = ExecutionContext.create(graph=graph, llm_client=llm_client)
         agent = MockLLMAgent(name="test_agent")
         context.register_llm_agent("test_agent", agent)
 
@@ -385,18 +368,12 @@ class TestMultipleInjectionTypes:
         @task(inject_llm_client=True, inject_llm_agent="test_agent")
         def test_task(llm_client: LLMClient, llm_agent: LLMAgent) -> dict[str, str]:
             # Both should be injected as named arguments
-            return {
-                "model": llm_client.model,
-                "agent_name": llm_agent.name
-            }
+            return {"model": llm_client.model, "agent_name": llm_agent.name}
 
         # Create context with both client and agent
         graph = TaskGraph()
         llm_client = LLMClient(model="gpt-4o-mini")
-        context = ExecutionContext.create(
-            graph=graph,
-            llm_client=llm_client
-        )
+        context = ExecutionContext.create(graph=graph, llm_client=llm_client)
         agent = MockLLMAgent(name="test_agent")
         context.register_llm_agent("test_agent", agent)
 
@@ -415,18 +392,12 @@ class TestMultipleInjectionTypes:
         @task(inject_context=True, inject_llm_client=True)
         def test_task(context: TaskExecutionContext, llm_client: LLMClient) -> dict[str, str | bool]:
             # Context is positional, llm_client is named argument
-            return {
-                "has_context": context is not None,
-                "model": llm_client.model
-            }
+            return {"has_context": context is not None, "model": llm_client.model}
 
         # Create context with client
         graph = TaskGraph()
         llm_client = LLMClient(model="gpt-4o-mini")
-        context = ExecutionContext.create(
-            graph=graph,
-            llm_client=llm_client
-        )
+        context = ExecutionContext.create(graph=graph, llm_client=llm_client)
 
         # Set execution context
         test_task.set_execution_context(context)
@@ -441,21 +412,20 @@ class TestMultipleInjectionTypes:
         from graflow.llm import LLMClient
 
         @task(inject_context=True, inject_llm_client=True, inject_llm_agent="test_agent")
-        def test_task(context: TaskExecutionContext, llm_client: LLMClient, llm_agent: LLMAgent) -> dict[str, str | bool]:
+        def test_task(
+            context: TaskExecutionContext, llm_client: LLMClient, llm_agent: LLMAgent
+        ) -> dict[str, str | bool]:
             # All three should be injected
             return {
                 "has_context": context is not None,
                 "model": llm_client.model,
-                "agent_response": llm_agent.run("Hello")["output"]
+                "agent_response": llm_agent.run("Hello")["output"],
             }
 
         # Create context with client and agent
         graph = TaskGraph()
         llm_client = LLMClient(model="gpt-4o-mini")
-        context = ExecutionContext.create(
-            graph=graph,
-            llm_client=llm_client
-        )
+        context = ExecutionContext.create(graph=graph, llm_client=llm_client)
         agent = MockLLMAgent(name="test_agent")
         context.register_llm_agent("test_agent", agent)
 

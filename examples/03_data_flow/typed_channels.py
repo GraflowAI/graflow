@@ -56,12 +56,14 @@ from graflow.core.workflow import workflow
 # Message Schema Definitions
 # ============================================================================
 
+
 class UserProfile(TypedDict):
     """User profile information.
 
     This schema defines the structure of user profile messages.
     TypedDict provides type hints and IDE support.
     """
+
     user_id: str
     name: str
     email: str
@@ -73,6 +75,7 @@ class UserMetrics(TypedDict):
 
     This schema defines user engagement and activity data.
     """
+
     user_id: str
     login_count: int
     last_active: float
@@ -82,6 +85,7 @@ class UserMetrics(TypedDict):
 # ============================================================================
 # Workflow Tasks
 # ============================================================================
+
 
 def main():
     """Demonstrate typed channel operations."""
@@ -104,7 +108,7 @@ def main():
                 "user_id": "user_123",
                 "name": "Alice",
                 "email": "alice@example.com",
-                "age": 30
+                "age": 30,
             }
 
             # Store the typed message
@@ -131,7 +135,7 @@ def main():
                 "user_id": user_profile["user_id"],
                 "login_count": 42,
                 "last_active": time.time(),
-                "premium": True
+                "premium": True,
             }
 
             metrics_channel.set("user_metrics", user_metrics)

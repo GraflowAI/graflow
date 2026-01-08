@@ -6,7 +6,6 @@ Tests Phase 2 scenarios without requiring actual Worker processes:
 - Dynamic task generation with nested groups
 """
 
-
 from graflow.coordination.graph_store import GraphStore
 from graflow.core.context import ExecutionContext
 from graflow.core.decorators import task
@@ -30,10 +29,7 @@ def test_graph_hash_generation_for_nested_groups(clean_redis):
     graph.add_node(simple_task)
 
     # Initialize GraphStore
-    graph_store = GraphStore(
-        redis_client=clean_redis,
-        key_prefix="test_nested"
-    )
+    graph_store = GraphStore(redis_client=clean_redis, key_prefix="test_nested")
 
     # Save graph and get hash
     hash1 = graph_store.save(graph)
@@ -46,13 +42,16 @@ def test_graph_hash_generation_for_nested_groups(clean_redis):
 
     # Different graph should return different hash
     graph2 = TaskGraph()
+
     @task
     def different_task():
         return "different"
+
     graph2.add_node(different_task)
 
     hash3 = graph_store.save(graph2)
     assert hash3 != hash1
+
 
 def test_execution_context_graph_hash_propagation(clean_redis):
     """
@@ -62,10 +61,7 @@ def test_execution_context_graph_hash_propagation(clean_redis):
     should be set in the ExecutionContext.
     """
     graph = TaskGraph()
-    graph_store = GraphStore(
-        redis_client=clean_redis,
-        key_prefix="test_propagation"
-    )
+    graph_store = GraphStore(redis_client=clean_redis, key_prefix="test_propagation")
 
     # Create context
     context = ExecutionContext(graph)
@@ -75,12 +71,13 @@ def test_execution_context_graph_hash_propagation(clean_redis):
     context.graph_hash = graph_hash
 
     # Verify hash is stored
-    assert hasattr(context, 'graph_hash')
+    assert hasattr(context, "graph_hash")
     assert context.graph_hash == graph_hash
 
     # Load graph back using hash
     loaded_graph = graph_store.load(graph_hash)
     assert loaded_graph is not None
+
 
 def test_next_task_adds_to_local_graph():
     """
@@ -113,6 +110,7 @@ def test_next_task_adds_to_local_graph():
     assert "dynamic_task" in graph.nodes
     assert len(graph.nodes) == 2
 
+
 def test_nested_group_creates_separate_graph_snapshot(clean_redis):
     """
     Test: Nested ParallelGroup creates a separate graph snapshot.
@@ -129,10 +127,7 @@ def test_nested_group_creates_separate_graph_snapshot(clean_redis):
 
     outer_graph.add_node(outer_task)
 
-    graph_store = GraphStore(
-        redis_client=clean_redis,
-        key_prefix="test_snapshot"
-    )
+    graph_store = GraphStore(redis_client=clean_redis, key_prefix="test_snapshot")
 
     # Save outer graph
     outer_hash = graph_store.save(outer_graph)
@@ -159,6 +154,7 @@ def test_nested_group_creates_separate_graph_snapshot(clean_redis):
     assert "outer_task" in loaded_outer.nodes
     assert "inner_task" in loaded_inner.nodes
 
+
 def test_sliding_ttl_for_long_running_workflows(clean_redis):
     """
     Test: Sliding TTL extends graph lifetime on access.
@@ -180,7 +176,7 @@ def test_sliding_ttl_for_long_running_workflows(clean_redis):
     graph_store = GraphStore(
         redis_client=clean_redis,
         key_prefix="test_ttl",
-        ttl=2  # 2 seconds for testing
+        ttl=2,  # 2 seconds for testing
     )
 
     # Save graph
@@ -200,6 +196,7 @@ def test_sliding_ttl_for_long_running_workflows(clean_redis):
     loaded_again = graph_store.load(graph_hash)
     assert loaded_again is not None
 
+
 def test_lru_cache_prevents_memory_leak(clean_redis):
     """
     Test: LRU cache limits memory usage for long-running Workers.
@@ -210,7 +207,7 @@ def test_lru_cache_prevents_memory_leak(clean_redis):
     graph_store = GraphStore(
         redis_client=clean_redis,
         key_prefix="test_lru",
-        cache_size=3  # Small cache for testing
+        cache_size=3,  # Small cache for testing
     )
 
     # Create and save 5 different graphs
@@ -220,7 +217,7 @@ def test_lru_cache_prevents_memory_leak(clean_redis):
 
         # Create unique task for each graph
         @task(f"task_{i}")
-        def unique_task():
+        def unique_task(i=i):
             return f"result_{i}"
 
         graph.add_node(unique_task)

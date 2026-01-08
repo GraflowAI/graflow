@@ -15,6 +15,7 @@ class TestInstanceCreation:
 
     def test_multiple_instances_with_unique_task_ids(self):
         """Test that multiple instances can be created with unique task_ids."""
+
         @task
         def process_data(value: int) -> int:
             return value * 2
@@ -34,6 +35,7 @@ class TestInstanceCreation:
 
     def test_instance_creation_with_only_task_id(self):
         """Test creating instance with only task_id, no bound parameters."""
+
         @task
         def process_data(value: int) -> int:
             return value * 2
@@ -45,6 +47,7 @@ class TestInstanceCreation:
 
     def test_auto_generated_task_id(self):
         """Test auto-generation of task_id when not specified."""
+
         @task
         def process_data(value: int) -> int:
             return value * 2
@@ -67,6 +70,7 @@ class TestInstanceCreation:
 
     def test_positional_args_not_supported(self):
         """Test that positional arguments raise TypeError."""
+
         @task
         def process_data(value: int) -> int:
             return value * 2
@@ -77,6 +81,7 @@ class TestInstanceCreation:
 
     def test_instance_creation_preserves_task_attributes(self):
         """Test that new instances preserve task configuration."""
+
         @task(inject_context=True)
         def process_data(ctx, value: int) -> int:
             return value * 2
@@ -158,10 +163,7 @@ class TestParameterResolution:
 
         @task(inject_context=True)
         def process(ctx: TaskExecutionContext, value: int) -> dict:
-            return {
-                "value": value,
-                "has_context": ctx is not None
-            }
+            return {"value": value, "has_context": ctx is not None}
 
         with workflow("test") as wf:
             # Create task with bound parameter (overrides channel)
@@ -183,6 +185,7 @@ class TestRegistration:
     def test_immediate_registration_with_context(self):
         """Test that tasks are registered immediately when context exists."""
         with workflow("test") as wf:
+
             @task
             def process_data(value: int) -> int:
                 return value * 2
@@ -196,6 +199,7 @@ class TestRegistration:
 
     def test_lazy_registration_without_context(self):
         """Test lazy registration when no context exists."""
+
         @task
         def process_data(value: int) -> int:
             return value * 2
@@ -208,6 +212,7 @@ class TestRegistration:
 
         # Register when added to workflow via operator
         with workflow("test") as wf:
+
             @task
             def dummy() -> None:
                 pass
@@ -223,6 +228,7 @@ class TestSerialization:
 
     def test_bound_kwargs_stored_correctly(self):
         """Test that bound kwargs are stored in the instance."""
+
         @task
         def process_data(value: int, multiplier: int = 2) -> int:
             return value * multiplier
@@ -231,12 +237,13 @@ class TestSerialization:
         task_instance = process_data(task_id="test", value=10, multiplier=3)
 
         # Verify bound kwargs are stored
-        assert hasattr(task_instance, '_bound_kwargs')
+        assert hasattr(task_instance, "_bound_kwargs")
         assert task_instance._bound_kwargs == {"value": 10, "multiplier": 3}
         assert task_instance.task_id == "test"
 
     def test_bound_kwargs_included_in_state(self):
         """Test that bound kwargs are included in __getstate__."""
+
         @task
         def process_data(value: int) -> int:
             return value * 2
@@ -247,8 +254,8 @@ class TestSerialization:
         state = task_instance.__getstate__()
 
         # Verify bound kwargs are in state
-        assert '_bound_kwargs' in state
-        assert state['_bound_kwargs'] == {"value": 10}
+        assert "_bound_kwargs" in state
+        assert state["_bound_kwargs"] == {"value": 10}
 
 
 class TestEdgeCases:
@@ -256,6 +263,7 @@ class TestEdgeCases:
 
     def test_empty_bound_kwargs(self):
         """Test task with no bound parameters."""
+
         @task
         def process_data(value: int) -> int:
             return value * 2
@@ -286,6 +294,7 @@ class TestEdgeCases:
 
     def test_multiple_bound_params(self):
         """Test binding multiple parameters."""
+
         @task
         def process(a: int, b: int, c: int, d: int = 4) -> int:
             return a + b + c + d

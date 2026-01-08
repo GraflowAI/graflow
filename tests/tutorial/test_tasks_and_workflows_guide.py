@@ -354,11 +354,7 @@ class TestLevel4PassingParameters:
             _task_inst = calculate(task_id="calc", base=10)
 
             # Specify start node since task instance creates a node
-            _, ctx = wf.execute(
-                start_node="calc",
-                ret_context=True,
-                initial_channel={"multiplier": 3, "offset": 5}
-            )
+            _, ctx = wf.execute(start_node="calc", ret_context=True, initial_channel={"multiplier": 3, "offset": 5})
 
             result = ctx.get_result("calc")
 
@@ -935,9 +931,13 @@ class TestIntegrationScenarios:
                 return data
 
             # Build a linear pipeline for one source
-            extract(task_id="extract_api", source="api") >> transform(  # type: ignore
-                task_id="transform_api", source="api"
-            ) >> load(task_id="load_api", source="api")  # type: ignore
+            (
+                extract(task_id="extract_api", source="api")
+                >> transform(  # type: ignore
+                    task_id="transform_api", source="api"
+                )
+                >> load(task_id="load_api", source="api")
+            )  # type: ignore
 
             _, ctx = wf.execute(start_node="extract_api", ret_context=True)
 

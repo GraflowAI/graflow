@@ -145,7 +145,7 @@ def scenario_2_batch_processing():
     # Simulate a batch of items to process
     items = list(range(10))
     batch_size = 3
-    batches = [items[i:i + batch_size] for i in range(0, len(items), batch_size)]
+    batches = [items[i : i + batch_size] for i in range(0, len(items), batch_size)]
 
     print(f"Processing {len(items)} items in {len(batches)} batches")
     print(f"Batch size: {batch_size}\n")
@@ -202,7 +202,7 @@ def scenario_2_batch_processing():
     print(f"\n✅ All {len(batches)} batches completed")
     print(f"Total items processed: {len(items)}")
     print(f"Total execution time: ~{elapsed:.1f}s")
-    print(f"Throughput: ~{len(items)/elapsed:.0f} items/sec")
+    print(f"Throughput: ~{len(items) / elapsed:.0f} items/sec")
 
 
 def scenario_3_heterogeneous_workflows():
@@ -212,6 +212,7 @@ def scenario_3_heterogeneous_workflows():
     def data_pipeline():
         """ETL data pipeline."""
         with workflow("etl_pipeline") as ctx:
+
             @task
             def extract():
                 print("ETL: Extracting data")
@@ -232,6 +233,7 @@ def scenario_3_heterogeneous_workflows():
     def ml_training():
         """ML model training pipeline."""
         with workflow("ml_training") as ctx:
+
             @task
             def prepare_data():
                 print("ML: Preparing training data")
@@ -252,6 +254,7 @@ def scenario_3_heterogeneous_workflows():
     def report_generation():
         """Report generation pipeline."""
         with workflow("reports") as ctx:
+
             @task
             def collect_metrics():
                 print("Reports: Collecting metrics")
@@ -270,7 +273,7 @@ def scenario_3_heterogeneous_workflows():
     threads = [
         threading.Thread(target=data_pipeline),
         threading.Thread(target=ml_training),
-        threading.Thread(target=report_generation)
+        threading.Thread(target=report_generation),
     ]
 
     start_time = time.time()

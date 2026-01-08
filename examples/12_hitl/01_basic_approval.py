@@ -17,9 +17,7 @@ from graflow.core.workflow import workflow
 
 # Configure logging to show INFO level messages from graflow.hitl
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
 )
 
 
@@ -38,11 +36,7 @@ def main():
             """Prepare deployment package."""
             print("\n[Task 1] Preparing deployment package...")
             time.sleep(0.5)
-            deployment_info = {
-                "version": "v1.2.3",
-                "environment": "production",
-                "services": ["api", "web", "worker"]
-            }
+            deployment_info = {"version": "v1.2.3", "environment": "production", "services": ["api", "web", "worker"]}
             print(f"[Task 1] Deployment ready: {deployment_info}")
             return deployment_info
 
@@ -63,13 +57,14 @@ def main():
                 pending = manager.list_pending_requests()
                 if pending:
                     from graflow.hitl.types import FeedbackResponse, FeedbackType
+
                     feedback_id = pending[0].feedback_id
                     response = FeedbackResponse(
                         feedback_id=feedback_id,
                         response_type=FeedbackType.APPROVAL,
                         approved=True,
                         reason="Deployment looks good, approved!",
-                        responded_by="human_operator"
+                        responded_by="human_operator",
                     )
                     manager.provide_feedback(feedback_id, response)
                     print("[Human] Approval provided!")
@@ -83,7 +78,7 @@ def main():
                 response = context.request_feedback(
                     feedback_type="approval",
                     prompt=f"Approve deployment {deployment_info['version']} to {deployment_info['environment']}?",
-                    timeout=5.0  # 5 second timeout for demo
+                    timeout=5.0,  # 5 second timeout for demo
                 )
 
                 if response.approved:
