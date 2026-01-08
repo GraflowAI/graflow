@@ -92,7 +92,7 @@ class TestDockerTaskHandler:
             device_requests=[device_req],
         )
 
-        assert handler.image == "python:3.11"
+        assert handler.image == PYTHON_IMAGE
         assert handler.auto_remove is False
         assert handler.environment == {"KEY": "value"}
 
