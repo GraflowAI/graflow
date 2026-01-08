@@ -23,6 +23,7 @@ def provide_feedback_after_delay(
     approved: bool = True,
     text: Optional[str] = None,
     selected: Optional[str] = None,
+    reason: Optional[str] = None,
     delay: float = 0.5,
 ):
     """Helper to provide feedback after a delay in a separate thread"""
@@ -40,6 +41,7 @@ def provide_feedback_after_delay(
                 feedback_id=feedback_id,
                 response_type=response_type,
                 approved=approved if response_type == FeedbackType.APPROVAL else None,
+                reason=reason if response_type == FeedbackType.APPROVAL else None,
                 text=text if response_type == FeedbackType.TEXT else None,
                 selected=selected if response_type == FeedbackType.SELECTION else None,
                 responded_by="test_user",
@@ -95,23 +97,7 @@ class TestBasicApproval:
 
             @task(inject_context=True)
             def request_approval(ctx: TaskExecutionContext):
-                def _provide():
-                    time.sleep(0.5)
-                    manager = ctx.execution_context.feedback_manager
-                    pending = manager.list_pending_requests()
-                    if pending:
-                        feedback_id = pending[0].feedback_id
-                        response = FeedbackResponse(
-                            feedback_id=feedback_id,
-                            response_type=FeedbackType.APPROVAL,
-                            approved=True,
-                            reason="Looks good to me!",
-                            responded_by="approver",
-                        )
-                        manager.provide_feedback(feedback_id, response)
-
-                thread = threading.Thread(target=_provide, daemon=True)
-                thread.start()
+                provide_feedback_after_delay(ctx, approved=True, reason="Looks good to me!")
 
                 response = ctx.request_feedback(feedback_type="approval", prompt="Approve deployment?", timeout=5.0)
 
