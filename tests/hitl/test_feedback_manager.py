@@ -359,11 +359,11 @@ class TestConvenienceMethods:
         thread = threading.Thread(target=request_thread)
         thread.start()
 
-        time.sleep(0.5)
+        time.sleep(1.0)
 
         # Provide approval
         manager = exec_context.feedback_manager
-        pending = manager.list_pending_requests()
+        pending = manager.list_pending_requests(session_id=exec_context.session_id)
         assert len(pending) == 1, f"Expected 1 pending request, found {len(pending)}"
 
         response = FeedbackResponse(
@@ -406,10 +406,10 @@ class TestConvenienceMethods:
         thread = threading.Thread(target=request_thread)
         thread.start()
 
-        time.sleep(0.5)
+        time.sleep(1.0)
 
         manager = exec_context.feedback_manager
-        pending = manager.list_pending_requests()
+        pending = manager.list_pending_requests(session_id=exec_context.session_id)
         assert len(pending) == 1, f"Expected 1 pending request, found {len(pending)}"
 
         response = FeedbackResponse(
@@ -451,10 +451,10 @@ class TestConvenienceMethods:
         thread = threading.Thread(target=request_thread)
         thread.start()
 
-        time.sleep(0.5)
+        time.sleep(1.0)
 
         manager = exec_context.feedback_manager
-        pending = manager.list_pending_requests()
+        pending = manager.list_pending_requests(session_id=exec_context.session_id)
         assert len(pending) == 1, f"Expected 1 pending request, found {len(pending)}"
 
         response = FeedbackResponse(
