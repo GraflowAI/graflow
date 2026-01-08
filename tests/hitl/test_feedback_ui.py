@@ -3,32 +3,36 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from graflow.api.app import create_feedback_api
+from graflow.hitl.manager import FeedbackManager
 from graflow.hitl.types import FeedbackRequest, FeedbackResponse, FeedbackType
 
 
 @pytest.fixture
-def app_with_web_ui():
+def app_with_web_ui(tmp_path: Path) -> FastAPI:
     """Create FastAPI app with Web UI enabled."""
     return create_feedback_api(
-        feedback_backend="filesystem", feedback_config={"data_dir": "test_feedback_data"}, enable_web_ui=True
+        feedback_backend="filesystem", feedback_config={"data_dir": str(tmp_path / "feedback_data")}, enable_web_ui=True
     )
 
 
 @pytest.fixture
-def client(app_with_web_ui):
+def client(app_with_web_ui: FastAPI) -> TestClient:
     """Create test client."""
     return TestClient(app_with_web_ui)
 
 
 @pytest.fixture
-def feedback_manager(app_with_web_ui):
+def feedback_manager(app_with_web_ui: FastAPI) -> FeedbackManager:
     """Get feedback manager from app state."""
-    return app_with_web_ui.state.feedback_manager
+    manager: FeedbackManager = app_with_web_ui.state.feedback_manager
+    return manager
 
 
 def create_test_request(
@@ -54,14 +58,14 @@ def create_test_request(
 class TestFeedbackUIEndpoints:
     """Test Feedback UI endpoints."""
 
-    def test_list_pending_feedback_empty(self, client):
+    def test_list_pending_feedback_empty(self, client: TestClient) -> None:
         """Test listing pending feedback when empty."""
         response = client.get("/ui/feedback/")
         assert response.status_code == 200
         assert "Pending Feedback Requests" in response.text
         assert "No pending feedback requests" in response.text
 
-    def test_list_pending_feedback_with_requests(self, client, feedback_manager):
+    def test_list_pending_feedback_with_requests(self, client: TestClient, feedback_manager: FeedbackManager) -> None:
         """Test listing pending feedback with multiple requests."""
         # Create multiple pending requests
         request1 = create_test_request(feedback_id="test-1", feedback_type="approval", prompt="Approve deployment?")
@@ -81,7 +85,7 @@ class TestFeedbackUIEndpoints:
         assert "test-1" not in response.text
         assert "test-2" not in response.text
 
-    def test_show_feedback_form_approval(self, client, feedback_manager):
+    def test_show_feedback_form_approval(self, client: TestClient, feedback_manager: FeedbackManager) -> None:
         """Test showing approval feedback form."""
         # Create pending request
         request = create_test_request(feedback_type="approval")
@@ -95,7 +99,7 @@ class TestFeedbackUIEndpoints:
         assert "Approve" in response.text
         assert "Reject" in response.text
 
-    def test_show_feedback_form_text(self, client, feedback_manager):
+    def test_show_feedback_form_text(self, client: TestClient, feedback_manager: FeedbackManager) -> None:
         """Test showing text input feedback form."""
         # Create pending request
         request = create_test_request(feedback_type="text", prompt="Enter your comment")
@@ -107,7 +111,7 @@ class TestFeedbackUIEndpoints:
         assert "Your Response" in response.text
         assert request.prompt in response.text
 
-    def test_show_feedback_form_selection(self, client, feedback_manager):
+    def test_show_feedback_form_selection(self, client: TestClient, feedback_manager: FeedbackManager) -> None:
         """Test showing selection feedback form."""
         # Create pending request
         request = create_test_request(
@@ -123,12 +127,12 @@ class TestFeedbackUIEndpoints:
         assert "option_b" in response.text
         assert "option_c" in response.text
 
-    def test_show_feedback_form_not_found(self, client):
+    def test_show_feedback_form_not_found(self, client: TestClient) -> None:
         """Test showing form for non-existent feedback."""
         response = client.get("/ui/feedback/non-existent-id")
         assert response.status_code == 404
 
-    def test_show_feedback_form_expired_redirect(self, client, feedback_manager):
+    def test_show_feedback_form_expired_redirect(self, client: TestClient, feedback_manager: FeedbackManager) -> None:
         """Test redirect to expired page for expired request."""
         # Create expired request
         request = create_test_request(feedback_type="approval")
@@ -140,7 +144,7 @@ class TestFeedbackUIEndpoints:
         assert response.status_code == 307  # Redirect
         assert f"/ui/feedback/{request.feedback_id}/expired" in response.headers["location"]
 
-    def test_submit_approval_approved(self, client, feedback_manager):
+    def test_submit_approval_approved(self, client: TestClient, feedback_manager: FeedbackManager) -> None:
         """Test submitting approval (approved)."""
         # Create pending request
         request = create_test_request(feedback_type="approval")
@@ -162,7 +166,7 @@ class TestFeedbackUIEndpoints:
         assert feedback_response.reason == "Looks good!"
         assert feedback_response.responded_by == "test@example.com"
 
-    def test_submit_approval_rejected(self, client, feedback_manager):
+    def test_submit_approval_rejected(self, client: TestClient, feedback_manager: FeedbackManager) -> None:
         """Test submitting approval (rejected)."""
         # Create pending request
         request = create_test_request(feedback_type="approval")
@@ -182,7 +186,7 @@ class TestFeedbackUIEndpoints:
         assert feedback_response.approved is False
         assert feedback_response.reason == "Not ready yet"
 
-    def test_submit_text(self, client, feedback_manager):
+    def test_submit_text(self, client: TestClient, feedback_manager: FeedbackManager) -> None:
         """Test submitting text input."""
         # Create pending request
         request = create_test_request(feedback_type="text")
@@ -199,7 +203,7 @@ class TestFeedbackUIEndpoints:
         assert feedback_response is not None
         assert feedback_response.text == "This is my response"
 
-    def test_submit_selection(self, client, feedback_manager):
+    def test_submit_selection(self, client: TestClient, feedback_manager: FeedbackManager) -> None:
         """Test submitting selection."""
         # Create pending request
         request = create_test_request(feedback_type="selection", options=["option_a", "option_b"])
@@ -216,7 +220,7 @@ class TestFeedbackUIEndpoints:
         assert feedback_response is not None
         assert feedback_response.selected == "option_b"
 
-    def test_submit_multi_selection(self, client, feedback_manager):
+    def test_submit_multi_selection(self, client: TestClient, feedback_manager: FeedbackManager) -> None:
         """Test submitting multi-selection."""
         # Create pending request
         request = create_test_request(feedback_type="multi_selection", options=["option_a", "option_b", "option_c"])
@@ -235,7 +239,7 @@ class TestFeedbackUIEndpoints:
         assert feedback_response is not None
         assert feedback_response.selected_multiple == ["option_a", "option_c"]
 
-    def test_submit_custom(self, client, feedback_manager):
+    def test_submit_custom(self, client: TestClient, feedback_manager: FeedbackManager) -> None:
         """Test submitting custom data."""
         # Create pending request
         request = create_test_request(feedback_type="custom")
@@ -254,7 +258,7 @@ class TestFeedbackUIEndpoints:
         assert feedback_response is not None
         assert feedback_response.custom_data == {"key": "value", "number": 42}
 
-    def test_submit_invalid_json(self, client, feedback_manager):
+    def test_submit_invalid_json(self, client: TestClient, feedback_manager: FeedbackManager) -> None:
         """Test submitting invalid JSON for custom type."""
         # Create pending request
         request = create_test_request(feedback_type="custom")
@@ -268,7 +272,7 @@ class TestFeedbackUIEndpoints:
         )
         assert response.status_code == 400
 
-    def test_submit_already_responded(self, client, feedback_manager):
+    def test_submit_already_responded(self, client: TestClient, feedback_manager: FeedbackManager) -> None:
         """Test submitting to already responded request."""
         # Create completed request
         request = create_test_request(feedback_type="approval")
@@ -282,7 +286,7 @@ class TestFeedbackUIEndpoints:
         assert response.status_code == 307  # Redirect
         assert f"/ui/feedback/{request.feedback_id}/expired" in response.headers["location"]
 
-    def test_show_success_page(self, client, feedback_manager):
+    def test_show_success_page(self, client: TestClient, feedback_manager: FeedbackManager) -> None:
         """Test showing success page."""
         # Create request and response
         request = create_test_request(feedback_type="approval")
@@ -306,7 +310,7 @@ class TestFeedbackUIEndpoints:
         assert "Test reason" in response.text
         assert "test@example.com" in response.text
 
-    def test_show_expired_page(self, client, feedback_manager):
+    def test_show_expired_page(self, client: TestClient, feedback_manager: FeedbackManager) -> None:
         """Test showing expired page."""
         # Create completed request
         request = create_test_request(feedback_type="approval")
@@ -319,9 +323,13 @@ class TestFeedbackUIEndpoints:
         assert "Request Expired" in response.text
         assert "completed" in response.text
 
-    def test_app_with_web_ui_disabled(self):
+    def test_app_with_web_ui_disabled(self, tmp_path: Path) -> None:
         """Test creating app with Web UI disabled."""
-        app = create_feedback_api(enable_web_ui=False)
+        app = create_feedback_api(
+            feedback_backend="filesystem",
+            feedback_config={"data_dir": str(tmp_path / "feedback_data")},
+            enable_web_ui=False,
+        )
         client = TestClient(app)
 
         # Root endpoint should not have web_ui in endpoints
@@ -338,7 +346,7 @@ class TestFeedbackUIEndpoints:
         response = client.get(f"/ui/feedback/{request.feedback_id}")
         assert response.status_code == 404
 
-    def test_root_endpoint_with_web_ui(self, client):
+    def test_root_endpoint_with_web_ui(self, client: TestClient) -> None:
         """Test root endpoint includes Web UI info."""
         response = client.get("/")
         assert response.status_code == 200
