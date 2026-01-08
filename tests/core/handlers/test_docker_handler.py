@@ -23,10 +23,10 @@ def is_docker_available():
 
 
 DOCKER_AVAILABLE = is_docker_available()
-HOST_PYTHON_MAJOR = str(sys.version_info.major)
-PYTHON_IMAGE_SLIM = f"python:{HOST_PYTHON_MAJOR}-slim"
-PYTHON_IMAGE_ALPINE = f"python:{HOST_PYTHON_MAJOR}-alpine"
-PYTHON_IMAGE = f"python:{HOST_PYTHON_MAJOR}"
+HOST_PYTHON_VERSION = f"{sys.version_info.major}.{sys.version_info.minor}"
+PYTHON_IMAGE_SLIM = f"python:{HOST_PYTHON_VERSION}-slim"
+PYTHON_IMAGE_ALPINE = f"python:{HOST_PYTHON_VERSION}-alpine"
+PYTHON_IMAGE = f"python:{HOST_PYTHON_VERSION}"
 
 
 class TestDockerTaskHandler:
