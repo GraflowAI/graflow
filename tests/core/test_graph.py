@@ -88,6 +88,16 @@ def test_a_a_b():
     }
     assert set(graph.edges) == expected_edges
 
+def test_a_a_b_duplicate_task():
+    """Test graph construction for flow: A >> A >> B."""
+    current_workflow_context()
+
+    task_a1 = Task("A")
+
+    with pytest.raises(DuplicateTaskError):
+        task_a2 = Task("A")
+        assert task_a1.task_id == task_a2.task_id, "Duplicate task IDs should match"
+
 def test_a_b_a():
     """Test graph construction for flow: A >> B >> A."""
     task_a = Task("A")
