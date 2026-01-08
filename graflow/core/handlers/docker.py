@@ -207,17 +207,22 @@ class DockerTaskHandler(TaskHandler):
             return
 
         version_part = tag.split("-", 1)[0]
-        major_str = version_part.split(".", 1)[0]
-        if not major_str.isdigit():
+        version_parts = version_part.split(".", 2)
+        major_str = version_parts[0]
+        minor_str = version_parts[1] if len(version_parts) > 1 else None
+        if not major_str.isdigit() or (minor_str is not None and not minor_str.isdigit()):
             return
 
         image_major = int(major_str)
+        image_minor = int(minor_str) if minor_str is not None else None
         host_major = sys.version_info.major
-        if image_major != host_major:
+        host_minor = sys.version_info.minor
+        if image_major != host_major or (image_minor is not None and image_minor != host_minor):
             logger.warning(
-                "[DockerTaskHandler] Python major version mismatch (host=%s, image=%s). "
-                "Unpickling may fail across major versions.",
+                "[DockerTaskHandler] Python version mismatch (host=%s.%s, image=%s). "
+                "Unpickling may fail across Python versions.",
                 host_major,
+                host_minor,
                 self.image,
             )
 
