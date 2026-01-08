@@ -86,7 +86,7 @@ jobs:
 
     - name: Run tests with coverage (Python 3.11 only)
       if: matrix.python-version == '3.11'
-      run: uv run pytest tests/ --cov=graflow --cov-report=xml --cov-report=term
+      run: uv run pytest tests/ --cov=graflow --cov-report=xml --cov-report=term-missing:skip-covered
       env:
         REDIS_HOST: localhost
         REDIS_PORT: 6379
