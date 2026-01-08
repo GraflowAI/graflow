@@ -190,18 +190,15 @@ class TestLLMAgentInjection:
             wf.register_llm_agent("analyzer", lambda ctx: mock_agent1)
             wf.register_llm_agent("summarizer", lambda ctx: mock_agent2)
 
-            @task(inject_llm_agent="analyzer")
+            @task(id="analyze", inject_llm_agent="analyzer")
             def analyze(llm_agent: LLMAgent):
                 return llm_agent.run("Analyze this")["output"]
 
-            @task(inject_llm_agent="summarizer")
+            @task(id="summarize", inject_llm_agent="summarizer")
             def summarize(llm_agent: LLMAgent):
                 return llm_agent.run("Summarize this")["output"]
 
-            analyze_task = analyze(task_id="analyze")
-            summarize_task = summarize(task_id="summarize")
-
-            analyze_task >> summarize_task  # type: ignore
+            analyze >> summarize  # type: ignore
 
             _, ctx = wf.execute(ret_context=True)
 
