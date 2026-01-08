@@ -3,6 +3,7 @@
 import base64
 import logging
 import pathlib
+import sys
 from typing import Any, Optional
 
 from cloudpickle import __version__ as cloudpickle_version
@@ -67,6 +68,7 @@ class DockerTaskHandler(TaskHandler):
         self.auto_remove = auto_remove
         self.environment = environment or {}
         self.device_requests = device_requests or []
+        self._warn_on_python_major_mismatch()
 
         # Auto-detect and mount graflow source if running from source
         self.volumes = volumes or {}
@@ -194,6 +196,30 @@ class DockerTaskHandler(TaskHandler):
         context.set_result(task_id, result)
         logger.info(f"[DockerTaskHandler] Task {task_id} completed successfully")
         return result
+
+    def _warn_on_python_major_mismatch(self) -> None:
+        """Warn when the container image Python major version differs from the host."""
+        if not self.image.startswith("python:"):
+            return
+
+        tag = self.image[len("python:") :]
+        if not tag:
+            return
+
+        version_part = tag.split("-", 1)[0]
+        major_str = version_part.split(".", 1)[0]
+        if not major_str.isdigit():
+            return
+
+        image_major = int(major_str)
+        host_major = sys.version_info.major
+        if image_major != host_major:
+            logger.warning(
+                "[DockerTaskHandler] Python major version mismatch (host=%s, image=%s). "
+                "Unpickling may fail across major versions.",
+                host_major,
+                self.image,
+            )
 
     def _serialize_task(self, task: Executable) -> str:
         """Serialize entire task object for Docker execution using cloudpickle.
