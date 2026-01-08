@@ -10,6 +10,8 @@ from typing import Optional
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from graflow.hitl.types import FeedbackType
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["feedback-ui"])
@@ -159,20 +161,20 @@ async def submit_feedback(
     }
 
     # Add type-specific fields
-    if feedback_request.feedback_type == "approval":
+    if feedback_request.feedback_type == FeedbackType.APPROVAL:
         response_data["approved"] = approved == "true" if approved else None
         response_data["reason"] = reason
 
-    elif feedback_request.feedback_type == "text":
+    elif feedback_request.feedback_type == FeedbackType.TEXT:
         response_data["text"] = text
 
-    elif feedback_request.feedback_type == "selection":
+    elif feedback_request.feedback_type == FeedbackType.SELECTION:
         response_data["selected"] = selected
 
-    elif feedback_request.feedback_type == "multi_selection":
+    elif feedback_request.feedback_type == FeedbackType.MULTI_SELECTION:
         response_data["selected_multiple"] = selected_multiple or []
 
-    elif feedback_request.feedback_type == "custom":
+    elif feedback_request.feedback_type == FeedbackType.CUSTOM:
         # Parse JSON
         try:
             response_data["custom_data"] = json.loads(custom_data) if custom_data else {}
