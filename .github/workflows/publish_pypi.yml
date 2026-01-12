@@ -1,0 +1,38 @@
+# This workflow will upload a Python Package to PyPI when a version tag is pushed
+
+name: "Publish Python Package to PyPI"
+
+on:
+  release:
+    types: ["published"]
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+*' # Push events to matching v1.0, v20.15.10 tags
+
+jobs:
+  run:
+    name: "Build and publish release"
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Print the installed version
+        run: echo "Installed uv version is ${{ steps.setup-uv.outputs.uv-version }}"
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
+
+      - name: Build
+        run: uv build
+
+      - name: Publish
+        run: uv publish --publish-url https://test.pypi.org/legacy/ --token ${{ secrets.TEST_PYPI_TOKEN }}
