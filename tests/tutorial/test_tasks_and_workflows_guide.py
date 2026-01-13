@@ -950,3 +950,184 @@ class TestIntegrationScenarios:
 
         load_result = ctx.get_result("load_api")
         assert "transformed" in load_result
+
+
+# =============================================================================
+# Dynamic Task Patterns: Fan-Out and Fan-Out-then-Fan-In
+# =============================================================================
+
+
+class TestDynamicTaskPatterns:
+    """Tests for dynamic task generation patterns from examples/07_dynamic_tasks/fan_out_fan_in.py"""
+
+    def test_fan_out_pattern(self):
+        """Test fan-out pattern where each branch independently triggers subsequent tasks.
+
+        In this pattern, each branch independently calls the integrator,
+        resulting in the integrator running multiple times (once per branch).
+        """
+
+        with workflow("fan_out") as wf:
+
+            @task(inject_context=True)
+            def root(context: TaskExecutionContext, parent_path: str = "") -> None:
+                """Root node that creates parallel group dynamically."""
+                channel = context.get_channel()
+                current_path = "root" if not parent_path else f"{parent_path}.root"
+                channel.append("trace", current_path)
+
+                # Create parallel group dynamically
+                context.next_task(parallel(node1_1(parent_path=current_path), node2(parent_path=current_path)))
+
+            @task(inject_context=True)
+            def node1_1(context: TaskExecutionContext, parent_path: str = "") -> None:
+                """Branch 1, step 1."""
+                channel = context.get_channel()
+                current_path = f"{parent_path}.node1_1" if parent_path else "node1_1"
+                channel.append("trace", current_path)
+
+                # Dynamically create node1_2
+                context.next_task(node1_2(parent_path=current_path))
+
+            @task(inject_context=True)
+            def node1_2(context: TaskExecutionContext, parent_path: str = "") -> None:
+                """Branch 1, step 2."""
+                channel = context.get_channel()
+                current_path = f"{parent_path}.node1_2" if parent_path else "node1_2"
+                channel.append("trace", current_path)
+
+                # Each branch independently calls integrator
+                context.next_task(integrator(parent_path=current_path))
+
+            @task(inject_context=True)
+            def node2(context: TaskExecutionContext, parent_path: str = "") -> None:
+                """Branch 2."""
+                channel = context.get_channel()
+                current_path = f"{parent_path}.node2" if parent_path else "node2"
+                channel.append("trace", current_path)
+
+                # Each branch independently calls integrator
+                context.next_task(integrator(parent_path=current_path))
+
+            @task(inject_context=True)
+            def integrator(context: TaskExecutionContext, parent_path: str = "") -> str:
+                """Integrator that combines all branch results."""
+                channel = context.get_channel()
+                current_path = f"{parent_path}.integrator" if parent_path else "integrator"
+                channel.append("trace", current_path)
+
+                trace = channel.get("trace", [])
+                combined = "|".join(trace)
+                return combined
+
+            # Execute workflow
+            _, exec_ctx = wf.execute("root", max_steps=20, ret_context=True)
+
+        # Verify trace structure
+        final_trace = exec_ctx.get_channel().get("trace", [])
+
+        # Should have root and both branches
+        assert "root" in final_trace
+        assert any("node1_1" in t for t in final_trace)
+        assert any("node1_2" in t for t in final_trace)
+        assert any("node2" in t for t in final_trace)
+
+        # Should have integrator called TWICE (once per branch)
+        integrator_calls = [t for t in final_trace if "integrator" in t]
+        assert len(integrator_calls) == 2, f"Expected 2 integrator calls, got {len(integrator_calls)}"
+
+        # Verify hierarchical paths
+        assert any(t.startswith("root.node1_1") for t in final_trace)
+        assert any(t.startswith("root.node2") for t in final_trace)
+
+    def test_fan_out_then_fan_in_pattern(self):
+        """Test fan-out-then-fan-in pattern where branches converge to single integrator.
+
+        In this pattern, the parallel group is chained with the integrator using the >> operator,
+        ensuring the integrator runs once after both branches complete.
+        """
+
+        with workflow("fan_out_fan_in") as wf:
+
+            @task(inject_context=True)
+            def root(context: TaskExecutionContext, parent_path: str = "") -> None:
+                """Root node that creates parallel group with fan-in using >> operator."""
+                channel = context.get_channel()
+                current_path = "root" if not parent_path else f"{parent_path}.root"
+                channel.append("trace", current_path)
+
+                # Create parallel group and chain with integrator using >>
+                # This ensures integrator runs once after both branches complete
+                # Integrator's parent path explicitly shows it receives from both branches
+                parallel_group = parallel(node1_1(parent_path=current_path), node2(parent_path=current_path))
+                chained = parallel_group >> integrator(parent_path=f"{current_path}.(node1_1.node1_2|node2)")
+                context.next_task(chained)
+
+            @task(inject_context=True)
+            def node1_1(context: TaskExecutionContext, parent_path: str = "") -> None:
+                """Branch 1, step 1 - dynamically creates node1_2."""
+                channel = context.get_channel()
+                current_path = f"{parent_path}.node1_1" if parent_path else "node1_1"
+                channel.append("trace", current_path)
+
+                # Dynamically create node1_2
+                context.next_task(node1_2(parent_path=current_path))
+
+            @task(inject_context=True)
+            def node1_2(context: TaskExecutionContext, parent_path: str = "") -> None:
+                """Branch 1, step 2."""
+                channel = context.get_channel()
+                current_path = f"{parent_path}.node1_2" if parent_path else "node1_2"
+                channel.append("trace", current_path)
+
+            @task(inject_context=True)
+            def node2(context: TaskExecutionContext, parent_path: str = "") -> None:
+                """Branch 2."""
+                channel = context.get_channel()
+                current_path = f"{parent_path}.node2" if parent_path else "node2"
+                channel.append("trace", current_path)
+
+            @task(inject_context=True)
+            def integrator(context: TaskExecutionContext, parent_path: str = "") -> str:
+                """Integrator that runs once after both branches complete."""
+                channel = context.get_channel()
+                current_path = f"{parent_path}.integrator" if parent_path else "integrator"
+                channel.append("trace", current_path)
+
+                trace = channel.get("trace", [])
+                combined = "|".join(trace)
+                return combined
+
+            # Execute workflow
+            _, exec_ctx = wf.execute("root", max_steps=20, ret_context=True)
+
+        # Verify trace structure
+        final_trace = exec_ctx.get_channel().get("trace", [])
+
+        # Should have root and both branches
+        assert "root" in final_trace
+        assert any("node1_1" in t for t in final_trace)
+        assert any("node1_2" in t for t in final_trace)
+        assert any("node2" in t for t in final_trace)
+
+        # Should have integrator called ONCE at the end
+        integrator_calls = [t for t in final_trace if "integrator" in t]
+        assert len(integrator_calls) == 1, f"Expected 1 integrator call, got {len(integrator_calls)}"
+
+        # Integrator path explicitly shows it receives from both branches
+        expected_integrator_path = "root.(node1_1.node1_2|node2).integrator"
+        assert expected_integrator_path in final_trace, f"Expected {expected_integrator_path} in trace"
+
+        # Verify correct order: branches complete before integrator
+        integrator_index = final_trace.index(expected_integrator_path)
+        # Filter out the integrator entry when looking for branch entries
+        node1_2_indices = [i for i, t in enumerate(final_trace) if "node1_2" in t and t != expected_integrator_path]
+        node2_indices = [i for i, t in enumerate(final_trace) if "node2" in t and t != expected_integrator_path]
+
+        # Both branches should complete before integrator
+        assert all(i < integrator_index for i in node1_2_indices), (
+            f"node1_2 indices {node1_2_indices} should be < {integrator_index}"
+        )
+        assert all(i < integrator_index for i in node2_indices), (
+            f"node2 indices {node2_indices} should be < {integrator_index}"
+        )

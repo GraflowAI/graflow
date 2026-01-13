@@ -4,7 +4,7 @@ Welcome to the Graflow examples! This directory contains progressive examples to
 
 ## 🎉 What's Available
 
-**47 comprehensive, production-ready examples** covering:
+**48 comprehensive, production-ready examples** covering:
 - ✅ **Task Basics** - Define and execute tasks with parameters
 - ✅ **Workflow Orchestration** - Sequential and parallel task composition
 - ✅ **Data Flow** - Channels, typed communication, and result storage
@@ -102,6 +102,7 @@ Advanced workflow patterns:
 
 Dynamic task generation patterns:
 - Compile-time dynamic task creation
+- Fan-out and fan-out-then-fan-in patterns with parallel groups
 - Runtime task generation with next_task() and next_iteration()
 - Iterative processing and convergence patterns
 - State machines and conditional branching
@@ -239,7 +240,8 @@ Master workflow state persistence and fault tolerance:
 
 **07_dynamic_tasks/** - Dynamic task creation patterns
 1. `dynamic_tasks.py` - Compile-time task generation (20 min)
-2. `runtime_dynamic_tasks.py` - Runtime task creation with next_task() (30 min)
+2. `fan_out_fan_in.py` - Fan-out and fan-out-then-fan-in patterns (20 min)
+3. `runtime_dynamic_tasks.py` - Runtime task creation with next_task() (30 min)
 
 ### Level 8: Production Use Cases 💼
 
@@ -288,7 +290,7 @@ Master workflow state persistence and fault tolerance:
 3. `03_periodic_checkpoint.py` - Periodic checkpoints for long tasks (20 min)
 4. `04_fault_recovery.py` - Fault tolerance with automatic retry (25 min)
 
-**Total Learning Time**: ~14.5 hours to complete all examples
+**Total Learning Time**: ~15 hours to complete all examples
 
 ### Quick Start Path (30 minutes)
 
@@ -401,6 +403,7 @@ examples/
 ├── 07_dynamic_tasks/    # Dynamic task generation
 │   ├── README.md       # Category documentation
 │   ├── dynamic_tasks.py
+│   ├── fan_out_fan_in.py
 │   └── runtime_dynamic_tasks.py
 │
 ├── 08_real_world/       # Real-world use cases
@@ -461,7 +464,7 @@ examples/
 | 04_execution | ✅ Complete | 3/3 | Custom execution handlers |
 | 05_distributed | ✅ Complete | 3/3 | Redis-based distribution |
 | 06_advanced | ✅ Complete | 5/5 | Advanced patterns |
-| 07_dynamic_tasks | ✅ Complete | 2/2 | Dynamic task generation |
+| 07_dynamic_tasks | ✅ Complete | 3/3 | Dynamic task generation |
 | 08_real_world | ✅ Complete | 4/4 | Production use cases |
 | 09_visualization | ✅ Complete | 2/2 | Workflow visualization |
 | 10_group_exec_policy | ✅ Complete | 5/5 | Parallel group error handling policies |
@@ -531,7 +534,7 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md) for details.
 
 All planned examples are now complete! 🎉
 
-The **47 examples** provide comprehensive coverage from basic concepts to AI-powered production applications. You can now:
+The **48 examples** provide comprehensive coverage from basic concepts to AI-powered production applications. You can now:
 
 1. **Build Production Workflows** - Use patterns from 08_real_world
 2. **Scale with Redis** - Deploy distributed workflows from 05_distributed
@@ -550,8 +553,8 @@ Additional examples may be added based on community feedback and emerging use ca
 
 All examples from the Tasks and Workflows Guide are also implemented as comprehensive unit tests in [`tests/tutorial/`](../tests/tutorial/):
 
-- **63 tests** with **100% pass rate**
-- **test_tasks_and_workflows_guide.py** - Core workflow features (34 tests)
+- **65 tests** with **100% pass rate**
+- **test_tasks_and_workflows_guide.py** - Core workflow features + dynamic patterns (36 tests)
 - **test_llm_integration.py** - LLM client and agent injection (11 tests)
 - **test_hitl.py** - Human-in-the-Loop feedback (18 tests)
 
@@ -573,7 +576,7 @@ uv run pytest tests/tutorial/test_hitl.py -v
 
 ## API Notes
 
-**Important**: The examples in this directory use stable, tested API patterns. All 47 examples are fully functional and production-ready. See [docs/examples_api_issues.md](../docs/examples_api_issues.md) for historical notes on API evolution.
+**Important**: The examples in this directory use stable, tested API patterns. All 48 examples are fully functional and production-ready. See [docs/examples_api_issues.md](../docs/examples_api_issues.md) for historical notes on API evolution.
 
 ## Getting Help
 

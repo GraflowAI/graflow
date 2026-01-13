@@ -60,7 +60,76 @@ Configuration: enable_validation=True
 
 ---
 
-### 2. runtime_dynamic_tasks.py
+### 2. fan_out_fan_in.py
+**Difficulty**: Advanced
+**Time**: 20 minutes
+
+Demonstrates two parallel execution patterns: fan-out and fan-out-then-fan-in using dynamic parallel groups.
+
+**Key Concepts**:
+- Dynamic parallel group creation with `parallel()`
+- Queueing parallel groups with `context.next_task()`
+- **Fan-out pattern**: Each branch independently triggers subsequent tasks
+- **Fan-out-then-fan-in pattern**: Branches converge using `>>` operator
+- Hierarchical path construction with bound parameters
+- Runtime task generation (node1_1 dynamically creates node1_2)
+
+**What You'll Learn**:
+- Creating parallel groups dynamically at runtime
+- Implementing fan-out pattern (multiple endpoints)
+- Implementing fan-out-then-fan-in pattern (convergence) with `>>` operator
+- Passing bound parameters to tasks (`task(parent_path=value)`)
+- Building hierarchical execution traces
+- Avoiding race conditions in parallel execution
+
+**Run**:
+```bash
+uv run python examples/07_dynamic_tasks/fan_out_fan_in.py
+```
+
+**Expected Output**:
+```
+=== Fan-Out Pattern ===
+
+Root: Creating parallel group dynamically.
+Node1_1: Executing branch 1, step 1.
+Node1_2: Executing branch 1, step 2.
+Integrator: Combining branch results.
+Node2: Executing branch 2.
+Integrator: Combining branch results.
+
+Final Trace: ['root', 'root.node1_1', 'root.node1_1.node1_2',
+              'root.node1_1.node1_2.integrator', 'root.node2', 'root.node2.integrator']
+
+============================================================
+
+=== Fan-Out and then Fan-In Pattern (Proper Convergence) ===
+
+Root: Creating parallel group with fan-in.
+Node1_1: Executing branch 1, step 1.
+Node1_2: Executing branch 1, step 2.
+Node1_2: Branch 1 complete
+Node2: Executing branch 2.
+Node2: Branch 2 complete
+Integrator: Combining results from both branches (runs only once).
+
+Final Trace: ['root', 'root.node1_1', 'root.node1_1.node1_2', 'root.node2', 'root.(node1_1.node1_2|node2).integrator']
+
+✓ Notice: Integrator appears only ONCE at the end
+✓ Integrator path explicitly shows it receives from both branches
+
+=== Complete ===
+```
+
+**Real-World Applications**:
+- Parallel data processing pipelines with map-reduce
+- Multi-model inference with result aggregation
+- Distributed search with result merging
+- A/B testing with metric comparison and final analysis
+
+---
+
+### 3. runtime_dynamic_tasks.py
 **Difficulty**: Advanced
 **Time**: 30 minutes
 
@@ -118,14 +187,15 @@ Current state: START (data=0)
 
 **Recommended Order**:
 1. Start with `dynamic_tasks.py` for compile-time generation
-2. Move to `runtime_dynamic_tasks.py` for runtime patterns
+2. Explore `fan_out_fan_in.py` for parallel execution patterns
+3. Move to `runtime_dynamic_tasks.py` for runtime patterns
 
 **Prerequisites**:
 - Complete examples from 01-03
 - Understanding of workflow patterns from 02
 - Familiarity with channels from 03
 
-**Total Time**: ~50 minutes
+**Total Time**: ~70 minutes
 
 ---
 
@@ -240,6 +310,70 @@ def state_machine(context: TaskExecutionContext):
             context.next_task(end_task)
         else:
             context.next_iteration()
+```
+
+### 5. Fan-Out Pattern (Runtime)
+
+Multiple branches independently trigger subsequent tasks:
+
+```python
+@task(inject_context=True)
+def root(context: TaskExecutionContext, parent_path: str = ""):
+    # Create parallel group where each branch independently continues
+    parallel_group = parallel(
+        node1(parent_path=current_path),
+        node2(parent_path=current_path)
+    )
+    context.next_task(parallel_group)
+
+# Each branch independently triggers integrator
+@task(inject_context=True)
+def node1(context: TaskExecutionContext, parent_path: str = ""):
+    # Do work, then trigger integrator
+    context.next_task(integrator(parent_path=current_path))
+
+@task(inject_context=True)
+def node2(context: TaskExecutionContext, parent_path: str = ""):
+    # Do work, then trigger integrator
+    context.next_task(integrator(parent_path=current_path))
+
+# Result: integrator runs multiple times (once per branch)
+```
+
+### 6. Fan-Out-then-Fan-In Pattern (Runtime)
+
+Branches diverge then converge to single task using `>>` operator:
+
+```python
+@task(inject_context=True)
+def root(context: TaskExecutionContext, parent_path: str = ""):
+    # Create parallel group and chain with integrator
+    parallel_group = parallel(
+        node1(parent_path=current_path),
+        node2(parent_path=current_path)
+    )
+    # Integrator's parent path explicitly shows it receives from both branches
+    chained = parallel_group >> integrator(parent_path=f"{current_path}.(node1_1.node1_2|node2)")
+    context.next_task(chained)
+
+# Branches do their work
+@task(inject_context=True)
+def node1(context: TaskExecutionContext, parent_path: str = ""):
+    # Do work, but don't trigger integrator
+    pass
+
+@task(inject_context=True)
+def node2(context: TaskExecutionContext, parent_path: str = ""):
+    # Do work, but don't trigger integrator
+    pass
+
+# Integrator automatically runs once after both branches complete
+@task(inject_context=True)
+def integrator(context: TaskExecutionContext, parent_path: str = ""):
+    # Combine results from all branches
+    pass
+
+# Result: integrator runs once after both branches complete
 ```
 
 ---
