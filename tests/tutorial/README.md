@@ -6,12 +6,13 @@ This directory contains comprehensive unit tests for the Tasks and Workflows Gui
 
 ### Overview
 
-**Total Tests:** 63 (across 3 test files)
+**Total Tests:** 81 (across 4 test files)
 **Pass Rate:** 100%
 **Test Files:**
 1. `test_tasks_and_workflows_guide.py` - Core workflow features (34 tests)
 2. `test_llm_integration.py` - LLM client and agent injection (11 tests)
 3. `test_hitl.py` - Human-in-the-Loop feedback (18 tests)
+4. `test_prompt_management.py` - Prompt management with YAML (18 tests)
 
 ---
 
@@ -183,6 +184,58 @@ Tests for Human-in-the-Loop feedback features using `ctx.request_feedback()`.
 
 ---
 
+## File: `test_prompt_management.py`
+
+Tests for prompt management features using `YAMLPromptManager` and workflow integration.
+
+**Test Statistics:**
+- **Total Tests:** 18
+- **Pass Rate:** 100%
+- **Coverage:** YAML prompt loading, workflow integration, prompt models
+
+### Test Organization
+
+1. **TestPromptManagerInjection** (4 tests)
+   - Basic prompt manager injection with `workflow(prompt_manager=pm)`
+   - Text prompt label selection (production, staging)
+   - Chat prompt rendering
+   - Multiple tasks with shared prompt manager
+
+2. **TestPromptManagerWithChannels** (2 tests)
+   - Workflow pattern with channel parameters
+   - Full onboarding workflow pattern (from examples)
+
+3. **TestPromptModels** (4 tests)
+   - TextPrompt rendering
+   - Multiple variable substitution
+   - ChatPrompt rendering
+   - Missing variable error handling
+
+4. **TestYAMLPromptManagerStandalone** (6 tests)
+   - Default label (production)
+   - Label-based prompt selection
+   - Chat prompt default label
+   - Prompt metadata access (version, created_at, metadata)
+   - Version information
+   - Multiple prompts from same YAML file
+
+5. **TestPromptManagerFactory** (2 tests)
+   - Factory creation of YAML manager
+   - Unknown backend error handling
+
+### Key Features Tested
+
+- ✅ `workflow("name", prompt_manager=pm)` - Prompt manager injection
+- ✅ `context.prompt_manager` - Access via TaskExecutionContext
+- ✅ `pm.get_text_prompt(name, label=)` - Text prompt retrieval
+- ✅ `pm.get_chat_prompt(name, label=)` - Chat prompt retrieval
+- ✅ `prompt.render(**variables)` - Variable substitution
+- ✅ Prompt metadata access (version, created_at, metadata)
+- ✅ Channel integration for workflow parameters
+- ✅ Factory pattern for backend selection
+
+---
+
 ## Running the Tests
 
 ### Run All Tutorial Tests
@@ -200,6 +253,9 @@ uv run pytest tests/tutorial/test_llm_integration.py -v
 
 # HITL feedback
 uv run pytest tests/tutorial/test_hitl.py -v
+
+# Prompt management
+uv run pytest tests/tutorial/test_prompt_management.py -v
 ```
 
 ### Run Specific Test Class
@@ -292,7 +348,8 @@ thread.start()
 | Core Workflows | `test_tasks_and_workflows_guide.py` | 34 | Tasks, workflows, composition, channels, context |
 | LLM Integration | `test_llm_integration.py` | 11 | LLM client, agents, tools, multi-model |
 | HITL Feedback | `test_hitl.py` | 18 | Approval, text, selection, timeout, handlers |
-| **Total** | | **63** | **100% pass rate** |
+| Prompt Management | `test_prompt_management.py` | 18 | YAML prompts, workflow integration, models |
+| **Total** | | **81** | **100% pass rate** |
 
 ---
 

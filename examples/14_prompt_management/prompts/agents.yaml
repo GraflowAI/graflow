@@ -1,0 +1,23 @@
+assistant:
+  type: chat
+  labels:
+    production:
+      content:
+        - role: system
+          content: "You are a helpful assistant specializing in {{domain}}."
+        - role: user
+          content: "Please help me with {{task}}."
+      version: 1
+      metadata:
+        model: "gpt-4o-mini"
+
+interviewer:
+  type: chat
+  labels:
+    production:
+      content:
+        - role: system
+          content: "You are an expert interviewer in {{field}}. Ask insightful questions."
+        - role: user
+          content: "Interview me about {{topic}}."
+      version: 1
