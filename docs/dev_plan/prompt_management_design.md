@@ -1348,10 +1348,19 @@ def workflow(
         pm = PromptManagerFactory.create("yaml", prompts_dir="./prompts")
 
         # Pass to workflow
-        with workflow("customer_engagement", prompt_manager=pm) as wf:
-            # Access via wf.prompt_manager
-            task1.run()
-            task2.run()
+        with workflow("customer_engagement", prompt_manager=pm) as ctx:
+            @task(inject_context=True)
+            def task1(context: TaskExecutionContext):
+                pm = context.prompt_manager
+                # Use prompt manager...
+
+            @task(inject_context=True)
+            def task2(context: TaskExecutionContext):
+                pm = context.prompt_manager
+                # Use prompt manager...
+
+            task1 >> task2
+            ctx.execute()
         ```
     """
     return WorkflowContext(name, tracer=tracer, prompt_manager=prompt_manager)
@@ -1712,8 +1721,15 @@ from graflow.prompts import PromptManagerFactory
 pm = PromptManagerFactory.create("yaml", prompts_dir="./prompts")
 
 # Pass to workflow
-with workflow("onboarding_workflow", prompt_manager=pm) as wf:
-    send_welcome_email.run(user_name="Alice", user_email="alice@example.com")
+with workflow("onboarding_workflow", prompt_manager=pm) as ctx:
+    @task(inject_context=True)
+    def setup(context: TaskExecutionContext):
+        channel = context.get_channel()
+        channel.set("user_name", "Alice")
+        channel.set("user_email", "alice@example.com")
+
+    setup >> send_welcome_email
+    ctx.execute()
 ```
 
 **Option 2: Environment-based (lazy initialization):**
@@ -1727,9 +1743,16 @@ export GRAFLOW_PROMPTS_DIR=./prompts
 from graflow.core.workflow import workflow
 
 # Workflow without explicit prompt manager
-with workflow("onboarding_workflow") as wf:
+with workflow("onboarding_workflow") as ctx:
+    @task(inject_context=True)
+    def setup(context: TaskExecutionContext):
+        channel = context.get_channel()
+        channel.set("user_name", "Alice")
+        channel.set("user_email", "alice@example.com")
+
     # Prompt manager auto-initialized on first access from GRAFLOW_PROMPTS_DIR
-    send_welcome_email.run(user_name="Alice", user_email="alice@example.com")
+    setup >> send_welcome_email
+    ctx.execute()
 ```
 
 **Option 3: Langfuse backend for production:**
@@ -1753,8 +1776,15 @@ pm = PromptManagerFactory.create(
 )
 
 # Pass to workflow
-with workflow("production_workflow", prompt_manager=pm) as wf:
-    send_welcome_email.run(user_name="Alice", user_email="alice@example.com")
+with workflow("production_workflow", prompt_manager=pm) as ctx:
+    @task(inject_context=True)
+    def setup(context: TaskExecutionContext):
+        channel = context.get_channel()
+        channel.set("user_name", "Alice")
+        channel.set("user_email", "alice@example.com")
+
+    setup >> send_welcome_email
+    ctx.execute()
 ```
 
 ---
@@ -1904,10 +1934,17 @@ def send_interview_request(context: ExecutionContext, expert_name: str, domain: 
 pm = PromptManagerFactory.create("yaml", prompts_dir="./prompts")
 
 # Pass to workflow
-with workflow("customer_engagement", prompt_manager=pm) as wf:
-    # Run tasks
-    greet_customer.run(customer_name="Alice", tier="vip")
-    send_interview_request.run(expert_name="Dr. Smith", domain="machine learning")
+with workflow("customer_engagement", prompt_manager=pm) as ctx:
+    @task(inject_context=True)
+    def setup(context: TaskExecutionContext):
+        channel = context.get_channel()
+        channel.set("customer_name", "Alice")
+        channel.set("tier", "vip")
+        channel.set("expert_name", "Dr. Smith")
+        channel.set("domain", "machine learning")
+
+    setup >> greet_customer >> send_interview_request
+    ctx.execute()
 ```
 
 ---
@@ -1954,24 +1991,35 @@ pm = PromptManagerFactory.create(
     max_retries=3  # Retry up to 3 times if fetch fails
 )
 
-@task(inject_context=True)
-def send_critical_notification(context, user_id: str, event: str):
-    # Fetch prompt (uses manager-level retry configuration)
-    prompt = context.prompt_manager.get_prompt(
-        "notifications/critical",
-        label="production",
-    )
+with workflow("critical_alerts", prompt_manager=pm) as ctx:
+    @task(inject_context=True)
+    def setup(context: TaskExecutionContext):
+        channel = context.get_channel()
+        channel.set("user_id", "user123")
+        channel.set("event", "system_down")
 
-    # Render notification
-    message = prompt.render(user_id=user_id, event=event)
+    @task(inject_context=True)
+    def send_critical_notification(context: TaskExecutionContext):
+        channel = context.get_channel()
+        user_id = channel.get("user_id")
+        event = channel.get("event")
 
-    # Send notification
-    send_push_notification(user_id, message)
+        # Fetch prompt (uses manager-level retry configuration)
+        prompt = context.prompt_manager.get_prompt(
+            "notifications/critical",
+            label="production",
+        )
 
-    return {"status": "sent", "user_id": user_id}
+        # Render notification
+        message = prompt.render(user_id=user_id, event=event)
 
-with workflow("critical_alerts", prompt_manager=pm) as wf:
-    send_critical_notification.run(user_id="user123", event="system_down")
+        # Send notification
+        send_push_notification(user_id, message)
+
+        return {"status": "sent", "user_id": user_id}
+
+    setup >> send_critical_notification
+    ctx.execute()
 ```
 
 ---
@@ -2249,22 +2297,32 @@ greeting:
       version: 1
 """)
 
-    # Create context with prompt manager
-    graph = TaskGraph()
-    context = ExecutionContext.create(
-        graph,
-        prompt_backend="yaml",
-        prompt_config={"prompts_dir": str(prompts_dir)}
-    )
+    from graflow.core.workflow import workflow
+    from graflow.prompts.factory import PromptManagerFactory
 
-    # Define task
-    @task(inject_context=True)
-    def greet(context, name: str):
-        prompt = context.prompt_manager.get_prompt("greeting")
-        return prompt.render(name=name)
+    # Create prompt manager
+    pm = PromptManagerFactory.create("yaml", prompts_dir=str(prompts_dir))
 
-    # Execute
-    result = greet.run(name="Alice")
+    # Use workflow pattern
+    with workflow("test_workflow", prompt_manager=pm) as ctx:
+        @task(inject_context=True)
+        def setup(context: TaskExecutionContext):
+            channel = context.get_channel()
+            channel.set("name", "Alice")
+
+        @task(inject_context=True)
+        def greet(context: TaskExecutionContext):
+            channel = context.get_channel()
+            name = channel.get("name")
+            prompt = context.prompt_manager.get_prompt("greeting")
+            result = prompt.render(name=name)
+            channel.set("result", result)
+            return result
+
+        setup >> greet
+        _, exec_context = ctx.execute(ret_context=True)
+
+    result = exec_context.channel.get("result")
     assert result == "Hello Alice!"
 ```
 
