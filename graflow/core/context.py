@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from graflow.hitl.types import FeedbackResponse, FeedbackType
     from graflow.llm.agents.base import LLMAgent
     from graflow.llm.client import LLMClient
+    from graflow.prompts.base import PromptManager
     from graflow.trace.base import Tracer
 
 T = TypeVar("T")
@@ -157,6 +158,26 @@ class TaskExecutionContext:
             ```
         """
         return self.execution_context.llm_client
+
+    @property
+    def prompt_manager(self) -> PromptManager:
+        """Get prompt manager from execution context.
+
+        Returns:
+            PromptManager instance (auto-created with default YAML backend if not set)
+
+        Example:
+            ```python
+            @task(inject_context=True)
+            def my_task(context: TaskExecutionContext):
+                # Access prompt manager through context
+                pm = context.prompt_manager
+                prompt = pm.get_prompt("greeting", label="production")
+                rendered = prompt.render(name="Alice")
+                return rendered
+            ```
+        """
+        return self.execution_context.prompt_manager
 
     def get_llm_agent(self, name: str) -> LLMAgent:
         """Get registered LLMAgent by name from execution context.
@@ -460,6 +481,7 @@ class ExecutionContext:
         trace_id: Optional[str] = None,
         tracer: Optional[Tracer] = None,
         llm_client: Optional[LLMClient] = None,
+        prompt_manager: Optional[PromptManager] = None,
     ):
         """Initialize ExecutionContext with configurable queue backend."""
         self.parent_context = parent_context
@@ -536,6 +558,9 @@ class ExecutionContext:
         self._llm_agents: Dict[str, Any] = {}  # LLMAgent registry
         self._llm_agents_yaml: Dict[str, str] = {}  # YAML serialization cache
 
+        # Prompt management
+        self._prompt_manager: Optional[PromptManager] = prompt_manager
+
         # HITL (Human-in-the-Loop) integration
         from graflow.hitl.manager import FeedbackManager
 
@@ -593,6 +618,7 @@ class ExecutionContext:
             session_id=branch_session_id,  # Hierarchical session ID
             trace_id=self.trace_id,  # Shared trace ID for distributed tracing
             tracer=cloned_tracer,
+            prompt_manager=self._prompt_manager,  # Share prompt manager with branch
         )
         return branch_context
 
@@ -622,6 +648,7 @@ class ExecutionContext:
         config: Optional[Dict[str, Any]] = None,
         tracer: Optional[Tracer] = None,
         llm_client: Optional[LLMClient] = None,
+        prompt_manager: Optional[PromptManager] = None,
     ) -> ExecutionContext:
         """Create a new execution context with configurable channel backend.
 
@@ -635,10 +662,12 @@ class ExecutionContext:
             config: Configuration applied to both queue and channel (e.g., redis_client, key_prefix)
             tracer: Optional tracer for workflow execution tracking (default: creates new NoopTracer)
             llm_client: Optional LLMClient instance for LLM integration
+            prompt_manager: Optional PromptManager instance for prompt template management
 
         Example:
             ```python
             from graflow.llm import LLMClient
+            from graflow.prompts import YAMLPromptManager
 
             # Create LLMClient
             llm_client = LLMClient(model="gpt-5-mini", temperature=0.7)
@@ -647,6 +676,13 @@ class ExecutionContext:
             context = ExecutionContext.create(
                 graph, start_node,
                 llm_client=llm_client
+            )
+
+            # Create context with prompt manager
+            prompt_manager = YAMLPromptManager(prompts_dir="./prompts")
+            context = ExecutionContext.create(
+                graph, start_node,
+                prompt_manager=prompt_manager
             )
 
             # Create context with Redis backend for HITL
@@ -675,6 +711,7 @@ class ExecutionContext:
             config=config,
             tracer=tracer,
             llm_client=llm_client,
+            prompt_manager=prompt_manager,
         )
 
     @property
@@ -807,6 +844,45 @@ class ExecutionContext:
             self._llm_client = LLMClient(model=default_model)
 
         return self._llm_client
+
+    @property
+    def prompt_manager(self) -> PromptManager:
+        """Get prompt manager instance.
+
+        Lazily creates a default YAMLPromptManager if not explicitly set.
+        Default prompts directory is resolved from GRAFLOW_PROMPTS_DIR environment variable,
+        falling back to "./prompts" in the current working directory.
+
+        Returns:
+            PromptManager instance
+
+        Example:
+            ```python
+            # .env file:
+            # GRAFLOW_PROMPTS_DIR=./my_prompts
+
+            # Access prompt manager (auto-created with default YAML backend)
+            pm = context.prompt_manager
+            prompt = pm.get_prompt("greeting", label="production")
+            rendered = prompt.render(name="Alice")
+
+            # Or inject explicitly
+            from graflow.prompts import YAMLPromptManager
+            prompt_manager = YAMLPromptManager(prompts_dir="./prompts")
+            context = ExecutionContext.create(
+                graph, start_node,
+                prompt_manager=prompt_manager
+            )
+            ```
+        """
+        if self._prompt_manager is None:
+            # Lazy initialization: create default YAMLPromptManager
+            # Constructor handles GRAFLOW_PROMPTS_DIR env var and default resolution
+            from graflow.prompts.yaml_manager import YAMLPromptManager
+
+            self._prompt_manager = YAMLPromptManager()
+
+        return self._prompt_manager
 
     def register_llm_agent(self, name: str, agent: LLMAgent) -> None:
         """Register LLM Agent for use in tasks.
@@ -1318,6 +1394,10 @@ class ExecutionContext:
             self._llm_agents = {}
         if not hasattr(self, "_llm_agents_yaml"):
             self._llm_agents_yaml = {}
+
+        # Ensure prompt manager attribute exists for older checkpoints
+        if not hasattr(self, "_prompt_manager"):
+            self._prompt_manager = None
 
         # Reconstruct FeedbackManager
         # Use same backend as channel for consistency (redis for distributed, filesystem for local)

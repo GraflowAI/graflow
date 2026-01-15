@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from graflow.core.context import ExecutionContext
     from graflow.core.task import Executable
     from graflow.llm.agents.base import LLMAgent
+    from graflow.prompts.base import PromptManager
 
 LLMAgentFactory = Callable[["ExecutionContext"], "LLMAgent"]
 LLMAgentProvider = Union["LLMAgent", LLMAgentFactory]
@@ -30,12 +31,18 @@ class WorkflowContext:
     This class manages the workflow graph and provides methods to add tasks,
     edges, and execute the workflow."""
 
-    def __init__(self, name: str, tracer: Optional[Tracer] = None):
+    def __init__(
+        self,
+        name: str,
+        tracer: Optional[Tracer] = None,
+        prompt_manager: Optional[PromptManager] = None,
+    ):
         """Initialize a new workflow context.
 
         Args:
             name: Name for this workflow
             tracer: Optional tracer for workflow execution tracking
+            prompt_manager: Optional prompt manager for prompt template management
         """
         self.name = name
         self.graph = TaskGraph()
@@ -43,6 +50,7 @@ class WorkflowContext:
         self._group_counter = 0
         self._redis_client: Optional[Any] = None
         self._tracer = tracer
+        self._prompt_manager: Optional[PromptManager] = prompt_manager
         self._llm_agent_providers: dict[str, LLMAgentProvider] = {}
         self._token: Optional[contextvars.Token] = None
 
@@ -137,7 +145,13 @@ class WorkflowContext:
         from graflow.core.context import ExecutionContext
         from graflow.core.engine import WorkflowEngine
 
-        exec_context = ExecutionContext.create(self.graph, start_node, max_steps=max_steps, tracer=self._tracer)
+        exec_context = ExecutionContext.create(
+            self.graph,
+            start_node,
+            max_steps=max_steps,
+            tracer=self._tracer,
+            prompt_manager=self._prompt_manager,
+        )
 
         # Set initial channel values if provided
         if initial_channel:
@@ -262,14 +276,32 @@ def clear_workflow_context() -> None:
     _current_context.set(None)
 
 
-def workflow(name: str, tracer: Optional[Tracer] = None) -> WorkflowContext:
+def workflow(
+    name: str,
+    tracer: Optional[Tracer] = None,
+    prompt_manager: Optional[PromptManager] = None,
+) -> WorkflowContext:
     """Context manager for creating a workflow.
 
     Args:
         name: Name of the workflow
         tracer: Optional tracer for workflow execution tracking
+        prompt_manager: Optional prompt manager for prompt template management
 
     Returns:
         WorkflowContext instance
+
+    Example:
+        ```python
+        from graflow.prompts import YAMLPromptManager
+
+        # Create prompt manager
+        prompt_manager = YAMLPromptManager(prompts_dir="./prompts")
+
+        # Use in workflow
+        with workflow("customer_engagement", prompt_manager=prompt_manager) as wf:
+            task_a >> task_b
+            wf.execute()
+        ```
     """
-    return WorkflowContext(name, tracer=tracer)
+    return WorkflowContext(name, tracer=tracer, prompt_manager=prompt_manager)
