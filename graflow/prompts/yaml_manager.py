@@ -139,12 +139,10 @@ class YAMLPromptManager(PromptManager):
         available_labels = list(self._loaded_prompts[name].keys())
         if target_label is not None:
             raise PromptVersionNotFoundError(
-                f"Label '{target_label}' not found for prompt '{name}'. "
-                f"Available labels: {available_labels}"
+                f"Label '{target_label}' not found for prompt '{name}'. Available labels: {available_labels}"
             )
         raise PromptVersionNotFoundError(
-            f"Version {target_version} not found for prompt '{name}'. "
-            f"Available labels: {available_labels}"
+            f"Version {target_version} not found for prompt '{name}'. Available labels: {available_labels}"
         )
 
     # -------------------------------------------------------------------------

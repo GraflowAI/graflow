@@ -64,14 +64,11 @@ class PromptManager(ABC):
             PromptVersionNotFoundError: If version/label not found
             PromptTypeError: If prompt is not a text type
         """
-        prompt = self.get_prompt(
-            name, version=version, label=label, cache_ttl_seconds=cache_ttl_seconds
-        )
+        prompt = self.get_prompt(name, version=version, label=label, cache_ttl_seconds=cache_ttl_seconds)
 
         if not isinstance(prompt, TextPrompt):
             raise PromptTypeError(
-                f"Prompt '{name}' is a chat prompt, not a text prompt. "
-                f"Use get_chat_prompt() instead."
+                f"Prompt '{name}' is a chat prompt, not a text prompt. Use get_chat_prompt() instead."
             )
 
         return prompt
@@ -101,14 +98,11 @@ class PromptManager(ABC):
             PromptVersionNotFoundError: If version/label not found
             PromptTypeError: If prompt is not a chat type
         """
-        prompt = self.get_prompt(
-            name, version=version, label=label, cache_ttl_seconds=cache_ttl_seconds
-        )
+        prompt = self.get_prompt(name, version=version, label=label, cache_ttl_seconds=cache_ttl_seconds)
 
         if not isinstance(prompt, ChatPrompt):
             raise PromptTypeError(
-                f"Prompt '{name}' is a text prompt, not a chat prompt. "
-                f"Use get_text_prompt() instead."
+                f"Prompt '{name}' is a text prompt, not a chat prompt. Use get_text_prompt() instead."
             )
 
         return prompt
