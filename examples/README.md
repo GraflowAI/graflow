@@ -4,7 +4,7 @@ Welcome to the Graflow examples! This directory contains progressive examples to
 
 ## 🎉 What's Available
 
-**48 comprehensive, production-ready examples** covering:
+**51 comprehensive, production-ready examples** covering:
 - ✅ **Task Basics** - Define and execute tasks with parameters
 - ✅ **Workflow Orchestration** - Sequential and parallel task composition
 - ✅ **Data Flow** - Channels, typed communication, and result storage
@@ -17,6 +17,7 @@ Welcome to the Graflow examples! This directory contains progressive examples to
 - ✅ **LLM Integration** - AI-powered workflows with LLMClient and agents
 - ✅ **Human-in-the-Loop** - Interactive workflows with human feedback
 - ✅ **Checkpoint/Resume** - Workflow state persistence and fault tolerance
+- ✅ **Prompt Management** - YAML and Langfuse prompt template management
 
 All examples include detailed documentation, real-world use cases, and hands-on experiments!
 
@@ -186,6 +187,19 @@ Master workflow state persistence and fault tolerance:
 
 **Use Cases**: Long-running ML training, multi-hour data pipelines, fault-tolerant workflows, state machine workflows
 
+### ✅ 14_prompt_management - Prompt Management
+**Status**: Complete | **Difficulty**: Intermediate
+
+Manage LLM prompts with YAML files or Langfuse cloud:
+- YAML-based prompt storage with label/version support
+- Langfuse integration for cloud-based prompt management
+- Prompt rendering with variable substitution
+- Workflow integration via context injection
+
+[View prompt management examples →](14_prompt_management/)
+
+**Note**: Langfuse examples require `langfuse` package and credentials.
+
 ## Learning Path
 
 **Recommended order for beginners:**
@@ -290,7 +304,14 @@ Master workflow state persistence and fault tolerance:
 3. `03_periodic_checkpoint.py` - Periodic checkpoints for long tasks (20 min)
 4. `04_fault_recovery.py` - Fault tolerance with automatic retry (25 min)
 
-**Total Learning Time**: ~15 hours to complete all examples
+### Level 14: Prompt Management 📝
+
+**14_prompt_management/** - LLM prompt template management
+1. `yaml_prompts.py` - YAML-based prompt loading and rendering (15 min)
+2. `langfuse_prompts.py` - Langfuse cloud prompt management (15 min)
+3. `workflow_with_prompts.py` - Prompts in workflow tasks (20 min)
+
+**Total Learning Time**: ~16 hours to complete all examples
 
 ### Quick Start Path (30 minutes)
 
@@ -447,6 +468,13 @@ examples/
 │   ├── 03_periodic_checkpoint.py
 │   └── 04_fault_recovery.py
 │
+├── 14_prompt_management/ # Prompt Management
+│   ├── README.md       # Category documentation
+│   ├── yaml_prompts.py
+│   ├── langfuse_prompts.py
+│   ├── workflow_with_prompts.py
+│   └── prompts/        # Sample YAML prompts
+│
 └── README.md           # This file
 ```
 
@@ -471,6 +499,7 @@ examples/
 | 11_llm_integration | ✅ Complete | 4/4 | LLM-powered workflows |
 | 12_hitl | ✅ Complete | 4/4 | Human-in-the-Loop workflows |
 | 13_checkpoints | ✅ Complete | 4/4 | Checkpoint/Resume for fault tolerance |
+| 14_prompt_management | ✅ Complete | 3/3 | Prompt template management |
 
 ## Troubleshooting
 
@@ -534,7 +563,7 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md) for details.
 
 All planned examples are now complete! 🎉
 
-The **48 examples** provide comprehensive coverage from basic concepts to AI-powered production applications. You can now:
+The **51 examples** provide comprehensive coverage from basic concepts to AI-powered production applications. You can now:
 
 1. **Build Production Workflows** - Use patterns from 08_real_world
 2. **Scale with Redis** - Deploy distributed workflows from 05_distributed
@@ -546,6 +575,7 @@ The **48 examples** provide comprehensive coverage from basic concepts to AI-pow
 8. **Integrate LLMs** - Build AI-powered workflows with LLMClient and agents from 11_llm_integration
 9. **Add Human Feedback** - Build interactive workflows with HITL from 12_hitl
 10. **Implement Fault Tolerance** - Build resilient workflows with checkpoint/resume from 13_checkpoints
+11. **Manage Prompts** - Use YAML or Langfuse for prompt templates from 14_prompt_management
 
 Additional examples may be added based on community feedback and emerging use cases.
 
@@ -553,10 +583,11 @@ Additional examples may be added based on community feedback and emerging use ca
 
 All examples from the Tasks and Workflows Guide are also implemented as comprehensive unit tests in [`tests/tutorial/`](../tests/tutorial/):
 
-- **65 tests** with **100% pass rate**
-- **test_tasks_and_workflows_guide.py** - Core workflow features + dynamic patterns (36 tests)
+- **81 tests** with **100% pass rate**
+- **test_tasks_and_workflows_guide.py** - Core workflow features + dynamic patterns (34 tests)
 - **test_llm_integration.py** - LLM client and agent injection (11 tests)
 - **test_hitl.py** - Human-in-the-Loop feedback (18 tests)
+- **test_prompt_management.py** - Prompt management with YAML (18 tests)
 
 These tests serve as both verification of functionality and practical code examples. They demonstrate proper usage patterns, mocking strategies, and best practices.
 
