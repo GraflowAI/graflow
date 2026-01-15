@@ -74,7 +74,8 @@ prompt-name:
   type: text  # or 'chat'
   labels:
     label-name:
-      content: "Template with {{variables}}"
+      content: |
+        Template with {{variables}}
       created_at: "2024-01-15T10:00:00"
       version: 3  # Numeric version ID
 ```
@@ -86,17 +87,20 @@ customer-greeting:
   type: text
   labels:
     production:
-      content: "Hello {{customer_name}}, welcome to {{product}}!"
+      content: |
+        Hello {{customer_name}}, welcome to {{product}}!
       created_at: "2024-01-15T10:00:00"
       version: 3
 
     staging:
-      content: "Hi {{customer_name}}! Welcome to {{product}} beta."
+      content: |
+        Hi {{customer_name}}! Welcome to {{product}} beta.
       created_at: "2024-01-20T14:00:00"
       version: 4
 
     latest:
-      content: "Hi {{customer_name}}! Welcome to {{product}} beta."
+      content: |
+        Hi {{customer_name}}! Welcome to {{product}} beta.
       created_at: "2024-01-20T14:00:00"
       version: 4
 ```
@@ -110,21 +114,122 @@ interview:
     production:
       content:
         - role: system
-          content: "You are an expert in {{domain}}."
+          content: |
+            You are an expert in {{domain}}.
         - role: user
-          content: "Interview me about {{topic}}."
+          content: |
+            Interview me about {{topic}}.
       created_at: "2024-01-15T14:30:00"
       version: 2
 
     staging:
       content:
         - role: system
-          content: "You are a world-class expert in {{domain}} with 20 years of experience."
+          content: |
+            You are a world-class expert in {{domain}} with 20 years of experience.
         - role: user
-          content: "Conduct a detailed interview about {{topic}}."
+          content: |
+            Conduct a detailed interview about {{topic}}.
       created_at: "2024-01-18T10:00:00"
       version: 3
 ```
+
+### Multiline Content Example
+
+YAML supports multiline strings using literal block scalar (`|`) or folded block scalar (`>`):
+
+```yaml
+system-prompt:
+  type: text
+  labels:
+    production:
+      # Literal block scalar (|): preserves newlines exactly as written
+      content: |
+        You are a helpful AI assistant for {{company}}.
+
+        Your responsibilities:
+        - Answer questions about {{product}}
+        - Provide accurate and helpful information
+        - Be polite and professional
+
+        Current user: {{user_name}}
+      version: 1
+      created_at: "2024-01-15T10:00:00"
+
+    staging:
+      # Folded block scalar (>): folds newlines into spaces (single paragraph)
+      content: >
+        You are a helpful AI assistant for {{company}}.
+        You help users with questions about {{product}}.
+        Always be polite and professional when assisting {{user_name}}.
+      version: 2
+      created_at: "2024-01-20T10:00:00"
+```
+
+**Chat prompt with multiline system message:**
+
+```yaml
+code-reviewer:
+  type: chat
+  labels:
+    production:
+      content:
+        - role: system
+          content: |
+            You are an expert code reviewer for {{language}} projects.
+
+            When reviewing code, focus on:
+            1. Code correctness and logic errors
+            2. Performance considerations
+            3. Security vulnerabilities
+            4. Code style and readability
+
+            Project context: {{project_description}}
+        - role: user
+          content: |
+            Please review the following code:
+
+            ```{{language}}
+            {{code_snippet}}
+            ```
+      version: 1
+      created_at: "2024-01-15T14:30:00"
+```
+
+**Key differences:**
+
+| Syntax | Behavior | Use Case |
+|--------|----------|----------|
+| `\|` (literal) | Preserves all newlines exactly | Formatted text, code blocks, bullet lists |
+| `>` (folded) | Joins consecutive lines with spaces | Long prose paragraphs, descriptions |
+
+**How `>` (folded) works:**
+```yaml
+# This YAML:
+description: >
+  This is a long description
+  that spans multiple lines
+  in the YAML file.
+
+# Becomes this string:
+# "This is a long description that spans multiple lines in the YAML file.\n"
+```
+
+**Blank lines in `>` create paragraph breaks:**
+```yaml
+# This YAML:
+content: >
+  First paragraph that spans
+  multiple lines.
+
+  Second paragraph after
+  a blank line.
+
+# Becomes:
+# "First paragraph that spans multiple lines.\nSecond paragraph after a blank line.\n"
+```
+
+**Recommendation:** Use `|` (literal) for most prompts since it preserves formatting exactly as written. Use `>` only when you want to write long paragraphs without manual line wrapping.
 
 ### Key Elements
 
@@ -210,7 +315,8 @@ greeting:
   type: text
   labels:
     production:
-      content: "Hello {{name}}!"
+      content: |
+        Hello {{name}}!
 ```
 
 **Access**: `pm.get_prompt("greeting")`
@@ -233,7 +339,8 @@ greeting:
   type: text
   labels:
     production:
-      content: "Hello {{name}}, welcome to {{product}}!"
+      content: |
+        Hello {{name}}, welcome to {{product}}!
 
 order-confirmation:
   type: chat
@@ -241,9 +348,11 @@ order-confirmation:
     production:
       content:
         - role: system
-          content: "You are a customer service agent."
+          content: |
+            You are a customer service agent.
         - role: user
-          content: "Confirm order {{order_id}}."
+          content: |
+            Confirm order {{order_id}}.
 ```
 
 **Access**:
@@ -273,7 +382,8 @@ welcome:
   type: text
   labels:
     production:
-      content: "Welcome {{name}}!"
+      content: |
+        Welcome {{name}}!
 
 tour-start:
   type: chat
@@ -281,7 +391,8 @@ tour-start:
     production:
       content:
         - role: system
-          content: "You are a tour guide for {{product}}."
+          content: |
+            You are a tour guide for {{product}}.
 ```
 
 **Access**:
@@ -506,27 +617,32 @@ welcome-message:
   type: text
   labels:
     v1-archive:
-      content: "Welcome {{name}}"
+      content: |
+        Welcome {{name}}
       version: 1
       created_at: "2024-01-01T10:00:00"
 
     v2-archive:
-      content: "Hello {{name}}, welcome!"
+      content: |
+        Hello {{name}}, welcome!
       version: 2
       created_at: "2024-01-05T10:00:00"
 
     production:
-      content: "Hello {{name}}, welcome to {{product}}!"
+      content: |
+        Hello {{name}}, welcome to {{product}}!
       version: 3
       created_at: "2024-01-15T10:00:00"
 
     experiment-a:
-      content: "Hey {{name}} 👋 Welcome to {{product}}!"
+      content: |
+        Hey {{name}} 👋 Welcome to {{product}}!
       version: 4
       created_at: "2024-01-20T14:00:00"
 
     latest:
-      content: "Hey {{name}} 👋 Welcome to {{product}}!"
+      content: |
+        Hey {{name}} 👋 Welcome to {{product}}!
       version: 4
       created_at: "2024-01-20T14:00:00"
 ```
@@ -874,6 +990,12 @@ class YAMLPromptManager(PromptManager):
                         If None, uses GRAFLOW_PROMPTS_DIR env var
                         If env var not set, defaults to "./prompts"
             cache_maxsize: Maximum cache entries (default: 1000)
+
+        Note:
+            If prompts_dir doesn't exist, the manager works as a no-op.
+            Calls to get_prompt() will raise PromptNotFoundError.
+            This allows using YAMLPromptManager as a default prompt manager
+            even when no prompts are defined.
         """
         import os
         from pathlib import Path
@@ -885,9 +1007,9 @@ class YAMLPromptManager(PromptManager):
         self.prompts_dir = Path(prompts_dir).resolve()
         self.cache_maxsize = cache_maxsize
 
-        # Validate directory exists
-        if not self.prompts_dir.exists():
-            raise ValueError(f"Prompts directory not found: {self.prompts_dir}")
+        # Load prompts if directory exists, otherwise work as no-op
+        if self.prompts_dir.exists():
+            self._load_all_prompts()
 ```
 
 ### Usage
