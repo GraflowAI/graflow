@@ -57,16 +57,17 @@ class YAMLPromptManager(PromptManager):
 
         # TLRUCache for prompt storage
         # Key: (name, label, version), Value: PromptVersion
-        self._prompt_cache: TLRUCache[Tuple[str, Optional[str], Optional[int]], PromptVersion] = TLRUCache(
-            maxsize=cache_maxsize
-        )
+        self._prompt_cache: TLRUCache[Tuple[str, str, int], PromptVersion] = TLRUCache(maxsize=cache_maxsize)
 
         # Track file modification times: {file_path: mtime}
         self._file_mtime: Dict[Path, float] = {}
 
         # Track loaded prompts: {prompt_name: {label: file_path}}
         # Used for: existence check, available labels, file reload tracking
-        self._loaded_prompts: Dict[str, Dict[str, str]] = {}
+        self._loaded_prompt_files: Dict[str, Dict[str, str]] = {}
+
+        # Track latest version per (name, label): {(name, label): latest_version}
+        self._latest_version: Dict[Tuple[str, str], int] = {}
 
     # -------------------------------------------------------------------------
     # Public API
@@ -82,10 +83,16 @@ class YAMLPromptManager(PromptManager):
     ) -> PromptVersion:
         """Get prompt from YAML files.
 
+        Semantics:
+            - Label is mandatory in YAML (e.g., "production", "staging").
+            - Version is optional in YAML; defaults to 1 if not specified.
+            - Each (name, label) pair has its own version tracking.
+            - When version arg is omitted, returns the latest version for the label.
+
         Args:
             name: Prompt name (format: "prompt_key" or "subdir/prompt_key").
-            version: Numeric version.
-            label: Version label (default: "production" if version is None).
+            version: Numeric version (optional, uses latest version for label if not specified).
+            label: Version label (default: "production").
             cache_ttl_seconds: Cache TTL override for this entry.
                               If None, uses constructor's cache_ttl.
                               Set to 0 for no expiration.
@@ -94,27 +101,29 @@ class YAMLPromptManager(PromptManager):
             PromptVersion instance (TextPrompt or ChatPrompt).
 
         Raises:
-            ValueError: If both version and label specified.
             PromptNotFoundError: If prompt not found in any directory.
             PromptVersionNotFoundError: If version/label not found.
         """
-        # Validate: cannot specify both label and version
-        if version is not None and label is not None:
-            raise ValueError(
-                "Cannot specify both 'version' and 'label'. "
-                "Use label for environment-based access (production, staging) "
-                "or version for direct numeric access."
-            )
-
-        # Determine target label/version
-        target_label = label if label is not None else ("production" if version is None else None)
-        target_version = version
+        # Determine target label (default: "production")
+        target_label = label if label is not None else "production"
 
         # Determine TTL (cache_ttl_seconds overrides default _cache_ttl)
         ttl = cache_ttl_seconds if cache_ttl_seconds is not None else self._cache_ttl
 
         # Load prompt file if required (updates cache)
         self._load_prompt_file(name, ttl)
+
+        # Determine target version (use latest if not specified)
+        target_version: int
+        if version is not None:
+            target_version = version
+        else:
+            latest = self._latest_version.get((name, target_label))
+            if latest is not None:
+                target_version = latest
+            else:
+                # Prompt or label not found - will raise error below
+                target_version = 1  # Default for error path
 
         # Build cache key and check cache
         cache_key = (name, target_label, target_version)
@@ -124,25 +133,32 @@ class YAMLPromptManager(PromptManager):
             return cached
 
         # If cache entries expired, reload prompt files and try again
-        if name in self._loaded_prompts:
-            for file_path_str in set(self._loaded_prompts[name].values()):
+        if name in self._loaded_prompt_files:
+            for file_path_str in set(self._loaded_prompt_files[name].values()):
                 self._reload_file(Path(file_path_str), ttl)
+            # Refresh target_version after reload
+            if version is None:
+                latest = self._latest_version.get((name, target_label))
+                if latest is not None:
+                    target_version = latest
+                    cache_key = (name, target_label, target_version)
             cached = self._prompt_cache.get(cache_key)
             if cached is not None:
                 return cached
 
         # Determine error type: prompt not found vs label/version not found
-        if name not in self._loaded_prompts:
+        if name not in self._loaded_prompt_files:
             raise PromptNotFoundError(f"Prompt not found: '{name}'")
 
         # Prompt exists but label/version not found
-        available_labels = list(self._loaded_prompts[name].keys())
-        if target_label is not None:
+        available_labels = list(self._loaded_prompt_files[name].keys())
+        if version is not None:
             raise PromptVersionNotFoundError(
-                f"Label '{target_label}' not found for prompt '{name}'. Available labels: {available_labels}"
+                f"Version {version} not found for prompt '{name}' with label '{target_label}'. "
+                f"Available labels: {available_labels}"
             )
         raise PromptVersionNotFoundError(
-            f"Version {target_version} not found for prompt '{name}'. Available labels: {available_labels}"
+            f"Label '{target_label}' not found for prompt '{name}'. Available labels: {available_labels}"
         )
 
     # -------------------------------------------------------------------------
@@ -168,8 +184,8 @@ class YAMLPromptManager(PromptManager):
             return
 
         # Check if prompt's source file was modified or removed and reload
-        if name in self._loaded_prompts:
-            for file_path_str in set(self._loaded_prompts[name].values()):
+        if name in self._loaded_prompt_files:
+            for file_path_str in set(self._loaded_prompt_files[name].values()):
                 file_path = Path(file_path_str)
                 cached_mtime = self._file_mtime.get(file_path)
                 if cached_mtime is None:
@@ -228,23 +244,27 @@ class YAMLPromptManager(PromptManager):
                     continue
                 prompt_version = self._create_prompt_version(prompt_type, full_name, label_name, label_data)
 
-                # Store in cache with label-based key
-                self._prompt_cache.set((full_name, label_name, None), prompt_version, ttl_seconds=ttl)
+                # Version is always set (defaults to 1 in _create_prompt_version)
+                version_num = prompt_version.version
+                assert version_num is not None  # For type checker
 
-                # Also store with version-based key if version is specified
-                if prompt_version.version is not None:
-                    self._prompt_cache.set((full_name, None, prompt_version.version), prompt_version, ttl_seconds=ttl)
+                # Store in cache with explicit (name, label, version) key
+                self._prompt_cache.set((full_name, label_name, version_num), prompt_version, ttl_seconds=ttl)
+
+                # Update latest version tracking (always overwrite since YAML is source of truth)
+                self._latest_version[(full_name, label_name)] = version_num
 
                 # Track file-to-prompt mapping for reload
-                if full_name not in self._loaded_prompts:
-                    self._loaded_prompts[full_name] = {}
-                self._loaded_prompts[full_name][label_name] = str(file_path)
+                if full_name not in self._loaded_prompt_files:
+                    self._loaded_prompt_files[full_name] = {}
+                self._loaded_prompt_files[full_name][label_name] = str(file_path)
 
     def _create_prompt_version(
         self, prompt_type: str, full_name: str, label_name: str, label_data: Dict[str, Any]
     ) -> PromptVersion:
         """Create a PromptVersion instance from label data."""
-        version_num: Optional[int] = label_data.get("version")
+        # Version defaults to 1 if not specified in YAML
+        version_num: int = label_data.get("version", 1)
         created_at: Optional[str] = label_data.get("created_at")
         metadata: Dict[str, Any] = label_data.get("metadata", {})
 
@@ -273,24 +293,7 @@ class YAMLPromptManager(PromptManager):
     # -------------------------------------------------------------------------
 
     def _reload_file(self, file_path: Path, ttl: int) -> None:
-        """Reload a single file, clearing old entries first."""
-        file_path_str = str(file_path)
-
-        # Clear entries from this file
-        for name in list(self._loaded_prompts.keys()):
-            label_files = self._loaded_prompts[name]
-            labels_to_remove = [label for label, path in label_files.items() if path == file_path_str]
-            for label in labels_to_remove:
-                cached_prompt = self._prompt_cache.get((name, label, None))
-                if cached_prompt is not None and cached_prompt.version is not None:
-                    self._prompt_cache.delete((name, None, cached_prompt.version))
-                # Delete label-based cache entry
-                self._prompt_cache.delete((name, label, None))
-                del label_files[label]
-            if not label_files:
-                del self._loaded_prompts[name]
-
-        # Reload file
+        """Reload a single file. Cache entries are overwritten by _parse_yaml_file()."""
         if file_path.exists():
             self._parse_yaml_file(file_path, ttl)
         else:

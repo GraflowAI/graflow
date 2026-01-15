@@ -147,10 +147,12 @@ class TestYAMLPromptManagerGetTextPrompt:
         assert "(staging)" in prompt.content
 
     def test_get_text_prompt_by_version(self, manager: YAMLPromptManager):
-        """Test getting text prompt by version number."""
-        prompt = manager.get_text_prompt("greeting", version=1)
+        """Test getting text prompt by specific version within a label."""
+        # Get version 1 from staging label (staging has version 1)
+        prompt = manager.get_text_prompt("greeting", label="staging", version=1)
 
         assert prompt.version == 1
+        assert prompt.label == "staging"
         assert "(staging)" in prompt.content
 
     def test_get_text_prompt_not_found(self, manager: YAMLPromptManager):
@@ -175,12 +177,14 @@ class TestYAMLPromptManagerGetTextPrompt:
 
         assert "999" in str(exc_info.value)
 
-    def test_get_text_prompt_both_version_and_label_raises(self, manager: YAMLPromptManager):
-        """Test that specifying both version and label raises error."""
-        with pytest.raises(ValueError) as exc_info:
-            manager.get_text_prompt("greeting", version=1, label="production")
+    def test_get_text_prompt_with_version_and_label(self, manager: YAMLPromptManager):
+        """Test getting text prompt with both version and label specified."""
+        # Get version 2 from production label
+        prompt = manager.get_text_prompt("greeting", version=2, label="production")
 
-        assert "Cannot specify both" in str(exc_info.value)
+        assert prompt.version == 2
+        assert prompt.label == "production"
+        assert prompt.content == "Hello {{name}}!"
 
     def test_get_text_prompt_virtual_folder(self, manager: YAMLPromptManager):
         """Test getting text prompt from virtual folder."""
@@ -233,8 +237,8 @@ class TestYAMLPromptManagerCaching:
 
         # Both should return same content
         assert prompt1.content == prompt2.content
-        # Verify cache has the entry
-        assert manager._prompt_cache.contains(("greeting", "production", None))
+        # Verify cache has the entry with explicit (name, label, version) key
+        assert manager._prompt_cache.contains(("greeting", "production", 2))
 
     def test_cache_ttl_override(self, prompts_dir: Path):
         """Test that cache_ttl_seconds overrides default TTL."""
@@ -244,8 +248,8 @@ class TestYAMLPromptManagerCaching:
         prompt = manager.get_text_prompt("greeting", label="production", cache_ttl_seconds=60)
         assert prompt.content == "Hello {{name}}!"
 
-        # Verify cached
-        assert manager._prompt_cache.contains(("greeting", "production", None))
+        # Verify cached with explicit (name, label, version) key
+        assert manager._prompt_cache.contains(("greeting", "production", 2))
 
     def test_file_modification_triggers_reload(self, tmp_path: Path):
         """Test that modified YAML files are reloaded after cache TTL expires."""
@@ -388,6 +392,146 @@ greeting:
         # Verify both labels are accessible
         assert manager.get_text_prompt("greeting", label="production") is not None
         assert manager.get_text_prompt("greeting", label="staging") is not None
+
+
+class TestYAMLPromptManagerVersionSemantics:
+    """Tests for version semantics: label is mandatory, version is optional."""
+
+    def test_version_defaults_to_1_when_not_specified(self, tmp_path: Path):
+        """Test that version defaults to 1 when not specified in YAML."""
+        prompts_yaml = tmp_path / "prompts.yaml"
+        prompts_yaml.write_text("""
+greeting:
+  type: text
+  labels:
+    production:
+      content: "Hello!"
+      # no version specified - should default to 1
+""")
+        manager = YAMLPromptManager(prompts_dir=str(tmp_path))
+        prompt = manager.get_text_prompt("greeting")
+
+        assert prompt.version == 1
+        assert prompt.label == "production"
+
+    def test_latest_version_returned_when_version_not_specified(self, tmp_path: Path):
+        """Test that latest version is returned when version arg is not specified."""
+        # Note: In YAML, each label entry has one version. The "latest" tracking
+        # is useful when the same file is reloaded with a different version.
+        prompts_yaml = tmp_path / "prompts.yaml"
+        prompts_yaml.write_text("""
+greeting:
+  type: text
+  labels:
+    production:
+      content: "Hello v3!"
+      version: 3
+""")
+        manager = YAMLPromptManager(prompts_dir=str(tmp_path))
+
+        # Without specifying version, should get the latest (v3)
+        prompt = manager.get_text_prompt("greeting", label="production")
+        assert prompt.version == 3
+        assert prompt.content == "Hello v3!"
+
+        # Can also explicitly request version 3
+        prompt_v3 = manager.get_text_prompt("greeting", label="production", version=3)
+        assert prompt_v3.version == 3
+
+    def test_specific_version_can_be_requested(self, tmp_path: Path):
+        """Test that a specific version can be requested with label."""
+        prompts_yaml = tmp_path / "prompts.yaml"
+        prompts_yaml.write_text("""
+greeting:
+  type: text
+  labels:
+    production:
+      content: "Production content"
+      version: 2
+    staging:
+      content: "Staging content"
+      version: 1
+""")
+        manager = YAMLPromptManager(prompts_dir=str(tmp_path))
+
+        # Request specific version within production label
+        prompt = manager.get_text_prompt("greeting", label="production", version=2)
+        assert prompt.version == 2
+        assert prompt.label == "production"
+
+        # Request specific version within staging label
+        prompt = manager.get_text_prompt("greeting", label="staging", version=1)
+        assert prompt.version == 1
+        assert prompt.label == "staging"
+
+    def test_version_not_found_raises_error(self, tmp_path: Path):
+        """Test that requesting non-existent version raises error."""
+        prompts_yaml = tmp_path / "prompts.yaml"
+        prompts_yaml.write_text("""
+greeting:
+  type: text
+  labels:
+    production:
+      content: "Hello!"
+      version: 2
+""")
+        manager = YAMLPromptManager(prompts_dir=str(tmp_path))
+
+        # Version 1 doesn't exist for production label
+        with pytest.raises(PromptVersionNotFoundError) as exc_info:
+            manager.get_text_prompt("greeting", label="production", version=1)
+
+        assert "1" in str(exc_info.value)
+
+    def test_label_defaults_to_production(self, tmp_path: Path):
+        """Test that label defaults to 'production' when not specified."""
+        prompts_yaml = tmp_path / "prompts.yaml"
+        prompts_yaml.write_text("""
+greeting:
+  type: text
+  labels:
+    production:
+      content: "Production!"
+      version: 1
+    staging:
+      content: "Staging!"
+      version: 1
+""")
+        manager = YAMLPromptManager(prompts_dir=str(tmp_path))
+
+        # Without label, should default to production
+        prompt = manager.get_text_prompt("greeting")
+        assert prompt.label == "production"
+        assert prompt.content == "Production!"
+
+    def test_different_labels_have_independent_versions(self, tmp_path: Path):
+        """Test that different labels maintain independent version numbers."""
+        prompts_yaml = tmp_path / "prompts.yaml"
+        prompts_yaml.write_text("""
+greeting:
+  type: text
+  labels:
+    production:
+      content: "Prod v5"
+      version: 5
+    staging:
+      content: "Stage v2"
+      version: 2
+    development:
+      content: "Dev v10"
+      version: 10
+""")
+        manager = YAMLPromptManager(prompts_dir=str(tmp_path))
+
+        # Each label has its own version
+        prod = manager.get_text_prompt("greeting", label="production")
+        assert prod.version == 5
+
+        staging = manager.get_text_prompt("greeting", label="staging")
+        assert staging.version == 2
+
+        dev = manager.get_text_prompt("greeting", label="development")
+        assert dev.version == 10
 
 
 class TestYAMLPromptManagerIntegration:
