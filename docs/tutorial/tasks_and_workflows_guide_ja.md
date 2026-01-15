@@ -21,6 +21,11 @@ Graflowでワークフローを構築するための実践ガイド — 最初�
 | コンテキスト注入 | `@task(inject_context=True)` | チャンネル/ワークフロー制御にアクセス |
 | LLMクライアント注入 | `@task(inject_llm_client=True)` | LLM APIを直接呼び出し |
 | LLMエージェント注入 | `@task(inject_llm_agent="name")` | ツール付きSuperAgentを注入 |
+| プロンプトマネージャー作成 | `PromptManagerFactory.create("yaml", ...)` | プロンプトバックエンドのファクトリ |
+| プロンプトマネージャー | `ctx.prompt_manager` | プロンプトテンプレートにアクセス |
+| テキストプロンプト取得 | `pm.get_text_prompt("name")` | テキストプロンプトテンプレートを取得 |
+| チャットプロンプト取得 | `pm.get_chat_prompt("name")` | チャットプロンプトテンプレートを取得 |
+| プロンプトをレンダリング | `prompt.render(var=value)` | テンプレート変数を置換 |
 | チャンネル取得 | `ctx.get_channel()` | キー・バリューチャンネルにアクセス |
 | TTL付き保存 | `channel.set(key, value, ttl=300)` | 有効期限付きで保存(秒) |
 | リスト末尾に追加 | `channel.append(key, value)` | リスト末尾に追加 |
@@ -48,7 +53,7 @@ Graflowでワークフローを構築するための実践ガイド — 最初�
 
 **コアコンセプト**
 - [レベル5: タスクインスタンス](#レベル5-タスクインスタンス) - 異なるパラメータでの再利用
-- [レベル6: チャンネルとコンテキスト](#レベル6-チャンネルとコンテキスト) - タスク間通信と注入
+- [レベル6: チャンネルとコンテキスト](#レベル6-チャンネルとコンテキスト) - タスク間通信、注入、プロンプト管理
 - [レベル7: 実行パターン](#レベル7-実行パターン) - 結果取得と実行制御
 - [レベル8: 複雑なワークフロー](#レベル8-複雑なワークフロー) - ダイヤモンドパターンと複数インスタンス
 
@@ -1001,6 +1006,207 @@ def task_with_llm(ctx: TaskExecutionContext, query: str):
 **使い分け:**
 - 直接注入 (`inject_llm_client=True`): LLMのみ使う場合にシンプル
 - コンテキスト経由 (`ctx.llm_client`): チャンネル/制御も必要な場合
+
+### プロンプト管理
+
+GraflowはLLMプロンプトをバージョン管理・ラベル管理するためのプロンプト管理モジュールを提供します。
+
+#### プロンプトマネージャーの設定
+
+`PromptManagerFactory` を使ってプロンプトマネージャーを作成し、ワークフローに渡します:
+
+```python
+from pathlib import Path
+from graflow.core.workflow import workflow
+from graflow.prompts.factory import PromptManagerFactory
+
+# YAMLベースのプロンプトマネージャー (ローカルファイル)
+prompts_dir = Path(__file__).parent / "prompts"
+pm = PromptManagerFactory.create("yaml", prompts_dir=str(prompts_dir))
+
+# または Langfuseベースのプロンプトマネージャー (クラウド)
+pm = PromptManagerFactory.create(
+    "langfuse",
+    fetch_timeout_seconds=10,  # 10秒タイムアウト
+    max_retries=2,             # 失敗時は最大2回リトライ
+)
+
+# ワークフローコンテキストに渡す
+with workflow("my_workflow", prompt_manager=pm) as ctx:
+    # タスクは context.prompt_manager でアクセス可能
+    ...
+```
+
+**利用可能なバックエンド:**
+
+| バックエンド | 用途 | 設定 |
+|---------|----------|---------------|
+| `"yaml"` | ローカル開発、バージョン管理されたプロンプト | `prompts_dir="./prompts"` |
+| `"langfuse"` | クラウドベース、チーム協業、A/Bテスト | `fetch_timeout_seconds`, `max_retries` |
+
+**Langfuseセットアップ** (`pip install graflow[tracing]` が必要):
+```bash
+export LANGFUSE_PUBLIC_KEY=pk-lf-...
+export LANGFUSE_SECRET_KEY=sk-lf-...
+export LANGFUSE_HOST=https://cloud.langfuse.com  # またはセルフホストURL
+```
+
+#### タスク内でプロンプトにアクセス
+
+`context.prompt_manager` を使ってタスク内でプロンプトにアクセスします:
+
+```python
+@task(inject_context=True)
+def greet(ctx: TaskExecutionContext) -> str:
+    pm = ctx.prompt_manager
+
+    # テキストプロンプトを取得し、変数をレンダリング
+    prompt = pm.get_text_prompt("greeting")
+    return prompt.render(name="Alice", product="Graflow")
+    # 出力: "Hello Alice, welcome to Graflow!"
+```
+
+#### テキストプロンプト vs チャットプロンプト
+
+**テキストプロンプト** - 単一文字列テンプレート:
+
+```python
+@task(inject_context=True)
+def generate_greeting(ctx: TaskExecutionContext) -> str:
+    pm = ctx.prompt_manager
+
+    # テキストプロンプトを取得
+    prompt = pm.get_text_prompt("greeting")
+
+    # render()は文字列を返す
+    message: str = prompt.render(name="Alice")
+    return message
+```
+
+**チャットプロンプト** - LLM API用のメッセージリストテンプレート:
+
+```python
+@task(inject_context=True)
+def generate_conversation(ctx: TaskExecutionContext) -> list:
+    pm = ctx.prompt_manager
+
+    # チャットプロンプトを取得
+    prompt = pm.get_chat_prompt("assistant")
+
+    # render()はメッセージ辞書のリストを返す
+    messages: list[dict] = prompt.render(domain="Python", task="debugging")
+    # [
+    #   {"role": "system", "content": "You are an expert in Python."},
+    #   {"role": "user", "content": "Help me with debugging."}
+    # ]
+    return messages
+```
+
+#### ラベルとバージョンによるアクセス
+
+特定バージョンのプロンプトにアクセス:
+
+```python
+# ラベル指定 (本番/ステージング環境に推奨)
+prompt = pm.get_text_prompt("greeting", label="production")
+prompt = pm.get_text_prompt("greeting", label="staging")
+
+# バージョン番号指定
+prompt = pm.get_text_prompt("greeting", version=1)
+prompt = pm.get_text_prompt("greeting", version=2)
+```
+
+#### YAMLプロンプト形式
+
+YAMLファイルにプロンプトを保存:
+
+```yaml
+# prompts/greeting.yaml
+greeting:
+  type: text
+  labels:
+    production:
+      content: "Hello {{name}}, welcome to {{product}}!"
+      version: 1
+      metadata:
+        author: "team@example.com"
+    staging:
+      content: "Hi {{name}}! Testing {{product}}."
+      version: 2
+
+# チャットプロンプトの例
+assistant:
+  type: chat
+  labels:
+    production:
+      content:
+        - role: system
+          content: "You are a helpful assistant specializing in {{domain}}."
+        - role: user
+          content: "Help me with {{task}}."
+```
+
+**主な機能:**
+- `{{variable}}` プレースホルダー (Jinja2構文)
+- ラベルベースのアクセス (`production`, `staging` など)
+- ファイル変更時の自動リロード
+- サブディレクトリ対応 (例: `customer/welcome`)
+
+#### 完全な例
+
+```python
+from pathlib import Path
+from graflow.core.workflow import workflow
+from graflow.core.decorators import task
+from graflow.core.context import TaskExecutionContext
+from graflow.prompts.factory import PromptManagerFactory
+
+# プロンプトマネージャーを作成
+prompts_dir = Path(__file__).parent / "prompts"
+pm = PromptManagerFactory.create("yaml", prompts_dir=str(prompts_dir))
+
+with workflow("customer_onboarding", prompt_manager=pm) as ctx:
+
+    @task(inject_context=True)
+    def setup(context: TaskExecutionContext):
+        channel = context.get_channel()
+        channel.set("customer_name", "Alice")
+        channel.set("product_name", "Graflow")
+
+    @task(inject_context=True)
+    def greet_customer(context: TaskExecutionContext) -> str:
+        pm = context.prompt_manager
+        channel = context.get_channel()
+
+        name = channel.get("customer_name")
+        product = channel.get("product_name")
+
+        # 本番用プロンプトを取得してレンダリング
+        prompt = pm.get_text_prompt("greeting", label="production")
+        return prompt.render(name=name, product=product)
+
+    @task(inject_context=True)
+    def generate_assistant(context: TaskExecutionContext) -> list:
+        pm = context.prompt_manager
+
+        # LLM API用のチャットプロンプトを取得
+        prompt = pm.get_chat_prompt("assistant", label="production")
+        messages = prompt.render(domain="Python", task="onboarding")
+
+        # LLM APIへ送信可能
+        return messages
+
+    setup >> greet_customer >> generate_assistant
+    ctx.execute("setup")
+```
+
+**💡 重要ポイント:**
+- `PromptManagerFactory.create()` でプロンプトマネージャーを作成
+- ワークフローに渡す: `workflow("name", prompt_manager=pm)`
+- タスク内では `context.prompt_manager` でアクセス
+- 文字列には `get_text_prompt()`、メッセージリストには `get_chat_prompt()`
+- 環境別プロンプトにはラベル (`production`, `staging`) を使用
+- 完全な例は `examples/14_prompt_management/` を参照
 
 ### Human-in-the-Loop: `ctx.request_feedback()`
 

@@ -21,6 +21,11 @@ This guide teaches you how to define tasks and build workflows through practical
 | Context injection | `@task(inject_context=True)` | Access channels/workflow control |
 | LLM client injection | `@task(inject_llm_client=True)` | Direct LLM API calls |
 | LLM agent injection | `@task(inject_llm_agent="name")` | Inject SuperAgent with tools |
+| Create prompt manager | `PromptManagerFactory.create("yaml", ...)` | Factory for prompt backends |
+| Prompt manager | `ctx.prompt_manager` | Access prompt templates |
+| Get text prompt | `pm.get_text_prompt("name")` | Get text prompt template |
+| Get chat prompt | `pm.get_chat_prompt("name")` | Get chat prompt template |
+| Render prompt | `prompt.render(var=value)` | Substitute template variables |
 | Get channel | `ctx.get_channel()` | Access key-value channel |
 | Set with TTL | `channel.set(key, value, ttl=300)` | Store with expiration (seconds) |
 | Append to list | `channel.append(key, value)` | Add to end of list |
@@ -48,7 +53,7 @@ This guide teaches you how to define tasks and build workflows through practical
 
 **Core Concepts**
 - [Level 5: Task Instances](#level-5-task-instances) - Reusing tasks with different parameters
-- [Level 6: Channels and Context](#level-6-channels-and-context) - Inter-task communication and injection
+- [Level 6: Channels and Context](#level-6-channels-and-context) - Inter-task communication, injection, and prompt management
 - [Level 7: Execution Patterns](#level-7-execution-patterns) - Getting results and controlling execution
 - [Level 8: Complex Workflows](#level-8-complex-workflows) - Diamond patterns and multi-instance
 
@@ -1001,6 +1006,205 @@ def task_with_llm(ctx: TaskExecutionContext, query: str):
 **When to use:**
 - Direct injection (`inject_llm_client=True`): Cleaner when only using LLM
 - Via context (`ctx.llm_client`): When you also need channels or workflow control
+
+### Prompt Management
+
+Graflow provides a prompt management module for managing LLM prompts with versioning and labels.
+
+#### Setting Up Prompt Manager
+
+Use `PromptManagerFactory` to create a prompt manager and pass it to the workflow:
+
+```python
+from pathlib import Path
+from graflow.core.workflow import workflow
+from graflow.prompts.factory import PromptManagerFactory
+
+# Create YAML-based prompt manager (local files)
+prompts_dir = Path(__file__).parent / "prompts"
+pm = PromptManagerFactory.create("yaml", prompts_dir=str(prompts_dir))
+
+# Or create Langfuse-based prompt manager
+pm = PromptManagerFactory.create(
+    "langfuse",
+    fetch_timeout_seconds=10,  # 10 second timeout
+    max_retries=2,             # Retry up to 2 times on failure
+)
+
+# Pass to workflow context
+with workflow("my_workflow", prompt_manager=pm) as ctx:
+    # Tasks can now access pm via context.prompt_manager
+    ...
+```
+
+**Available backends:**
+
+| Backend | Use Case | Configuration |
+|---------|----------|---------------|
+| `"yaml"` | Local development, version-controlled prompts | `prompts_dir="./prompts"` |
+| `"langfuse"` | Cloud-based, team collaboration, A/B testing | `fetch_timeout_seconds`, `max_retries` |
+
+**Langfuse setup** (requires `pip install graflow[tracing]`):
+```bash
+export LANGFUSE_PUBLIC_KEY=pk-lf-...
+export LANGFUSE_SECRET_KEY=sk-lf-...
+export LANGFUSE_HOST=https://cloud.langfuse.com  # or self-hosted URL
+```
+
+#### Accessing Prompts in Tasks
+
+Use `context.prompt_manager` to access prompts within tasks:
+
+```python
+@task(inject_context=True)
+def greet(ctx: TaskExecutionContext) -> str:
+    pm = ctx.prompt_manager
+
+    # Get text prompt and render with variables
+    prompt = pm.get_text_prompt("greeting")
+    return prompt.render(name="Alice", product="Graflow")
+    # Output: "Hello Alice, welcome to Graflow!"
+```
+
+#### Text Prompts vs Chat Prompts
+
+**Text Prompts** - Single string templates:
+
+```python
+@task(inject_context=True)
+def generate_greeting(ctx: TaskExecutionContext) -> str:
+    pm = ctx.prompt_manager
+
+    # Get text prompt
+    prompt = pm.get_text_prompt("greeting")
+
+    # Render returns a string
+    message: str = prompt.render(name="Alice")
+    return message
+```
+
+**Chat Prompts** - Message list templates for LLM APIs:
+
+```python
+@task(inject_context=True)
+def generate_conversation(ctx: TaskExecutionContext) -> list:
+    pm = ctx.prompt_manager
+
+    # Get chat prompt
+    prompt = pm.get_chat_prompt("assistant")
+
+    # Render returns list of message dicts
+    messages: list[dict] = prompt.render(domain="Python", task="debugging")
+    # [
+    #   {"role": "system", "content": "You are an expert in Python."},
+    #   {"role": "user", "content": "Help me with debugging."}
+    # ]
+    return messages
+```
+
+#### Label and Version Access
+
+Access specific versions of prompts:
+
+```python
+# By label (recommended for production/staging)
+prompt = pm.get_text_prompt("greeting", label="production")
+prompt = pm.get_text_prompt("greeting", label="staging")
+
+# By version number
+prompt = pm.get_text_prompt("greeting", version=1)
+prompt = pm.get_text_prompt("greeting", version=2)
+```
+
+#### YAML Prompt Format
+
+Store prompts in YAML files:
+
+```yaml
+# prompts/greeting.yaml
+greeting:
+  type: text
+  labels:
+    production:
+      content: "Hello {{name}}, welcome to {{product}}!"
+      version: 1
+      metadata:
+        author: "team@example.com"
+    staging:
+      content: "Hi {{name}}! Testing {{product}}."
+      version: 2
+
+# Chat prompt example
+assistant:
+  type: chat
+  labels:
+    production:
+      content:
+        - role: system
+          content: "You are a helpful assistant specializing in {{domain}}."
+        - role: user
+          content: "Help me with {{task}}."
+```
+
+**Key features:**
+- `{{variable}}` placeholders (Jinja2 syntax)
+- Label-based access (`production`, `staging`, etc.)
+- Auto-reload on file changes
+- Subdirectory support (e.g., `customer/welcome`)
+
+#### Complete Example
+
+```python
+from graflow.core.workflow import workflow
+from graflow.core.decorators import task
+from graflow.core.context import TaskExecutionContext
+from graflow.prompts.factory import PromptManagerFactory
+
+# Create prompt manager
+pm = PromptManagerFactory.create("yaml", prompts_dir="./prompts")
+
+with workflow("customer_onboarding", prompt_manager=pm) as ctx:
+
+    @task(inject_context=True)
+    def setup(context: TaskExecutionContext):
+        channel = context.get_channel()
+        channel.set("customer_name", "Alice")
+        channel.set("product_name", "Graflow")
+
+    @task(inject_context=True)
+    def greet_customer(context: TaskExecutionContext) -> str:
+        pm = context.prompt_manager
+        channel = context.get_channel()
+
+        name = channel.get("customer_name")
+        product = channel.get("product_name")
+
+        # Get production prompt and render
+        prompt = pm.get_text_prompt("greeting", label="production")
+        return prompt.render(name=name, product=product)
+
+    @task(inject_context=True)
+    def generate_assistant(context: TaskExecutionContext) -> list:
+        pm = context.prompt_manager
+
+        # Get chat prompt for LLM API
+        prompt = pm.get_chat_prompt("assistant", label="production")
+        messages = prompt.render(domain="Python", task="onboarding")
+
+        # Ready to send to LLM API
+        return messages
+
+    setup >> greet_customer >> generate_assistant
+    ctx.execute("setup")
+```
+
+**💡 Key Takeaways:**
+- Create prompt manager with `PromptManagerFactory.create()`
+- Pass to workflow: `workflow("name", prompt_manager=pm)`
+- Access in tasks via `context.prompt_manager`
+- Use `get_text_prompt()` for strings, `get_chat_prompt()` for message lists
+- Use labels (`production`, `staging`) for environment-specific prompts
+- See `examples/14_prompt_management/` for complete examples
 
 ### Human-in-the-Loop: `ctx.request_feedback()`
 
