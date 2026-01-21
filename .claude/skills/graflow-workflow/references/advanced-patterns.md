@@ -170,63 +170,75 @@ with workflow("fault_tolerant") as wf:
 
 ### Basic Approval
 ```python
-from graflow.hitl.manager import FeedbackManager
-from graflow.hitl.types import FeedbackType
-
 @task(inject_context=True)
 def approval_task(ctx: TaskExecutionContext):
-    manager = FeedbackManager()
-
-    feedback = manager.request_feedback(
-        request_id="deploy_approval",
-        feedback_type=FeedbackType.APPROVAL,
-        message="Approve deployment to production?",
-        timeout=300  # 5 minutes
+    response = ctx.request_feedback(
+        feedback_type="approval",
+        prompt="Approve deployment to production?",
+        timeout=300.0,  # 5 minutes
     )
 
-    if feedback.approved:
+    if response.approved:
         ctx.next_task(deploy())
     else:
-        ctx.cancel_workflow(error="Deployment rejected")
+        ctx.cancel_workflow(error=f"Deployment rejected: {response.reason}")
 ```
 
 ### Text Input
 ```python
-feedback = manager.request_feedback(
-    request_id="config_input",
-    feedback_type=FeedbackType.TEXT,
-    message="Enter configuration value:",
-    timeout=60
-)
-config_value = feedback.value
+@task(inject_context=True)
+def text_input_task(ctx: TaskExecutionContext):
+    response = ctx.request_feedback(
+        feedback_type="text",
+        prompt="Enter configuration value:",
+        timeout=60.0,
+    )
+    config_value = response.text
 ```
 
 ### Selection
 ```python
-feedback = manager.request_feedback(
-    request_id="model_selection",
-    feedback_type=FeedbackType.SELECTION,
-    message="Select model to use:",
-    options=["gpt-4o", "gpt-4o-mini", "claude-3-5-sonnet"],
-    timeout=120
-)
-selected_model = feedback.value
+@task(inject_context=True)
+def selection_task(ctx: TaskExecutionContext):
+    response = ctx.request_feedback(
+        feedback_type="selection",
+        prompt="Select model to use:",
+        options=["gpt-4o", "gpt-4o-mini", "claude-3-5-sonnet"],
+        timeout=120.0,
+    )
+    selected_model = response.selected
 ```
 
 ### Channel Integration
 ```python
 @task(inject_context=True)
 def feedback_to_channel(ctx: TaskExecutionContext):
-    manager = FeedbackManager()
-
-    feedback = manager.request_feedback(
-        request_id="user_input",
-        feedback_type=FeedbackType.TEXT,
-        message="Enter search query:",
-        channel_key="search_query",  # Auto-write to channel
-        execution_context=ctx.execution_context
+    response = ctx.request_feedback(
+        feedback_type="selection",
+        prompt="Select processing mode:",
+        options=["low_cost", "balanced", "high_performance"],
+        channel_key="processing_mode",  # Auto-write to channel
+        write_to_channel=True,
+        timeout=60.0,
     )
-    # feedback.value is also written to channel["search_query"]
+    # response.selected is also written to channel["processing_mode"]
+```
+
+### Timeout and Checkpoint
+```python
+@task(inject_context=True)
+def review_task(ctx: TaskExecutionContext):
+    try:
+        response = ctx.request_feedback(
+            feedback_type="text",
+            prompt="Review findings and provide your assessment:",
+            timeout=2.0,  # Short timeout triggers checkpoint
+        )
+        return response.text
+    except Exception as e:
+        # Timeout triggers checkpoint creation
+        # Workflow can resume when feedback is provided via API
+        raise
 ```
 
 ---
