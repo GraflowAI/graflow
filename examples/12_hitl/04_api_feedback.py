@@ -8,16 +8,16 @@ Requirements:
 
 Usage:
     1. Start Redis:
-       docker run -p 6379:6379 redis:7.2
+       docker run -p 16378:6379 redis:7.2
 
     2. Start the API server (in another terminal):
-       uv run python -m graflow.api --backend redis --redis-host localhost --redis-port 6379
+       uv run python -m graflow.api --backend redis --redis-host localhost --redis-port 16378
 
     3. Run this workflow:
        uv run python examples/12_hitl/04_api_feedback.py [--redis-host HOST] [--redis-port PORT]
 
        Example with custom port:
-       uv run python examples/12_hitl/04_api_feedback.py --redis-port 16379
+       uv run python examples/12_hitl/04_api_feedback.py --redis-port 16378
 
     4. The workflow will wait for feedback. Provide it via API:
        # List pending requests
@@ -51,7 +51,7 @@ def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="HITL Feedback API Example")
     parser.add_argument("--redis-host", type=str, default="localhost", help="Redis host (default: localhost)")
-    parser.add_argument("--redis-port", type=int, default=6379, help="Redis port (default: 6379)")
+    parser.add_argument("--redis-port", type=int, default=16378, help="Redis port (default: 16378)")
     args = parser.parse_args()
 
     try:

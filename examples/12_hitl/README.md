@@ -66,24 +66,24 @@ uv sync --all-extras
 **Setup:**
 1. Start Redis:
    ```bash
-   docker run -p 16379:6379 redis:7.2
+   docker run -p 16378:6379 redis:7.2
    ```
 
 2. Start API server (Terminal 1) on port 8080:
    ```bash
-   uv run python -m graflow.api --port 8080 --backend redis --redis-host localhost --redis-port 16379
+   uv run python -m graflow.api --port 8080 --backend redis --redis-host localhost --redis-port 16378
    ```
 
 3. Run workflow (Terminal 2):
    ```bash
    # With custom port (matching Redis configuration)
-   uv run python examples/12_hitl/04_api_feedback.py --redis-port 16379
+   uv run python examples/12_hitl/04_api_feedback.py --redis-port 16378
 
-   # Or with default port (6379)
+   # Or with default port (16378)
    uv run python examples/12_hitl/04_api_feedback.py
 
    # With custom host and port
-   uv run python examples/12_hitl/04_api_feedback.py --redis-host localhost --redis-port 16379
+   uv run python examples/12_hitl/04_api_feedback.py --redis-host localhost --redis-port 16378
    ```
 
 4. Provide feedback via API (Terminal 3):
@@ -114,13 +114,13 @@ uv sync --all-extras
 uv run python -m graflow.api --backend filesystem
 
 # Redis backend (distributed/production)
-uv run python -m graflow.api --backend redis --redis-host localhost --redis-port 6379
+uv run python -m graflow.api --backend redis --redis-host localhost --redis-port 16378
 
 # With custom configuration
 uv run python -m graflow.api \
   --backend redis \
   --redis-host localhost \
-  --redis-port 6379 \
+  --redis-port 16378 \
   --host 0.0.0.0 \
   --port 8080 \
   --enable-cors
@@ -134,7 +134,7 @@ from graflow.api.app import create_feedback_api
 # Create Redis client
 redis_client = redis.Redis(
     host='localhost',
-    port=6379,
+    port=16378,
     db=0,
     decode_responses=True
 )
@@ -301,7 +301,7 @@ from graflow.core.engine import WorkflowEngine
 # Create Redis client
 redis_client = redis.Redis(
     host='localhost',
-    port=6379,
+    port=16378,
     db=0,
     decode_responses=True
 )
