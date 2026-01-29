@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "company-intel-mcp": {
+      "type": "http",
+      "url": "http://localhost:9100/mcp"
+    },
+    "company-intelligence": {
+      "command": "uv",
+      "args": ["run", "python", "server.py"],
+      "cwd": "${workspaceFolder}/examples/mcp_server",
+      "env": {
+        "TAVILY_API_KEY": "${env:TAVILY_API_KEY}",
+        "OPENAI_API_KEY": "${env:OPENAI_API_KEY}",
+        "LANGFUSE_PUBLIC_KEY": "${env:LANGFUSE_PUBLIC_KEY}",
+        "LANGFUSE_SECRET_KEY": "${env:LANGFUSE_SECRET_KEY}",
+        "LANGFUSE_HOST": "${env:LANGFUSE_HOST}",
+        "ENABLE_TRACING": "true"
+      }
+    }
+  }
+}

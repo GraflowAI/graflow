@@ -4,7 +4,7 @@ Welcome to the Graflow examples! This directory contains progressive examples to
 
 ## 🎉 What's Available
 
-**51 comprehensive, production-ready examples** covering:
+**54 comprehensive, production-ready examples** covering:
 - ✅ **Task Basics** - Define and execute tasks with parameters
 - ✅ **Workflow Orchestration** - Sequential and parallel task composition
 - ✅ **Data Flow** - Channels, typed communication, and result storage
@@ -18,6 +18,7 @@ Welcome to the Graflow examples! This directory contains progressive examples to
 - ✅ **Human-in-the-Loop** - Interactive workflows with human feedback
 - ✅ **Checkpoint/Resume** - Workflow state persistence and fault tolerance
 - ✅ **Prompt Management** - YAML and Langfuse prompt template management
+- ✅ **MCP Server Integration** - Expose workflows as MCP tools with FastMCP
 
 All examples include detailed documentation, real-world use cases, and hands-on experiments!
 
@@ -200,6 +201,20 @@ Manage LLM prompts with YAML files or Langfuse cloud:
 
 **Note**: Langfuse examples require `langfuse` package and credentials.
 
+### ✅ mcp_server - MCP Server Integration
+**Status**: Complete | **Difficulty**: Advanced
+
+Expose Graflow workflows as MCP (Model Context Protocol) tools:
+- FastMCP server with REST API endpoints
+- Multi-agent workflow with feedback loops (Search → Curate → Write → Critique)
+- Company intelligence report generation
+- Langfuse tracing integration
+- Claude Code MCP configuration
+
+[View MCP server example →](mcp_server/)
+
+**Note**: Requires `fastmcp`, `tavily-python`, and API keys. See directory README for setup.
+
 ## Learning Path
 
 **Recommended order for beginners:**
@@ -352,6 +367,7 @@ Some examples require additional packages:
 - **Docker examples**: `docker`
 - **Visualization**: `grandalf`, `pygraphviz`, `requests`
 - **LLM integration**: `litellm` (for LLMClient), `google-adk` (for agents)
+- **MCP server**: `fastmcp`, `tavily-python`, `python-dotenv`
 
 ## Running Examples
 
@@ -475,6 +491,18 @@ examples/
 │   ├── workflow_with_prompts.py
 │   └── prompts/        # Sample YAML prompts
 │
+├── mcp_server/         # MCP Server Integration
+│   ├── README.md       # Setup and usage documentation
+│   ├── server.py       # FastMCP server
+│   ├── workflow.py     # Graflow workflow definition
+│   ├── client_example.py # Client usage example
+│   ├── config.py       # Configuration management
+│   └── agents/         # Multi-agent implementation
+│       ├── search.py   # Tavily search agent
+│       ├── curator.py  # Content curation agent
+│       ├── writer.py   # Report writer agent
+│       └── critique.py # Quality critique agent
+│
 └── README.md           # This file
 ```
 
@@ -500,6 +528,7 @@ examples/
 | 12_hitl | ✅ Complete | 4/4 | Human-in-the-Loop workflows |
 | 13_checkpoints | ✅ Complete | 4/4 | Checkpoint/Resume for fault tolerance |
 | 14_prompt_management | ✅ Complete | 3/3 | Prompt template management |
+| mcp_server | ✅ Complete | 3/3 | MCP server with multi-agent workflow |
 
 ## Troubleshooting
 
@@ -563,7 +592,7 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md) for details.
 
 All planned examples are now complete! 🎉
 
-The **51 examples** provide comprehensive coverage from basic concepts to AI-powered production applications. You can now:
+The **54 examples** provide comprehensive coverage from basic concepts to AI-powered production applications. You can now:
 
 1. **Build Production Workflows** - Use patterns from 08_real_world
 2. **Scale with Redis** - Deploy distributed workflows from 05_distributed
@@ -576,6 +605,7 @@ The **51 examples** provide comprehensive coverage from basic concepts to AI-pow
 9. **Add Human Feedback** - Build interactive workflows with HITL from 12_hitl
 10. **Implement Fault Tolerance** - Build resilient workflows with checkpoint/resume from 13_checkpoints
 11. **Manage Prompts** - Use YAML or Langfuse for prompt templates from 14_prompt_management
+12. **Expose as MCP Tools** - Serve workflows via MCP protocol from mcp_server
 
 Additional examples may be added based on community feedback and emerging use cases.
 
@@ -607,7 +637,7 @@ uv run pytest tests/tutorial/test_hitl.py -v
 
 ## API Notes
 
-**Important**: The examples in this directory use stable, tested API patterns. All 48 examples are fully functional and production-ready. See [docs/examples_api_issues.md](../docs/examples_api_issues.md) for historical notes on API evolution.
+**Important**: The examples in this directory use stable, tested API patterns. All 54 examples are fully functional and production-ready. See [docs/examples_api_issues.md](../docs/examples_api_issues.md) for historical notes on API evolution.
 
 ## Getting Help
 
