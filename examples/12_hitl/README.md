@@ -84,6 +84,9 @@ uv sync --all-extras
 
    # With custom host and port
    uv run python examples/12_hitl/04_api_feedback.py --redis-host localhost --redis-port 16378
+
+   # With webhook notifications (optional)
+   uv run python examples/12_hitl/04_api_feedback.py --webhook-url https://your-app.com/webhooks/feedback
    ```
 
 4. Provide feedback via API (Terminal 3):

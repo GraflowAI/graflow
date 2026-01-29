@@ -52,7 +52,49 @@ def main():
     parser = argparse.ArgumentParser(description="HITL Feedback API Example")
     parser.add_argument("--redis-host", type=str, default="localhost", help="Redis host (default: localhost)")
     parser.add_argument("--redis-port", type=int, default=16378, help="Redis port (default: 16378)")
+    parser.add_argument(
+        "--webhook-url",
+        type=str,
+        default=None,
+        help="Webhook URL to receive feedback event notifications",
+    )
+    parser.add_argument(
+        "--api-host",
+        type=str,
+        default="localhost",
+        help="Host for the feedback API (default: localhost)",
+    )
+    parser.add_argument(
+        "--api-port",
+        type=int,
+        default=8080,
+        help="Port for the feedback API (default: 8080)",
+    )
     args = parser.parse_args()
+
+    # Construct API base URL
+    api_base_url = f"http://{args.api_host}:{args.api_port}"
+
+    # Create webhook handler if URL provided
+    webhook_handler = None
+    if args.webhook_url:
+        # Use SlackFeedbackHandler for Slack webhooks, WebhookFeedbackHandler for others
+        if "hooks.slack.com" in args.webhook_url:
+            from graflow.hitl.handler import SlackFeedbackHandler
+
+            # Construct feedback UI URL for Slack button
+            feedback_ui_url = f"{api_base_url}/ui/feedback/{{feedback_id}}"
+            webhook_handler = SlackFeedbackHandler(
+                webhook_url=args.webhook_url,
+                feedback_ui_url=feedback_ui_url,
+            )
+            print(f"[Setup] Slack webhook notifications enabled: {args.webhook_url}")
+            print(f"[Setup] Feedback UI URL: {feedback_ui_url}")
+        else:
+            from graflow.hitl.handler import WebhookFeedbackHandler
+
+            webhook_handler = WebhookFeedbackHandler(webhook_url=args.webhook_url)
+            print(f"[Setup] Webhook notifications enabled: {args.webhook_url}")
 
     try:
         import redis
@@ -137,6 +179,7 @@ def main():
                     feedback_type="approval",
                     prompt=f"Approve deployment {deployment_info['version']} to {deployment_info['environment']}?",
                     timeout=300.0,  # 5 minutes
+                    handler=webhook_handler,  # Optional webhook notifications
                 )
 
                 if response.approved:

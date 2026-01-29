@@ -83,6 +83,139 @@ class FeedbackHandler:
         pass
 
 
+class WebhookFeedbackHandler(FeedbackHandler):
+    """Handler that sends HTTP webhook notifications for feedback events.
+
+    Sends JSON payloads to a webhook URL when feedback is requested, received, or times out.
+
+    Example:
+        ```python
+        from graflow.hitl.handler import WebhookFeedbackHandler
+
+        handler = WebhookFeedbackHandler(
+            webhook_url="https://your-app.com/webhooks/feedback",
+            headers={"Authorization": "Bearer YOUR_TOKEN"}
+        )
+
+        # Use handler with request_feedback
+        context.request_feedback(
+            feedback_type="approval",
+            prompt="Deploy to production?",
+            handler=handler
+        )
+        ```
+    """
+
+    def __init__(
+        self,
+        webhook_url: str,
+        headers: Optional[dict[str, str]] = None,
+        timeout: float = 10.0,
+    ):
+        """Initialize Webhook handler.
+
+        Args:
+            webhook_url: URL to send webhook notifications to
+            headers: Optional HTTP headers to include in requests
+            timeout: Request timeout in seconds (default: 10)
+        """
+        self.webhook_url = webhook_url
+        self.headers = headers or {}
+        self.timeout = timeout
+
+    def _send_webhook(self, event_type: str, payload: dict) -> bool:
+        """Send webhook notification.
+
+        Args:
+            event_type: Type of event (request_created, response_received, request_timeout)
+            payload: JSON payload to send
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            import requests
+
+            full_payload = {
+                "event_type": event_type,
+                "timestamp": __import__("datetime").datetime.now().isoformat(),
+                **payload,
+            }
+
+            headers = {"Content-Type": "application/json", **self.headers}
+
+            response = requests.post(
+                self.webhook_url,
+                json=full_payload,
+                headers=headers,
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            logger.info(
+                "Webhook sent successfully: %s to %s",
+                event_type,
+                self.webhook_url,
+                extra={"event_type": event_type, "status_code": response.status_code},
+            )
+            return True
+        except Exception as e:
+            logger.error("Failed to send webhook: %s", e, exc_info=True)
+            return False
+
+    def on_request_created(self, request: FeedbackRequest) -> None:
+        """Send webhook notification when feedback is requested."""
+        # Handle created_at being either datetime or string
+        created_at = request.created_at
+
+        payload = {
+            "feedback_id": request.feedback_id,
+            "task_id": request.task_id,
+            "session_id": request.session_id,
+            "feedback_type": request.feedback_type.value,
+            "prompt": request.prompt,
+            "options": request.options,
+            "timeout": request.timeout,
+            "metadata": request.metadata,
+            "created_at": created_at,
+        }
+        self._send_webhook("request_created", payload)
+
+    def on_response_received(self, request: FeedbackRequest, response: FeedbackResponse) -> None:
+        """Send webhook notification when feedback is received."""
+        # Handle responded_at being either datetime or string
+        responded_at = response.responded_at
+
+        payload = {
+            "feedback_id": request.feedback_id,
+            "task_id": request.task_id,
+            "session_id": request.session_id,
+            "feedback_type": request.feedback_type.value,
+            "response": {
+                "approved": response.approved,
+                "reason": response.reason,
+                "text": response.text,
+                "selected": response.selected,
+                "selected_multiple": response.selected_multiple,
+                "custom_data": response.custom_data,
+                "responded_by": response.responded_by,
+                "responded_at": responded_at,
+            },
+        }
+        self._send_webhook("response_received", payload)
+
+    def on_request_timeout(self, request: FeedbackRequest) -> None:
+        """Send webhook notification when feedback times out."""
+        payload = {
+            "feedback_id": request.feedback_id,
+            "task_id": request.task_id,
+            "session_id": request.session_id,
+            "feedback_type": request.feedback_type.value,
+            "prompt": request.prompt,
+            "timeout": request.timeout,
+        }
+        self._send_webhook("request_timeout", payload)
+
+
 class SlackFeedbackHandler(FeedbackHandler):
     """Handler that sends Slack notifications for feedback events.
 
