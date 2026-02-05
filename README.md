@@ -1,4 +1,4 @@
-<img width="500" height="200" alt="banner" src="https://github.com/user-attachments/assets/932a3403-7d2c-4e9d-a900-8781f97fb14b" />
+<a href="https://graflow.ai"><img width="500" height="200" alt="banner" src="https://github.com/user-attachments/assets/932a3403-7d2c-4e9d-a900-8781f97fb14b" /></a>
 
 # Graflow
 
@@ -8,11 +8,9 @@ Graflow is the orchestration engine for production-grade agentic workflows, desi
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![PyPI](https://img.shields.io/pypi/v/graflow.svg)](https://pypi.org/project/graflow/)
 
-<img src="https://img.shields.io/twitter/follow/GraflowAI?logo=X&color=%20%23f5f5f5" alt="follow on X(Twitter)"></a>
+<a href="https://x.com/GraflowAI"><img src="https://img.shields.io/twitter/follow/GraflowAI?logo=X&color=%20%23f5f5f5" alt="follow on X(Twitter)"></a>
 
-## Demo
-
-<a href="https://www.youtube.com/watch?v=OkJlpmdCCAg"><img width="749" height="404" alt="youtube_thunbnail" src="https://github.com/user-attachments/assets/ac58948f-afdd-4154-be88-97c6eadf851f" /></a>
+<a href="https://www.youtube.com/watch?v=OkJlpmdCCAg"><img width="765" height="428" alt="image" src="https://github.com/user-attachments/assets/a4c287d2-805f-45ac-9d09-2bb9b1f88ee4" /></a>
 
 ## Installation
 
