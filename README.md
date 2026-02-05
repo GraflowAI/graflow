@@ -1,0 +1,30 @@
+<img width="500" height="200" alt="banner" src="https://github.com/user-attachments/assets/932a3403-7d2c-4e9d-a900-8781f97fb14b" />
+
+# Graflow
+
+Graflow is the orchestration engine for production-grade agentic workflows, designed to be reliable, explainable, and scalable.
+
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![PyPI](https://img.shields.io/pypi/v/graflow.svg)](https://pypi.org/project/graflow/)
+
+<img src="https://img.shields.io/twitter/follow/GraflowAI?logo=X&color=%20%23f5f5f5" alt="follow on X(Twitter)"></a>
+
+## Demo
+
+<a href="https://www.youtube.com/watch?v=OkJlpmdCCAg"><img width="749" height="404" alt="youtube_thunbnail" src="https://github.com/user-attachments/assets/ac58948f-afdd-4154-be88-97c6eadf851f" /></a>
+
+## Installation
+
+```bash
+pip install graflow
+```
+
+## Documentation
+
+- [Examples](./examples/) - Production-ready examples organized by complexity
+- [API Documentation](./docs/) - Detailed API reference
+
+## License
+
+This project is licensed under the Apache License 2.0 - see the [LICENSE](./LICENSE) file for details.
