@@ -307,14 +307,13 @@ class WorkflowEngine:
                     extra={"task_id": task_id, "session_id": context.session_id},
                 )
 
-            else:
-                # Normal successor processing: add successor nodes to queue
-                # Child tasks inside a ParallelGroup have no graph-level successors
-                if task_id in graph.nodes:
-                    successors = list(graph.successors(task_id))
-                    for succ in successors:
-                        succ_task = graph.get_node(succ)
-                        context.add_to_queue(succ_task)
+            # Normal successor processing: add successor nodes to queue
+            # Child tasks inside a ParallelGroup have no graph-level successors
+            elif task_id in graph.nodes:
+                successors = list(graph.successors(task_id))
+                for succ in successors:
+                    succ_task = graph.get_node(succ)
+                    context.add_to_queue(succ_task)
 
             # Get next task from queue
             task_id = context.get_next_task()
