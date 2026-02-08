@@ -231,8 +231,8 @@ class WorkflowEngine:
             # Reset control flow flags for each task
             context.reset_control_flags()
 
-            # Check if task exists in graph
-            if task_id not in graph.nodes:
+            # Check if task exists in graph (including inside ParallelGroups)
+            if not graph.has_node(task_id):
                 logger.error(
                     "Node not found in graph: %s",
                     task_id,
@@ -309,10 +309,12 @@ class WorkflowEngine:
 
             else:
                 # Normal successor processing: add successor nodes to queue
-                successors = list(graph.successors(task_id))
-                for succ in successors:
-                    succ_task = graph.get_node(succ)
-                    context.add_to_queue(succ_task)
+                # Child tasks inside a ParallelGroup have no graph-level successors
+                if task_id in graph.nodes:
+                    successors = list(graph.successors(task_id))
+                    for succ in successors:
+                        succ_task = graph.get_node(succ)
+                        context.add_to_queue(succ_task)
 
             # Get next task from queue
             task_id = context.get_next_task()

@@ -68,6 +68,21 @@ class TaskGraph:
 
         raise KeyError(f"Task {task_id} not found in graph")
 
+    def has_node(self, task_id: str) -> bool:
+        """Check if a task exists in the graph, including inside ParallelGroups."""
+        if task_id in self._graph.nodes:
+            return True
+
+        from graflow.core.task import ParallelGroup
+
+        for node_id in self._graph.nodes:
+            node_data = self._graph.nodes[node_id]
+            if "task" in node_data and isinstance(node_data["task"], ParallelGroup):
+                for member in node_data["task"].tasks:
+                    if member.task_id == task_id:
+                        return True
+        return False
+
     @property
     def nodes(self) -> NodeView:
         """Get all node names in the graph."""
