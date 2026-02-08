@@ -220,7 +220,7 @@ class FeedbackManager:
             logger.warning("Request %s not found", feedback_id, extra={"feedback_id": feedback_id})
             return False
 
-        if request.status != "pending":
+        if request.status not in ("pending", "timeout"):
             logger.warning(
                 "Request %s is not pending (status=%s), rejecting late response",
                 feedback_id,
