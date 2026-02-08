@@ -462,7 +462,9 @@ def create_article_workflow(
 
             prompt = f"Editorial Review: {title}\n\n{body_preview}...\n\nApprove for publishing?"
 
-            print(f"[{article_id}] [HITL] Requesting editorial approval for: {title} | DEBUG keys={list(article.keys())} paragraphs={len(paragraphs)} body={len(body)} summary={len(summary)}")
+            print(
+                f"[{article_id}] [HITL] Requesting editorial approval for: {title} | DEBUG keys={list(article.keys())} paragraphs={len(paragraphs)} body={len(body)} summary={len(summary)}"
+            )
 
             # Include full article content in metadata so the frontend can render a review panel
             sources = article.get("sources", [])
