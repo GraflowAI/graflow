@@ -389,8 +389,8 @@ def _collect_parallel_group_internal_tasks(group_node_id: str, graph: nx.DiGraph
     _, external_tasks = _classify_parallel_group_edges(group_node_id, graph)
     external_task_set = set(external_tasks)
 
-    # Collect all tasks reachable from parallel tasks, excluding external tasks
-    internal_tasks = set()
+    # Always include direct member tasks of the ParallelGroup
+    internal_tasks = set(parallel_task_ids)
     visited = set()
 
     def dfs(task_id: str) -> None:
@@ -410,7 +410,7 @@ def _collect_parallel_group_internal_tasks(group_node_id: str, graph: nx.DiGraph
         for successor in graph.successors(task_id):
             dfs(successor)
 
-    # Start DFS from each parallel task
+    # Start DFS from each parallel task (for additional downstream internal tasks)
     for task_id in parallel_task_ids:
         if task_id in graph.nodes():
             dfs(task_id)
@@ -480,6 +480,11 @@ def _transform_graph_with_start_end_nodes(graph: nx.DiGraph) -> tuple[nx.DiGraph
         # Add edges: predecessors -> start node
         for pred in predecessors:
             transformed.add_edge(pred, start_node_name)
+
+        # Add member task nodes if they don't exist in the graph
+        for member_task in task.tasks:
+            if member_task.task_id not in transformed.nodes():
+                transformed.add_node(member_task.task_id, task=member_task)
 
         # Add edges: start node -> parallel tasks
         for task_id in internal_tasks:
@@ -659,6 +664,11 @@ def _transform_graph_for_container_view(graph: nx.DiGraph) -> tuple[nx.DiGraph, 
 
             # Classify successors
             _internal_tasks, external_tasks = _classify_parallel_group_edges(str(node), graph)
+
+            # Add member task nodes to the transformed graph if they don't exist
+            for member_task in task.tasks:
+                if member_task.task_id not in transformed_graph.nodes():
+                    transformed_graph.add_node(member_task.task_id, task=member_task)
 
             # Collect all tasks that should be inside the container
             # This includes direct child tasks and all reachable internal tasks
