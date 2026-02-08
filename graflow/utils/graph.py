@@ -436,8 +436,6 @@ def _transform_graph_with_start_end_nodes(graph: nx.DiGraph) -> tuple[nx.DiGraph
     Returns:
         Tuple of (transformed graph, set of ParallelGroup node names for double-box rendering)
     """
-    from graflow.core.task import ParallelGroup
-
     transformed = graph.copy()
     parallel_group_nodes: set[str] = set()
 
@@ -445,13 +443,7 @@ def _transform_graph_with_start_end_nodes(graph: nx.DiGraph) -> tuple[nx.DiGraph
         if not _is_parallel_group(str(node), graph):
             continue
 
-        node_data = graph.nodes.get(node)
-        if not node_data:
-            continue
-
-        task = node_data.get("task")
-        if not isinstance(task, ParallelGroup):
-            continue
+        task = graph.nodes[node]["task"]
 
         # Get parallel tasks and external tasks
         parallel_task_ids = [t.task_id for t in task.tasks]
@@ -460,7 +452,6 @@ def _transform_graph_with_start_end_nodes(graph: nx.DiGraph) -> tuple[nx.DiGraph
 
         # External successors exclude parallel members (tracked separately)
         external_tasks = [s for s in successors if s not in parallel_task_ids]
-        internal_tasks = parallel_task_ids
 
         # Create start and end node names
         start_node_name = str(node)  # Use the original ParallelGroup name
@@ -486,14 +477,10 @@ def _transform_graph_with_start_end_nodes(graph: nx.DiGraph) -> tuple[nx.DiGraph
             if member_task.task_id not in transformed.nodes():
                 transformed.add_node(member_task.task_id, task=member_task)
 
-        # Add edges: start node -> parallel tasks
-        for task_id in internal_tasks:
+        # Add edges: start node -> parallel tasks, parallel tasks -> end node
+        for task_id in parallel_task_ids:
             if task_id in transformed.nodes():
                 transformed.add_edge(start_node_name, task_id)
-
-        # Add edges: parallel tasks -> end node
-        for task_id in internal_tasks:
-            if task_id in transformed.nodes():
                 transformed.add_edge(task_id, end_node_name)
 
         # Add edges: end node -> external successors
