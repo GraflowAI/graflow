@@ -212,12 +212,21 @@ class FeedbackManager:
             response: Feedback response
 
         Returns:
-            True if successful, False if request not found
+            True if successful, False if request not found or not pending
         """
         # Get request
         request = self._backend.get_request(feedback_id)
         if not request:
             logger.warning("Request %s not found", feedback_id, extra={"feedback_id": feedback_id})
+            return False
+
+        if request.status != "pending":
+            logger.warning(
+                "Request %s is not pending (status=%s), rejecting late response",
+                feedback_id,
+                request.status,
+                extra={"feedback_id": feedback_id, "status": request.status},
+            )
             return False
 
         # Store response
