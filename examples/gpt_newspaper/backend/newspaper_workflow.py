@@ -20,10 +20,12 @@ Expected Output:
 Generated newspaper HTML in outputs/ directory with multiple articles.
 """
 
+from __future__ import annotations
+
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, List
+from typing import Any, Dict, List, Optional
 
 from agents import (
     CritiqueAgent,
@@ -41,20 +43,30 @@ from graflow.core.workflow import workflow
 from graflow.trace.langfuse import LangFuseTracer
 
 
-def create_article_workflow(query: str, article_id: str, output_dir: str, tracer=None):
+def create_article_workflow(
+    query: str,
+    article_id: str,
+    output_dir: str,
+    tracer: Any = None,
+    enable_hitl: bool = False,
+    log_stream_manager: Any = None,
+    run_id: Optional[str] = None,
+):
     """
     Create a workflow for processing a single article query.
 
     This workflow demonstrates graflow's dynamic task creation pattern:
-    - Search -> Curate -> Write -> Critique
-    - If critique has feedback: next_task(writer) then next_task(critique)
-    - If critique approves: next_task(designer)
+    - Search -> Curate -> Write -> Critique -> Design
+    - If enable_hitl: Search -> Curate -> Write -> Critique -> [Editorial Approval] -> Design
 
     Args:
         query: Article topic/query
         article_id: Unique identifier for this article
         output_dir: Output directory for article HTML
         tracer: Optional tracer for workflow execution tracking
+        enable_hitl: If True, insert HITL editorial approval between critique and design
+        log_stream_manager: Optional LogStreamManager for WebSocket broadcasting (HITL only)
+        run_id: Optional run ID for log streaming (HITL only)
 
     Returns:
         Workflow context
@@ -193,13 +205,76 @@ def create_article_workflow(query: str, article_id: str, output_dir: str, tracer
             print(f"[{article_id}] ✅ Design complete: {design_result.get('path')}")
             return design_result
 
-        # Build workflow graph: search >> curate >> write >> critique >> design
-        _ = search_task >> curate_task >> write_task >> critique_task >> design_task
+        # Build workflow graph
+        if enable_hitl:
+            from newspaper_hitl_workflow import WebSocketFeedbackHandler
+
+            @task(id=f"editorial_approval_{article_id}", inject_context=True)
+            def editorial_approval_task(context: TaskExecutionContext) -> Dict:
+                """Request editorial approval via HITL before proceeding to design."""
+                channel = context.get_channel()
+                article = channel.get("article")
+                if article is None:
+                    article = context.get_result(f"critique_{article_id}")
+                if article is None:
+                    article = context.get_result(f"write_{article_id}")
+                if article is None:
+                    raise ValueError("Article data is required for editorial approval.")
+
+                title = article.get("title", "Untitled")
+                body = article.get("body", "") or ""
+                body_preview = body[:500]
+
+                prompt = f"Editorial Review: {title}\n\n{body_preview}...\n\nApprove for publishing?"
+                print(f"[{article_id}] [HITL] Requesting editorial approval for: {title}")
+
+                sources = article.get("sources", [])
+                metadata: Dict[str, Any] = {
+                    "article_id": article_id,
+                    "stage": "editorial_approval",
+                    "title": title,
+                    "body": body,
+                    "sources": sources[:20] if isinstance(sources, list) else sources,
+                    "image": article.get("image"),
+                    "query": article.get("query", query),
+                }
+
+                handler = WebSocketFeedbackHandler(log_stream_manager, run_id or "")
+                response = context.request_feedback(
+                    feedback_type="approval",
+                    prompt=prompt,
+                    timeout=300.0,
+                    metadata=metadata,
+                    handler=handler,
+                )
+
+                if response.approved:
+                    print(f"[{article_id}] [HITL] Article approved by editor!")
+                    return article
+                else:
+                    reason = response.reason or "Editor requested revisions"
+                    print(f"[{article_id}] [HITL] Article rejected: {reason}")
+                    article["critique"] = reason
+                    channel.set("article", article)
+                    channel.set("iteration", channel.get("iteration", default=0) + 1)
+                    context.next_task(write_task, goto=True)
+                    return {"status": "revision_requested", "reason": reason}
+
+            _ = search_task >> curate_task >> write_task >> critique_task >> editorial_approval_task >> design_task
+        else:
+            _ = search_task >> curate_task >> write_task >> critique_task >> design_task
 
         return wf
 
 
-def execute_article_workflow(query: str, article_id: str, output_dir: str) -> Dict:
+def execute_article_workflow(
+    query: str,
+    article_id: str,
+    output_dir: str,
+    enable_hitl: bool = False,
+    log_stream_manager: Any = None,
+    run_id: Optional[str] = None,
+) -> Dict:
     """
     Execute a single article workflow.
 
@@ -207,12 +282,16 @@ def execute_article_workflow(query: str, article_id: str, output_dir: str) -> Di
         query: Article query/topic
         article_id: Unique article identifier
         output_dir: Output directory for article HTML
+        enable_hitl: If True, insert HITL editorial approval between critique and design
+        log_stream_manager: Optional LogStreamManager for WebSocket broadcasting (HITL only)
+        run_id: Optional run ID for log streaming (HITL only)
 
     Returns:
         Completed article dict with design, or None if not found
     """
+    label = "HITL" if enable_hitl else "Original"
     print(f"\n{'=' * 80}")
-    print(f"Processing Article: {query}")
+    print(f"Processing Article ({label}): {query}")
     print(f"{'=' * 80}")
 
     # Create tracer for workflow observability
@@ -225,7 +304,15 @@ def execute_article_workflow(query: str, article_id: str, output_dir: str) -> Di
         tracer = None
 
     # Create and execute workflow
-    wf = create_article_workflow(query, article_id, output_dir, tracer=tracer)
+    wf = create_article_workflow(
+        query,
+        article_id,
+        output_dir,
+        tracer=tracer,
+        enable_hitl=enable_hitl,
+        log_stream_manager=log_stream_manager,
+        run_id=run_id,
+    )
     result = wf.execute(
         f"search_{article_id}",
         max_steps=30,  # Allow multiple write-critique cycles
@@ -247,6 +334,9 @@ def run_newspaper_workflow(
     layout: str = "layout_1.html",
     max_workers: int | None = None,
     output_dir: str | None = None,
+    enable_hitl: bool = False,
+    log_stream_manager: Any = None,
+    run_id: Optional[str] = None,
 ):
     """
     Run the complete newspaper workflow for multiple queries in parallel.
@@ -255,14 +345,20 @@ def run_newspaper_workflow(
     - Parallel processing of multiple article workflows using ThreadPoolExecutor
     - Dynamic task creation with next_task()
     - Final compilation and publishing
+    - Optional HITL editorial approval gate between critique and design
 
     Args:
         queries: List of article queries/topics
         layout: Newspaper layout template
         max_workers: Max number of parallel workers (None = number of processors)
+        output_dir: Optional output directory override
+        enable_hitl: If True, insert HITL editorial approval between critique and design
+        log_stream_manager: Optional LogStreamManager for WebSocket broadcasting (HITL only)
+        run_id: Optional run ID for log streaming (HITL only)
     """
+    label = "HITL" if enable_hitl else ""
     print("=" * 80)
-    print("🗞️  GPT NEWSPAPER WORKFLOW")
+    print(f"🗞️  GPT NEWSPAPER WORKFLOW {label}".rstrip())
     print("=" * 80)
 
     # Create output directory
@@ -282,7 +378,15 @@ def run_newspaper_workflow(
         completed_articles = list(
             executor.map(
                 lambda args: execute_article_workflow(*args),
-                zip(queries, article_ids, [output_dir] * len(queries), strict=False),
+                zip(
+                    queries,
+                    article_ids,
+                    [output_dir] * len(queries),
+                    [enable_hitl] * len(queries),
+                    [log_stream_manager] * len(queries),
+                    [run_id] * len(queries),
+                    strict=False,
+                ),
             )
         )
 

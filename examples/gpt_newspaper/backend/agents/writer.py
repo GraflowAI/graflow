@@ -23,6 +23,7 @@ ARTICLE_JSON_FORMAT = """
 
 REVISE_JSON_FORMAT = """
 {
+  "title": "revised title of the article",
   "paragraphs": [
     "paragraph 1",
     "paragraph 2",
@@ -30,6 +31,7 @@ REVISE_JSON_FORMAT = """
     "paragraph 4",
     "paragraph 5"
   ],
+  "summary": "revised 2 sentences summary of the article",
   "message": "message to the critique explaining changes"
 }
 """
@@ -103,6 +105,12 @@ Sources:
 
 Your task is to write a critically acclaimed article about the provided query or topic based on the sources.
 
+Important guidelines:
+- When mentioning dates, events, or temporal information, use the exact dates from the sources. Do NOT fabricate or guess dates.
+- Attribute key facts and claims to their sources where appropriate.
+- Ensure the timeline of events is consistent and accurate relative to today's date.
+- If sources disagree on dates or facts, note the discrepancy or use the most reliable source.
+
 Please return nothing but a JSON in the following format:
 {ARTICLE_JSON_FORMAT}
 """
@@ -131,10 +139,27 @@ Please return nothing but a JSON in the following format:
         Returns:
             Dict with revised 'paragraphs' and 'message' to critique
         """
-        prompt = f"""Article:
-{article}
+        critique = article.get("critique", "No feedback provided")
+        title = article.get("title", "Unknown")
+        summary = article.get("summary", "")
+        paragraphs = article.get("paragraphs", [])
 
-Your task is to edit the article based on the critique given.
+        prompt = f"""Today's date is {datetime.now().strftime("%d/%m/%Y")}.
+
+Title: {title}
+
+Summary: {summary}
+
+Current paragraphs:
+{json.dumps(paragraphs, ensure_ascii=False, indent=2)}
+
+--- CRITIQUE / EDITOR FEEDBACK ---
+{critique}
+--- END FEEDBACK ---
+
+Your task is to revise the article based on the critique / editor feedback shown above.
+Address each point raised in the feedback carefully.
+You MUST revise the title, summary, and all paragraphs as needed to fully address the feedback.
 
 Please return json format with the revised 'paragraphs' and a new 'message' field to the critique that explains your changes or why you didn't change anything.
 

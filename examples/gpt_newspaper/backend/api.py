@@ -36,10 +36,17 @@ from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnec
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from newspaper_agent_workflow import run_newspaper_workflow as run_agent_newspaper_workflow
 from newspaper_dynamic_workflow import run_newspaper_workflow as run_dynamic_newspaper_workflow
+from newspaper_hitl_workflow import run_newspaper_workflow as run_hitl_newspaper_workflow
 from newspaper_workflow import run_newspaper_workflow as run_original_newspaper_workflow
 from pydantic import BaseModel, ConfigDict, Field
+
+import graflow.api
+from graflow.api.endpoints.feedback import router as feedback_router
+from graflow.api.endpoints.feedback_ui import router as feedback_ui_router
+from graflow.hitl.manager import FeedbackManager
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -58,6 +65,21 @@ app.add_middleware(
 outputs_dir = Path("outputs")
 outputs_dir.mkdir(exist_ok=True)
 app.mount("/outputs", StaticFiles(directory=outputs_dir), name="outputs")
+
+# Initialize FeedbackManager and mount feedback API/UI endpoints for HITL workflow
+feedback_manager = FeedbackManager(backend="filesystem")
+app.state.feedback_manager = feedback_manager
+app.include_router(feedback_router)
+
+# Setup Jinja2 templates and mount feedback web UI
+_api_pkg_dir = Path(graflow.api.__file__).parent
+_template_dir = _api_pkg_dir / "templates"
+if _template_dir.exists():
+    app.state.templates = Jinja2Templates(directory=str(_template_dir))
+    _static_dir = _api_pkg_dir / "static"
+    if _static_dir.exists():
+        app.mount("/static", StaticFiles(directory=str(_static_dir)), name="graflow_static")
+    app.include_router(feedback_ui_router)
 
 
 # Pydantic Models
@@ -226,6 +248,11 @@ class NewspaperRequest(BaseModel):
         description="Workflow variant to execute: 'original' (simple LLM tasks), 'dynamic' (parallel execution), or 'agent' (LLM agents with tools)",
         example=DEFAULT_WORKFLOW,
     )  # type: ignore
+    enable_hitl: bool = Field(
+        default=False,
+        alias="enableHitl",
+        description="When true and workflow is 'dynamic', insert an editorial approval (HITL) gate into the workflow",
+    )
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -337,14 +364,30 @@ def _generate_newspaper_impl(request: NewspaperRequest, run_id: str) -> Newspape
         raise HTTPException(status_code=400, detail="At least one non-empty query is required.")
 
     workflow_choice: SupportedWorkflow = request.workflow or DEFAULT_WORKFLOW
-    workflow_runner = WORKFLOW_RUNNERS.get(workflow_choice, WORKFLOW_RUNNERS[DEFAULT_WORKFLOW])
+    use_hitl = request.enable_hitl and workflow_choice in ("original", "dynamic")
 
-    newspaper_path = workflow_runner(
-        queries=sanitized_queries,
-        layout=request.resolved_layout(),
-        max_workers=request.max_workers,
-        output_dir=request.output_dir,
-    )
+    # For dynamic+HITL, use the dedicated HITL workflow runner.
+    # For original+HITL, use the original runner with enable_hitl flag.
+    if use_hitl and workflow_choice == "dynamic":
+        workflow_runner = run_hitl_newspaper_workflow
+    else:
+        workflow_runner = WORKFLOW_RUNNERS.get(workflow_choice, WORKFLOW_RUNNERS[DEFAULT_WORKFLOW])
+
+    kwargs: Dict = {
+        "queries": sanitized_queries,
+        "layout": request.resolved_layout(),
+        "max_workers": request.max_workers,
+        "output_dir": request.output_dir,
+    }
+
+    # Pass extra arguments for HITL-enabled workflows (WebSocket feedback broadcasting)
+    if use_hitl:
+        kwargs["log_stream_manager"] = log_stream_manager
+        kwargs["run_id"] = run_id
+        if workflow_choice == "original":
+            kwargs["enable_hitl"] = True
+
+    newspaper_path = workflow_runner(**kwargs)
     response = _build_newspaper_response(Path(newspaper_path), request, run_id=run_id)
     response.layout = request.layout
     response.queries = sanitized_queries

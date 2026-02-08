@@ -10,6 +10,15 @@ export interface LogConsoleProps {
 
 const formatLine = (entry: LogEvent) => {
   const prefix = `[${new Date(entry.timestamp).toLocaleTimeString()}]`;
+  if (entry.type === "feedback_request") {
+    return `${prefix} [HITL] Waiting for editorial approval...`;
+  }
+  if (entry.type === "feedback_resolved") {
+    return `${prefix} [HITL] Feedback received, resuming workflow`;
+  }
+  if (entry.type === "feedback_timeout") {
+    return `${prefix} [HITL] Feedback timed out`;
+  }
   const statusLabel = entry.type === "status" ? ` (${entry.status ?? "status"})` : "";
   const message = (entry.message ?? "").trimEnd();
   return `${prefix}${statusLabel} ${message}`.trim();
@@ -28,6 +37,7 @@ const openLogsInNewWindow = (entries: LogEvent[], runId: string | null) => {
     <!DOCTYPE html>
     <html>
       <head>
+        <meta charset="utf-8">
         <title>Live Logs - ${runId || "Unknown Run"}</title>
         <style>
           body {
@@ -184,11 +194,11 @@ const openLogsInNewWindow = (entries: LogEvent[], runId: string | null) => {
     </html>
   `;
 
-  const newWindow = window.open("", "_blank", "width=800,height=600");
-  if (newWindow) {
-    newWindow.document.write(htmlContent);
-    newWindow.document.close();
-  }
+  const blob = new Blob([htmlContent], { type: "text/html" });
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank", "width=800,height=600");
+  // Release the object URL after the new window has loaded the content
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
 const LogConsole = ({ entries, runId, loading }: LogConsoleProps) => (

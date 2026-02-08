@@ -1,5 +1,6 @@
 import axios, { AxiosInstance } from "axios";
 import type {
+  FeedbackResponsePayload,
   LayoutOption,
   NewspaperRequest,
   NewspaperResponse,
@@ -37,6 +38,10 @@ export class GPTNewspaperClient {
       params: { limit }
     });
     return response.data;
+  }
+
+  public async respondToFeedback(feedbackId: string, payload: FeedbackResponsePayload): Promise<void> {
+    await this.http.post(`/api/feedback/${feedbackId}/respond`, payload);
   }
 
   public withBaseUrl(baseURL: string): GPTNewspaperClient {

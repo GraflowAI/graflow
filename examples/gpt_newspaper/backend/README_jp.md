@@ -4,32 +4,33 @@
 
 ## 概要
 
-このディレクトリには、**AI新聞記事を自動生成するシステム**の**3つのバージョン**が含まれています。Graflowの様々なパターンとユースケースを段階的に理解できるように設計されています。
+このディレクトリには、**AI新聞記事を自動生成するシステム**の**4つのバージョン**が含まれています。Graflowの様々なパターンとユースケースを段階的に理解できるように設計されています。
 
 ## ワークフロー比較
 
-| 機能 | シンプル版 | 動的版 | **エージェント版** |
-|------|-----------|--------|-------------------|
-| **ファイル** | `newspaper_workflow.py` | `newspaper_dynamic_workflow.py` | `newspaper_agent_workflow.py` |
-| **タスク数** | 5タスク | 15+タスク (動的) | 6タスク |
-| **複雑度** | 🟢 低 | 🟡 高 | 🟡 中 |
-| **LLMエージェント** | 0 (純粋なLLMタスク) | 0 (純粋なLLMタスク) | **2 (研究者、編集者)** |
-| **ツール呼び出し** | ❌ なし | ❌ なし | **✅ あり (8ツール)** |
-| **リサーチ** | 単一検索 | 複数角度ファンアウト | **自律的マルチ検索** |
-| **執筆** | 単一LLM呼び出し | 3並列ペルソナ | 単一LLM+改訂 |
-| **品質管理** | シンプル批評 | 批評 + 3ゲート | **エージェント駆動編集** |
-| **改訂ループ** | 固定ロジック (goto) | 固定ロジック (goto) | **エージェント制御** |
-| **動的タスク生成** | なし (gotoのみ) | 検索展開、ギャップ補填 | なし (エージェントが決定) |
-| **並列実行** | 記事レベル | タスク + 記事レベル | 記事レベル |
-| **エラーハンドリング** | 反復回数制限 | 部分的成功 (2/3) | エージェント制御 |
-| **レイテンシ** | ~30秒 | ~45秒 | ~60秒 |
-| **LLM呼び出し** | 4-6回 | 10-15回 | 8-12回 + ツール |
-| **コスト (相対)** | 1x | 2-3x | 1.5-2x |
-| **品質** | 良 | 優 | **秀** |
-| **自律性** | 低 | 中 | **高** |
-| **透明性** | 中 | 中 | **高 (ツール可視化)** |
-| **コード行数** | ~325行 | ~604行 | ~1100行 |
-| **学習曲線** | 🟢 初心者向け | 🟡 中級者向け | 🟡 中級者向け |
+| 機能 | シンプル版 | 動的版 | **エージェント版** | **HITL版** |
+|------|-----------|--------|-------------------|------------|
+| **ファイル** | `newspaper_workflow.py` | `newspaper_dynamic_workflow.py` | `newspaper_agent_workflow.py` | `newspaper_hitl_workflow.py` |
+| **タスク数** | 5タスク | 15+タスク (動的) | 6タスク | 16+タスク (動的+HITL) |
+| **複雑度** | 🟢 低 | 🟡 高 | 🟡 中 | 🟡 高 |
+| **LLMエージェント** | 0 (純粋なLLMタスク) | 0 (純粋なLLMタスク) | **2 (研究者、編集者)** | 0 (純粋なLLMタスク) |
+| **ツール呼び出し** | ❌ なし | ❌ なし | **✅ あり (8ツール)** | ❌ なし |
+| **リサーチ** | 単一検索 | 複数角度ファンアウト | **自律的マルチ検索** | 複数角度ファンアウト |
+| **執筆** | 単一LLM呼び出し | 3並列ペルソナ | 単一LLM+改訂 | 3並列ペルソナ |
+| **品質管理** | シンプル批評 | 批評 + 3ゲート | **エージェント駆動編集** | 批評 + **人間承認** + 3ゲート |
+| **改訂ループ** | 固定ロジック (goto) | 固定ロジック (goto) | **エージェント制御** | 固定ロジック + **人間判断** |
+| **Human-in-the-Loop** | ❌ なし | ❌ なし | ❌ なし | **✅ 編集承認ゲート** |
+| **動的タスク生成** | なし (gotoのみ) | 検索展開、ギャップ補填 | なし (エージェントが決定) | 検索展開、ギャップ補填 |
+| **並列実行** | 記事レベル | タスク + 記事レベル | 記事レベル | タスク + 記事レベル |
+| **エラーハンドリング** | 反復回数制限 | 部分的成功 (2/3) | エージェント制御 | 部分的成功 + タイムアウト |
+| **レイテンシ** | ~30秒 | ~45秒 | ~60秒 | ~45秒 + 人間待機 |
+| **LLM呼び出し** | 4-6回 | 10-15回 | 8-12回 + ツール | 10-15回 |
+| **コスト (相対)** | 1x | 2-3x | 1.5-2x | 2-3x |
+| **品質** | 良 | 優 | **秀** | **秀 (人間保証)** |
+| **自律性** | 低 | 中 | **高** | 中 (人間ゲート) |
+| **透明性** | 中 | 中 | **高 (ツール可視化)** | **高 (承認UI)** |
+| **コード行数** | ~325行 | ~604行 | ~1100行 | ~650行 |
+| **学習曲線** | 🟢 初心者向け | 🟡 中級者向け | 🟡 中級者向け | 🟡 中級者向け |
 
 ## 選択ガイド
 
@@ -51,6 +52,13 @@
 - ✅ ツール使用の透明性が必要 (トレースで可視化)
 - ✅ エージェントシステムの構築
 - ✅ LLMエージェントパターンの探求
+
+### HITL版を選ぶべき場合:
+- ✅ 公開前に人間の承認が必要
+- ✅ 編集者によるレビューゲートが必要
+- ✅ フロントエンドからインラインで承認/却下したい
+- ✅ GraflowのHITL機能を学ぶ
+- ✅ WebSocket経由のリアルタイムフィードバック連携
 
 ---
 
@@ -93,15 +101,35 @@ PYTHONPATH=. uv run python examples/gpt_newspaper/backend/newspaper_agent_workfl
 
 **詳細なエージェントワークフローのセットアップ:** [agent_workflow.md](agent_workflow.md) を参照
 
+### HITL版
+```bash
+# 動的版と同じ環境変数
+export TAVILY_API_KEY="your_tavily_api_key"
+export OPENAI_API_KEY="your_openai_api_key"
+
+# バックエンド起動
+cd examples/gpt_newspaper/backend
+uvicorn api:app --reload --port 8000
+
+# フロントエンド起動 (別ターミナル)
+cd examples/gpt_newspaper/frontend
+npm run dev
+
+# ブラウザで http://localhost:5173 を開き、"Enable editorial review (HITL)" チェックボックスをオン
+```
+
+**詳細なHITLワークフローの説明:** [hitl_workflow.md](hitl_workflow.md) を参照
+
 ---
 
 ## 学習パス
 
-**推奨順序:** シンプル版 → 動的版 → エージェント版
+**推奨順序:** シンプル版 → 動的版 → HITL版 → エージェント版
 
 1. **`newspaper_workflow.py`** - gotoループ、チャンネル、状態管理を学ぶ
 2. **`newspaper_dynamic_workflow.py`** - 動的タスク生成、並列実行、グループポリシーを学ぶ
-3. **`newspaper_agent_workflow.py`** - LLMエージェント、ツール呼び出し、自律的意思決定を学ぶ
+3. **`newspaper_hitl_workflow.py`** - Human-in-the-Loop、WebSocketフィードバック、承認ゲートを学ぶ
+4. **`newspaper_agent_workflow.py`** - LLMエージェント、ツール呼び出し、自律的意思決定を学ぶ
 
 ---
 
@@ -109,10 +137,70 @@ PYTHONPATH=. uv run python examples/gpt_newspaper/backend/newspaper_agent_workfl
 
 ## ワークフローの全体像
 
+```mermaid
+flowchart TD
+    UI(["🗞️ User Input<br/>queries, layout"])
+
+    subgraph ARTICLES ["📰 Per-Article Pipeline (parallel)"]
+        S["🔍 Search<br/>Tavily API"]
+        CU["📋 Curator<br/>LLM source selection"]
+        W["✍️ Writer<br/>LLM article draft"]
+        CR["🔎 Critique<br/>LLM quality review"]
+        DE["🎨 Designer<br/>HTML article layout"]
+
+        S --> CU --> W --> CR
+        CR -->|"🔄 feedback"| W
+        CR -->|"✅ approved"| DE
+    end
+
+    ED["📰 Editor<br/>compile newspaper"]
+    PU["📤 Publisher<br/>save HTML output"]
+
+    UI --> ARTICLES
+    ARTICLES --> ED --> PU
+
+    style UI fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    style CR fill:#fff3e0,stroke:#e65100
+    style DE fill:#e8f5e9,stroke:#2e7d32
+    style ED fill:#f3e5f5,stroke:#7b1fa2
+    style PU fill:#f3e5f5,stroke:#7b1fa2
 ```
-search → curate → write ⟲ critique → design
-                    ↑      ↓
-                    └──────┘ (フィードバックループ)
+
+### HITL有効化時のワークフロー
+
+`enableHitl` チェックボックスをオンにすると、批評後・デザイン前に**編集承認ゲート**が挿入されます。
+
+```mermaid
+flowchart TD
+    UI(["🗞️ User Input<br/>queries, layout, ☑ enableHitl"])
+
+    subgraph ARTICLES ["📰 Per-Article Pipeline (parallel)"]
+        S["🔍 Search<br/>Tavily API"]
+        CU["📋 Curator<br/>LLM source selection"]
+        W["✍️ Writer<br/>LLM article draft"]
+        CR["🔎 Critique<br/>LLM quality review"]
+        EA{{"✋ Editorial Approval<br/>HITL"}}
+        DE["🎨 Designer<br/>HTML article layout"]
+
+        S --> CU --> W --> CR
+        CR -->|"🔄 feedback"| W
+        CR -->|"✅ approved"| EA
+        EA -->|"✅ Approve"| DE
+        EA -->|"❌ Reject + reason"| W
+    end
+
+    ED["📰 Editor<br/>compile newspaper"]
+    PU["📤 Publisher<br/>save HTML output"]
+
+    UI --> ARTICLES
+    ARTICLES --> ED --> PU
+
+    style UI fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    style EA fill:#ff9800,stroke:#e65100,color:#fff,stroke-width:3px
+    style CR fill:#fff3e0,stroke:#e65100
+    style DE fill:#e8f5e9,stroke:#2e7d32
+    style ED fill:#f3e5f5,stroke:#7b1fa2
+    style PU fill:#f3e5f5,stroke:#7b1fa2
 ```
 
 ## 核となる機能: goto=Trueによるループバック
@@ -389,7 +477,7 @@ quality_gate = (
 
 ---
 
-## ワークフローのタスクグラフ
+## ワークフローのタスクグラフ (動的版)
 
 ```python
 # newspaper_dynamic_workflow.py:428
@@ -428,10 +516,171 @@ design
 
 ---
 
+# Part 3: HITL版 (`newspaper_hitl_workflow.py`)
+
+## ワークフローの全体像
+
+動的版に**編集承認ゲート**を追加したバージョンです。批評が通過した後、品質ゲートの前に人間の承認ステップが挿入されます。
+
+```mermaid
+graph TD
+    A[topic_intake] --> B[search_router]
+    B --> B1[search_angle_1]
+    B --> B2[search_angle_2]
+    B --> Bn[search_angle_n]
+    B1 --> C[curate]
+    B2 --> C
+    Bn --> C
+    C -->|gap fill| C
+    C --> W1[write_feature]
+    C --> W2[write_brief]
+    C --> W3[write_data_digest]
+    W1 --> SD[select_draft]
+    W2 --> SD
+    W3 --> SD
+    SD --> W[write]
+    W --> CR[critique]
+    CR -->|feedback| W
+    CR -->|approved| EA{editorial_approval<br/>HITL}
+    EA -->|Approve| QG1[fact_check]
+    EA -->|Approve| QG2[compliance_check]
+    EA -->|Approve| QG3[risk_check]
+    EA -->|Reject + reason| W
+    QG1 --> QS[quality_gate_summary]
+    QG2 --> QS
+    QG3 --> QS
+    QS --> D[design]
+
+    style EA fill:#ff9800,stroke:#e65100,color:#fff,stroke-width:3px
+    style W1 fill:#e3f2fd,stroke:#1565c0
+    style W2 fill:#e3f2fd,stroke:#1565c0
+    style W3 fill:#e3f2fd,stroke:#1565c0
+    style QG1 fill:#e8f5e9,stroke:#2e7d32
+    style QG2 fill:#e8f5e9,stroke:#2e7d32
+    style QG3 fill:#e8f5e9,stroke:#2e7d32
+```
+
+## 核となる機能: Human-in-the-Loopによる編集承認
+
+### 1. **WebSocketFeedbackHandler** 📡
+
+WebSocket経由でフィードバックイベントをフロントエンドにブロードキャストするハンドラーです。
+
+```python
+class WebSocketFeedbackHandler(FeedbackHandler):
+    """LogStreamManager経由でHITLイベントをWebSocket配信"""
+
+    def __init__(self, log_stream_manager, run_id: str):
+        self._log_stream_manager = log_stream_manager
+        self._run_id = run_id
+
+    def on_request_created(self, request: FeedbackRequest) -> None:
+        # feedback_request イベントをWebSocketで配信
+        payload = {
+            "type": "feedback_request",
+            "feedbackId": request.feedback_id,
+            "feedbackType": request.feedback_type.value,
+            "prompt": request.prompt,
+            "timeout": request.timeout,
+            ...
+        }
+        self._log_stream_manager._publish(self._run_id, payload)
+
+    def on_response_received(self, request, response) -> None:
+        # feedback_resolved イベント配信 → フロントエンドが承認フォームを閉じる
+
+    def on_request_timeout(self, request) -> None:
+        # feedback_timeout イベント配信 → タイムアウト表示
+```
+
+### 2. **editorial_approval_task** ✋
+
+`newspaper_hitl_workflow.py` の核心部分です。
+
+```python
+@task(id=f"editorial_approval_{article_id}", inject_context=True)
+def editorial_approval_task(context: TaskExecutionContext) -> Dict:
+    """品質ゲート前に人間の編集承認を要求"""
+    article = _get_article_from_channel(context)
+    title = article.get("title", "Untitled")
+    body_preview = (article.get("body", "") or "")[:500]
+
+    prompt = f"Editorial Review: {title}\n\n{body_preview}...\n\nApprove for publishing?"
+
+    # ★ WebSocket経由でフロントエンドにフィードバック要求を送信
+    handler = WebSocketFeedbackHandler(log_stream_manager, run_id)
+    response = context.request_feedback(
+        feedback_type="approval",
+        prompt=prompt,
+        timeout=300.0,  # 5分間待機
+        metadata={"article_id": article_id, "stage": "editorial_approval"},
+        handler=handler,
+    )
+
+    if response.approved:
+        return article  # → 品質ゲートへ進む
+    else:
+        # ★ 却下: エディターのフィードバック付きでライターに差し戻し
+        article["critique"] = response.reason or "Editor requested revisions"
+        channel.set("article", article)
+        context.next_task(write_task, goto=True)
+        return {"status": "revision_requested"}
+```
+
+#### 何をやっているか
+
+1. 批評が承認した記事のタイトルと本文プレビューを表示
+2. `context.request_feedback()` でフィードバックを要求し、**スレッドをブロック**して応答を待つ
+3. `WebSocketFeedbackHandler` が `feedback_request` イベントをフロントエンドに配信
+4. フロントエンドに「Approve / Reject」フォームが表示される
+5. **承認** → 品質ゲートへ進む
+6. **却下** → エディターの理由を `article["critique"]` にセットし、`goto=True` でライターに差し戻す
+
+### 2つのフィードバックループ
+
+| ループ | 種別 | トリガー | 最大回数 |
+|--------|------|----------|----------|
+| critique → write | 自動 (LLM) | 批評エージェントの判断 | 3回 |
+| editorial_approval → write | 人間 (HITL) | エディターのReject | 無制限 |
+
+### WebSocketイベントフロー
+
+```
+バックエンド                        フロントエンド
+   |                                   |
+   |-- feedback_request ------------->|  (承認フォーム表示)
+   |                                   |
+   |<-- POST /api/feedback/{id} ------|  (Approve/Reject クリック)
+   |                                   |
+   |-- feedback_resolved ------------>|  (フォーム非表示、ワークフロー再開)
+   |                                   |
+```
+
+### ブロッキングモデル
+
+`context.request_feedback()` は呼び出しスレッドを500msごとにポーリングしてブロックします。FastAPIの `run_in_executor` (スレッドプール) 内で実行されるため、イベントループは `POST /api/feedback/{id}/respond` リクエストを処理可能です。
+
+### タイムアウト
+
+デフォルトは **300秒（5分）** です。応答がない場合、`FeedbackTimeoutError` が発生し、その記事のワークフローは失敗します。
+
+### フロントエンドUI
+
+- ログコンソール下に **FeedbackPanel** コンポーネントが表示される
+- 「Approve」(緑) / 「Reject」(赤) ボタン
+- Reject時にオプショナルな理由テキストフィールド
+- カウントダウンタイマー表示
+- 送信中はローディングスピナー
+
+---
+
 ## 主な洞察
 
 ### シンプル版 → 動的版
 **進化**: 並列実行、ランタイムタスク生成、グループポリシーを学ぶ
+
+### 動的版 → HITL版
+**進化**: Human-in-the-Loopゲート、WebSocketフィードバック、人間+自動ハイブリッドループを学ぶ
 
 ### シンプル版 → エージェント版
 **進化**: LLMエージェント、ツール呼び出し、自律的意思決定を学ぶ
@@ -439,8 +688,8 @@ design
 ### 動的版 → エージェント版
 **比較**: 動的版はより多くの並列タスク、エージェント版は自律的推論
 
-### 全3つ
-**学習**: 固定ロジック → 並列複雑性 → 自律的エージェント の進化を確認
+### 全4つ
+**学習**: 固定ロジック → 並列複雑性 → 人間承認ゲート → 自律的エージェント の進化を確認
 
 ---
 
@@ -478,18 +727,19 @@ channel.get("gap_fill_requested", default=False)
 
 ## まとめ
 
-これらのワークフローは、**シンプルなループから自律的エージェントへのGraflowの進化**を示しており、各パターンが前のパターンの上に構築されています。
+これらのワークフローは、**シンプルなループから人間参加型、そして自律的エージェントへのGraflowの進化**を示しており、各パターンが前のパターンの上に構築されています。
 
 ### Graflow vs 従来のワークフローエンジン
 
-| 機能 | 従来型 | Graflow (シンプル) | Graflow (動的) | Graflow (エージェント) |
-|------|-------|------------------|----------------|---------------------|
-| **タスク定義** | 事前に全て定義 | 事前定義 + goto | 実行時に動的生成 | 事前定義 + エージェント |
-| **循環フロー** | サポートなし (DAGのみ) | `goto=True`でループバック | 複数パターンのループ | エージェント制御ループ |
-| **条件分岐** | 事前定義が必要 | 実行時の状態で判断 | 動的タスク追加で分岐 | エージェントが決定 |
-| **並列実行** | 固定数の並列タスク | ワークフローレベル | タスクレベル + ワークフローレベル | ワークフローレベル |
-| **エラーハンドリング** | 固定的なリトライ | 反復回数制限 | 動的補完 + 部分的成功許容 | エージェントが判断 |
-| **自律性** | なし | 低 | 中 | **高** |
+| 機能 | 従来型 | Graflow (シンプル) | Graflow (動的) | Graflow (HITL) | Graflow (エージェント) |
+|------|-------|------------------|----------------|----------------|---------------------|
+| **タスク定義** | 事前に全て定義 | 事前定義 + goto | 実行時に動的生成 | 動的生成 + HITL | 事前定義 + エージェント |
+| **循環フロー** | サポートなし (DAGのみ) | `goto=True`でループバック | 複数パターンのループ | 自動+人間ループ | エージェント制御ループ |
+| **条件分岐** | 事前定義が必要 | 実行時の状態で判断 | 動的タスク追加で分岐 | 人間の判断で分岐 | エージェントが決定 |
+| **並列実行** | 固定数の並列タスク | ワークフローレベル | タスクレベル + ワークフローレベル | タスク + ワークフロー | ワークフローレベル |
+| **エラーハンドリング** | 固定的なリトライ | 反復回数制限 | 動的補完 + 部分的成功許容 | 部分的成功 + タイムアウト | エージェントが判断 |
+| **人間の関与** | なし | なし | なし | **承認ゲート** | なし |
+| **自律性** | なし | 低 | 中 | 中 (人間ゲート) | **高** |
 
 ### 実用例
 
@@ -501,6 +751,12 @@ channel.get("gap_fill_requested", default=False)
 - 🔄 複数角度のリサーチを伴う複雑なコンテンツパイプライン
 - 📊 動的処理拡張を伴うデータ分析
 - ⚙️ 自動ギャップ補填を伴うETLパイプライン
+
+**HITL版:**
+- ✋ 公開前に編集者承認が必要なコンテンツパイプライン
+- 🏥 医療・法務など人間レビュー必須のドキュメント生成
+- 📋 デプロイ承認、データバリデーション等の承認ワークフロー
+- 🔄 人間フィードバックによる反復改善ループ
 
 **エージェント版:**
 - 🔍 自律的検証を伴うリサーチ自動化

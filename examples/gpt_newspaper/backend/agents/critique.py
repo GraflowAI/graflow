@@ -1,9 +1,22 @@
 """Critique Agent - Provides feedback on articles"""
 
+import json
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from graflow.llm.client import LLMClient, make_message
+
+
+def _format_sources_for_review(sources: List[Dict]) -> str:
+    """Format source articles for cross-reference review."""
+    lines: list[str] = []
+    for i, src in enumerate(sources, 1):
+        title = src.get("title", "Untitled")
+        url = src.get("url", "")
+        content = (src.get("content") or "")[:600]
+        published = src.get("published_date", "unknown date")
+        lines.append(f"[Source {i}] {title}\n  URL: {url}\n  Published: {published}\n  Excerpt: {content}")
+    return "\n\n".join(lines)
 
 
 class CritiqueAgent:
@@ -29,16 +42,47 @@ class CritiqueAgent:
         Returns:
             Critique feedback string or None if article is acceptable
         """
+        title = article.get("title", "Untitled")
+        summary = article.get("summary", "")
+        paragraphs = article.get("paragraphs", [])
+        sources = article.get("sources", [])
+        revision_message = article.get("message")
+
+        sources_text = _format_sources_for_review(sources) if sources else "(no sources available)"
+
+        revision_note = ""
+        if revision_message:
+            revision_note = f"""
+--- WRITER'S REVISION NOTE ---
+The writer has revised the article based on your previous critique.
+Writer's message: {revision_message}
+--- END REVISION NOTE ---
+"""
+
         prompt = f"""Today's date is {datetime.now().strftime("%d/%m/%Y")}.
 
-Article:
-{article}
+--- ARTICLE ---
+Title: {title}
 
-Your task is to provide a really short feedback on the article only if necessary.
+Summary: {summary}
 
-If you think the article is good, please return exactly the word "None".
+Paragraphs:
+{json.dumps(paragraphs, ensure_ascii=False, indent=2)}
+--- END ARTICLE ---
 
-If you noticed the field 'message' in the article, it means the writer has revised the article based on your previous critique. You can provide feedback on the revised article or just return "None" if you think the article is good now.
+--- SOURCE MATERIAL ---
+{sources_text}
+--- END SOURCE MATERIAL ---
+{revision_note}
+Your task is to review the article and provide feedback. Focus on the following:
+
+1. **Factual accuracy**: Cross-reference dates, numbers, names, and events mentioned in the article against the source material above. Flag any dates or facts that are not supported by the sources or appear incorrect.
+2. **Temporal consistency**: Verify that the timeline of events is accurate. Check that "yesterday", "last week", specific dates, etc. are consistent with today's date ({datetime.now().strftime("%d/%m/%Y")}) and the source publication dates.
+3. **Attribution**: Ensure claims are properly attributed to sources. Flag any unsupported assertions.
+4. **Writing quality**: Check for clarity, coherence, and readability.
+
+If the article is factually accurate, well-written, and properly sourced, return exactly the word "None".
+Otherwise, provide concise, actionable feedback listing specific issues to fix.
 
 Please return a string of your critique or the word "None".
 """
@@ -47,7 +91,7 @@ Please return a string of your critique or the word "None".
             messages=[
                 make_message(
                     "system",
-                    "You are a newspaper writing critique. Your sole purpose is to provide short feedback on a written article so the writer will know what to fix.",
+                    "You are a rigorous newspaper fact-checker and writing critic. You verify factual claims, dates, and temporal information against source material, and provide actionable feedback to improve article accuracy and quality.",
                 ),
                 make_message("user", prompt),
             ],

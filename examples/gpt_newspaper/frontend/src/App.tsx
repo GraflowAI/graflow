@@ -1,11 +1,11 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import {
   Alert,
   CircularProgress,
   Container,
   Divider,
   List,
-  ListItem,
+  ListItemButton,
   ListItemText,
   Paper,
   Stack,
@@ -14,25 +14,66 @@ import {
 import Grid from "@mui/material/Grid";
 import QueryForm from "./components/QueryForm";
 import NewspaperPreview from "./components/NewspaperPreview";
+import type { NewspaperPreviewProps } from "./components/NewspaperPreview";
 import LogConsole from "./components/LogConsole";
+import FeedbackPanel from "./components/FeedbackPanel";
 import { useNewspaper } from "./hooks/useNewspaper";
+import { useFeedback } from "./hooks/useFeedback";
+import type { NewspaperSummary } from "./api/types";
 
 const getBackendUrl = (path: string): string => {
   const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
-  // Remove leading slash from path if present to avoid double slashes
   const cleanPath = path.startsWith("/") ? path.slice(1) : path;
   return `${baseUrl}/${cleanPath}`;
 };
 
 const App = () => {
   const { history, latest, loading, error, logEntries, activeRunId, generate } = useNewspaper();
+  const { pendingFeedback, submitting, submitError, submitFeedback } = useFeedback(logEntries);
+  const [selectedPreview, setSelectedPreview] = useState<NewspaperPreviewProps | null>(null);
+  const [fetchingPreview, setFetchingPreview] = useState(false);
 
   const handleSubmit = useCallback(
     async (payload: Parameters<typeof generate>[0]) => {
+      setSelectedPreview(null);
       await generate(payload);
     },
     [generate]
   );
+
+  const handleSelectHistory = useCallback(
+    async (item: NewspaperSummary) => {
+      setFetchingPreview(true);
+      try {
+        const url = getBackendUrl(item.outputPath);
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`Failed to fetch: ${res.status}`);
+        const html = await res.text();
+        setSelectedPreview({
+          html,
+          outputPath: item.outputPath,
+          createdAt: item.createdAt,
+        });
+      } catch (err) {
+        console.error("Failed to load past newspaper", err);
+      } finally {
+        setFetchingPreview(false);
+      }
+    },
+    []
+  );
+
+  // Show selected past run or latest generation result
+  const preview = selectedPreview ?? (latest
+    ? {
+        html: latest.html,
+        outputPath: latest.outputPath,
+        createdAt: latest.createdAt,
+        queries: latest.queries,
+        layout: latest.layout,
+        workflow: latest.workflow,
+      }
+    : null);
 
   return (
     <Container maxWidth="lg" sx={{ py: 6 }}>
@@ -72,19 +113,17 @@ const App = () => {
               ) : (
                 <List dense>
                   {history.map((item) => (
-                    <ListItem
+                    <ListItemButton
                       key={item.outputPath}
-                      component="a"
-                      href={getBackendUrl(item.outputPath)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      sx={{ textDecoration: "none", color: "inherit" }}
+                      selected={preview?.outputPath === item.outputPath}
+                      onClick={() => handleSelectHistory(item)}
+                      disabled={fetchingPreview}
                     >
                       <ListItemText
                         primary={item.filename}
                         secondary={new Date(item.createdAt).toLocaleString()}
                       />
-                    </ListItem>
+                    </ListItemButton>
                   ))}
                 </List>
               )}
@@ -92,23 +131,31 @@ const App = () => {
             {(activeRunId || logEntries.length > 0) && (
               <LogConsole entries={logEntries} runId={activeRunId} loading={loading} />
             )}
+            {pendingFeedback && (
+              <FeedbackPanel
+                feedback={pendingFeedback}
+                onSubmit={submitFeedback}
+                submitting={submitting}
+                error={submitError}
+              />
+            )}
           </Grid>
           <Grid item xs={12} md={7}>
-            {latest ? (
-              <NewspaperPreview
-                html={latest.html}
-                outputPath={latest.outputPath}
-                createdAt={latest.createdAt}
-                queries={latest.queries}
-                layout={latest.layout}
-                workflow={latest.workflow}
-              />
+            {fetchingPreview ? (
+              <Paper variant="outlined" sx={{ p: 4, height: "100%" }}>
+                <Stack spacing={2} alignItems="center" justifyContent="center" sx={{ height: "100%" }}>
+                  <CircularProgress size={32} />
+                  <Typography color="text.secondary">Loading newspaper…</Typography>
+                </Stack>
+              </Paper>
+            ) : preview ? (
+              <NewspaperPreview {...preview} />
             ) : (
               <Paper variant="outlined" sx={{ p: 4, height: "100%" }}>
                 <Stack spacing={2} alignItems="center" justifyContent="center" sx={{ height: "100%" }}>
                   <Typography variant="h5">Preview</Typography>
                   <Typography color="text.secondary" align="center">
-                    Generate a newspaper to see the HTML preview and artefact details here.
+                    Generate a newspaper or select a past run to see the HTML preview here.
                   </Typography>
                 </Stack>
               </Paper>

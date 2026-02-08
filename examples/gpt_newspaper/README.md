@@ -113,6 +113,162 @@ Stop containers with `examples/gpt_newspaper/docker-compose.sh down`.
   - Dark terminal-style theme optimized for log viewing
 - Closing or navigating away from the page automatically stops the stream (connections end server-side when the run completes).
 
+## Workflow Diagrams
+
+### Original Workflow
+
+The original workflow processes each article through a simple linear pipeline with a write-critique feedback loop.
+
+```mermaid
+flowchart TD
+    UI(["🗞️ User Input<br/>queries, layout"])
+
+    subgraph ARTICLES ["📰 Per-Article Pipeline (parallel)"]
+        S["🔍 Search<br/>Tavily API"]
+        CU["📋 Curator<br/>LLM source selection"]
+        W["✍️ Writer<br/>LLM article draft"]
+        CR["🔎 Critique<br/>LLM quality review"]
+        DE["🎨 Designer<br/>HTML article layout"]
+
+        S --> CU --> W --> CR
+        CR -->|"🔄 feedback"| W
+        CR -->|"✅ approved"| DE
+    end
+
+    ED["📰 Editor<br/>compile newspaper"]
+    PU["📤 Publisher<br/>save HTML output"]
+
+    UI --> ARTICLES
+    ARTICLES --> ED --> PU
+
+    style UI fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    style CR fill:#fff3e0,stroke:#e65100
+    style DE fill:#e8f5e9,stroke:#2e7d32
+    style ED fill:#f3e5f5,stroke:#7b1fa2
+    style PU fill:#f3e5f5,stroke:#7b1fa2
+```
+
+### Original Workflow + HITL
+
+When **"Enable editorial review (HITL)"** is checked, an editorial approval gate is inserted between critique and design.
+
+```mermaid
+flowchart TD
+    UI(["🗞️ User Input<br/>queries, layout, ☑ enableHitl"])
+
+    subgraph ARTICLES ["📰 Per-Article Pipeline (parallel)"]
+        S["🔍 Search<br/>Tavily API"]
+        CU["📋 Curator<br/>LLM source selection"]
+        W["✍️ Writer<br/>LLM article draft"]
+        CR["🔎 Critique<br/>LLM quality review"]
+        EA{{"✋ Editorial Approval<br/>HITL"}}
+        DE["🎨 Designer<br/>HTML article layout"]
+
+        S --> CU --> W --> CR
+        CR -->|"🔄 feedback"| W
+        CR -->|"✅ approved"| EA
+        EA -->|"✅ Approve"| DE
+        EA -->|"❌ Reject + reason"| W
+    end
+
+    ED["📰 Editor<br/>compile newspaper"]
+    PU["📤 Publisher<br/>save HTML output"]
+
+    UI --> ARTICLES
+    ARTICLES --> ED --> PU
+
+    style UI fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    style EA fill:#ff9800,stroke:#e65100,color:#fff,stroke-width:3px
+    style CR fill:#fff3e0,stroke:#e65100
+    style DE fill:#e8f5e9,stroke:#2e7d32
+    style ED fill:#f3e5f5,stroke:#7b1fa2
+    style PU fill:#f3e5f5,stroke:#7b1fa2
+```
+
+## Human-in-the-Loop (HITL) Workflow
+
+HITL editorial approval is available for both **original** and **dynamic** workflows. Check **"Enable editorial review (HITL)"** in the frontend to insert an editorial approval gate. See [backend/hitl_workflow.md](backend/hitl_workflow.md) for full implementation details.
+
+### Dynamic Workflow + HITL
+
+The dynamic workflow adds parallel writer personas, quality gates, and dynamic search expansion on top of the original pipeline.
+
+```mermaid
+graph TD
+    A[topic_intake] --> B[search_router]
+    B --> B1[search_angle_1]
+    B --> B2[search_angle_2]
+    B --> Bn[search_angle_n]
+    B1 --> C[curate]
+    B2 --> C
+    Bn --> C
+    C -->|gap fill| C
+    C --> W1[write_feature]
+    C --> W2[write_brief]
+    C --> W3[write_data_digest]
+    W1 --> SD[select_draft]
+    W2 --> SD
+    W3 --> SD
+    SD --> W[write]
+    W --> CR[critique]
+    CR -->|feedback| W
+    CR -->|approved| EA{editorial_approval<br/>HITL}
+    EA -->|Approve| QG1[fact_check]
+    EA -->|Approve| QG2[compliance_check]
+    EA -->|Approve| QG3[risk_check]
+    EA -->|Reject + reason| W
+    QG1 --> QS[quality_gate_summary]
+    QG2 --> QS
+    QG3 --> QS
+    QS --> D[design]
+
+    style EA fill:#ff9800,stroke:#e65100,color:#fff,stroke-width:3px
+    style W1 fill:#e3f2fd,stroke:#1565c0
+    style W2 fill:#e3f2fd,stroke:#1565c0
+    style W3 fill:#e3f2fd,stroke:#1565c0
+    style QG1 fill:#e8f5e9,stroke:#2e7d32
+    style QG2 fill:#e8f5e9,stroke:#2e7d32
+    style QG3 fill:#e8f5e9,stroke:#2e7d32
+```
+
+### Quick Start
+
+```bash
+# 1. Backend
+cd examples/gpt_newspaper/backend
+cp .env.example .env          # set TAVILY_API_KEY and OPENAI_API_KEY
+pip install -r requirements.txt
+uvicorn api:app --reload --port 8000
+
+# 2. Frontend (separate terminal)
+cd examples/gpt_newspaper/frontend
+npm install
+VITE_API_BASE_URL=http://localhost:8000 npm run dev -- --host 0.0.0.0 --port 5173
+```
+
+See [backend/hitl_workflow.md](backend/hitl_workflow.md) for detailed setup including Redis backend and Docker Compose options.
+
+### How It Works
+1. Select a workflow (**original** or **dynamic**) and check **"Enable editorial review (HITL)"**
+2. The workflow runs normally through the critique stage
+3. After critique approves, the **editorial approval** step pauses and sends a feedback request via WebSocket
+4. The frontend displays an inline **Approve / Reject** form below the log panel
+5. **Approve** -> continues to design (original) or quality gate (dynamic)
+6. **Reject** (with optional reason) -> loops back to the writer with editor feedback, then re-critiques and asks for approval again
+
+### Configuration
+- **Timeout**: 5 minutes (300 seconds) — if no response, the feedback request times out
+- **Backend**: Uses Graflow's `FeedbackManager` with filesystem backend; feedback API exposed at `GET/POST /api/feedback`
+- **WebSocket events**: `feedback_request`, `feedback_resolved`, `feedback_timeout` events are broadcast to the log stream
+
+### API Endpoints
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/feedback` | List pending feedback requests |
+| GET | `/api/feedback/{id}` | Get feedback request details |
+| POST | `/api/feedback/{id}/respond` | Submit feedback response |
+| DELETE | `/api/feedback/{id}` | Cancel feedback request |
+
 ## Tests
 - Backend workflow smoke test: `uv run pytest examples/gpt_newspaper/backend/test_workflow.py`
 - Frontend unit tests: `cd examples/gpt_newspaper/frontend && npm run test`

@@ -15,6 +15,7 @@ export interface GeneratePayload {
   outputDir?: string;
   runId?: string;
   workflow: WorkflowOption;
+  enableHitl?: boolean;
 }
 
 export interface UseNewspaperResult {
