@@ -4,6 +4,7 @@
 
 Graflow is the orchestration engine for production-grade agentic workflows, designed to be reliable, explainable, and scalable.
 
+[![Documentation Status](https://img.shields.io/:docs-latest-green.svg)](https://graflow.ai/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![PyPI](https://img.shields.io/pypi/v/graflow.svg)](https://pypi.org/project/graflow/)
