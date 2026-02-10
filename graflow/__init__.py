@@ -1,3 +1,7 @@
 """Graflow - An executable task graph engine."""
 
-__version__ = "0.1.0"
+try:
+    from importlib.metadata import version
+    __version__ = version("graflow")
+except Exception:
+    pass
