@@ -26,6 +26,7 @@ def _reconstruct_task_wrapper(
     inject_llm_agent: Optional[str],
     handler_type: Optional[str],
     resolve_keyword_args: bool = True,
+    max_cycles: Optional[int] = None,
 ) -> TaskWrapper:
     """Reconstruct TaskWrapper from serialized components.
 
@@ -42,6 +43,7 @@ def _reconstruct_task_wrapper(
         inject_llm_agent: Agent name to inject
         handler_type: Handler type string
         resolve_keyword_args: Whether to resolve keyword arguments from channel
+        max_cycles: Per-task maximum cycle count for next_iteration()
 
     Returns:
         Fresh TaskWrapper instance (state will be restored by pickle)
@@ -63,6 +65,7 @@ def _reconstruct_task_wrapper(
         register_to_context=False,  # Don't re-register during deserialization
         handler_type=handler_type,
         resolve_keyword_args=resolve_keyword_args,
+        max_cycles=max_cycles,
     )
 
     return task_wrapper
@@ -709,6 +712,7 @@ class TaskWrapper(Executable):
         register_to_context: bool = True,
         handler_type: Optional[str] = None,
         resolve_keyword_args: bool = True,
+        max_cycles: Optional[int] = None,
     ) -> None:
         """Initialize a task wrapper with task_id and function.
 
@@ -722,6 +726,8 @@ class TaskWrapper(Executable):
             register_to_context: Whether to register to workflow context
             handler_type: Execution handler type ("direct", "docker", or custom)
             resolve_keyword_args: Whether to resolve keyword arguments from channel
+            max_cycles: Per-task maximum cycle count for next_iteration().
+                       If None, the global default_max_cycles is used.
         """
         super().__init__()
         self._task_id = task_id
@@ -730,6 +736,7 @@ class TaskWrapper(Executable):
         self.inject_llm_client = inject_llm_client
         self.inject_llm_agent = inject_llm_agent
         self.resolve_keyword_args = resolve_keyword_args
+        self.max_cycles = max_cycles
 
         # Initialize bound kwargs storage for instance creation
         self._bound_kwargs: dict[str, Any] = {}
@@ -779,6 +786,7 @@ class TaskWrapper(Executable):
                 self.inject_llm_agent,
                 self.handler_type,
                 self.resolve_keyword_args,
+                self.max_cycles,
             ),
             state,  # Additional state to restore
             None,  # listitems
@@ -943,6 +951,7 @@ class TaskWrapper(Executable):
                     register_to_context=True,  # Uses _register_to_context() internally
                     handler_type=getattr(self, "handler_type", None),
                     resolve_keyword_args=self.resolve_keyword_args,
+                    max_cycles=self.max_cycles,
                 )
 
                 # Store bound parameters (remaining kwargs after task_id extraction)
