@@ -92,7 +92,7 @@ class TaskExecutionContext:
 
     def can_iterate(self) -> bool:
         """Check if this task can execute another cycle (delegated to CycleController)."""
-        return self.execution_context.cycle_controller.can_execute(self._base_task_id)
+        return self.execution_context.cycle_controller.accept_next_cycle(self._base_task_id)
 
     def next_iteration(self, data: Any = None) -> str:
         """Create iteration task using this task's context."""

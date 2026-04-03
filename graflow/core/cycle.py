@@ -2,7 +2,7 @@
 # This file is part of Graflow, a graph-based workflow management system.
 # It implements cycle control to prevent infinite loops in task execution.
 
-from typing import Dict, Optional
+from typing import Dict
 
 from graflow.exceptions import CycleLimitExceededError
 
@@ -15,7 +15,7 @@ class CycleController:
 
     Lifecycle:
         1. executing_task() calls increment() at execution start → cycle_count becomes 1, 2, ...
-        2. Task body reads cycle_count (1-based) and calls can_execute() to check budget
+        2. Task body reads cycle_count (1-based) and calls accept_next_cycle() to check budget
         3. next_iteration() calls check_cycle_limit() before creating the iteration task
     """
 
@@ -32,17 +32,9 @@ class CycleController:
         """Get maximum cycle count for a node (node-specific or default)."""
         return self.node_max_cycles.get(node_id, self.default_max_cycles)
 
-    def can_execute(self, node_id: str, iteration: Optional[int] = None) -> bool:
-        """Check if node can execute another cycle.
-
-        Args:
-            node_id: The node identifier
-            iteration: Optional explicit iteration count to check.
-                      If None, uses the current cycle count for the node.
-        """
-        if iteration is None:
-            iteration = self.cycle_counts.get(node_id, 0)
-        return iteration < self.get_max_cycles_for_node(node_id)
+    def accept_next_cycle(self, node_id: str) -> bool:
+        """Return True if the node's cycle count is below its max_cycles."""
+        return self.cycle_counts.get(node_id, 0) < self.get_max_cycles_for_node(node_id)
 
     def increment(self, node_id: str) -> int:
         """Increment cycle count at execution start. No limit check.
