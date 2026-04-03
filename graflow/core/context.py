@@ -94,10 +94,6 @@ class TaskExecutionContext:
         """Check if this task can execute another cycle (delegated to CycleController)."""
         return self.execution_context.cycle_controller.can_execute(self._base_task_id)
 
-    def register_cycle(self) -> int:
-        """Register a cycle execution and return new count (delegated to CycleController)."""
-        return self.execution_context.cycle_controller.register_cycle(self._base_task_id)
-
     def next_iteration(self, data: Any = None) -> str:
         """Create iteration task using this task's context."""
         return self.execution_context.next_iteration(data, self.task_id)
@@ -1204,13 +1200,10 @@ class ExecutionContext:
         if task_id not in self.graph.nodes:
             raise ValueError(f"Task {task_id} not found in graph")
 
-        # Get or create task context
-        task_ctx = self._task_contexts.get(task_id)
-        if not task_ctx:
-            task_ctx = self.create_task_context(task_id)
+        # Check cycle limit before creating iteration task
+        self.cycle_controller.check_cycle_limit(task_id)
 
-        # Register this cycle execution (raises CycleLimitExceededError if limit reached)
-        cycle_count = task_ctx.register_cycle()
+        cycle_count = self.cycle_controller.get_cycle_count(task_id)
 
         # Get the current task function
         current_task = self.graph.get_node(task_id)
@@ -1218,21 +1211,25 @@ class ExecutionContext:
         # Generate iteration task ID with cycle count
         iteration_id = f"{task_id}_cycle_{cycle_count}_{uuid.uuid4().hex[:8]}"
 
+        # Capture self (ExecutionContext) for the closure
+        exec_context = self
+
         # Create iteration function with data
         def iteration_func():
             # Set execution context on current_task before calling it
-            current_task.set_execution_context(task_ctx.execution_context)
+            current_task.set_execution_context(exec_context)
 
             # Check if current_task has inject_context
             inject_context = bool(getattr(current_task, "inject_context", False))
             if inject_context:
-                # Don't pass task_ctx, only pass data (TaskWrapper will inject context)
+                # Don't pass task context, only pass data (TaskWrapper will inject context)
                 if data is not None:
                     return current_task(data)
                 else:
                     return current_task()
-            # Pass task_ctx for tasks without inject_context
-            elif data is not None:
+            # Pass current task context for tasks without inject_context
+            task_ctx = exec_context.current_task_context
+            if data is not None:
                 return current_task(task_ctx, data)
             else:
                 return current_task(task_ctx)
@@ -1260,6 +1257,11 @@ class ExecutionContext:
         task_max_cycles = getattr(task, "max_cycles", None)
         if task_max_cycles is not None:
             self.cycle_controller.set_node_max_cycles(task.task_id, task_max_cycles)
+
+        # Increment cycle count (1-based: first execution = 1)
+        # Resolve base task ID for iteration tasks (e.g. "task_cycle_1_abc" → "task")
+        base_task_id = _ITERATION_PATTERN.sub("", task.task_id) or task.task_id
+        self.cycle_controller.increment(base_task_id)
 
         task_ctx = self.create_task_context(task.task_id)
 

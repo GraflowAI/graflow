@@ -980,8 +980,8 @@ class TaskWrapper(Executable):
 
         if self.inject_context:
             task_context = exec_context.current_task_context
-            if not task_context:
-                # Fallback: create temporary task context
+            if task_context is None:
+                # Direct call without engine (e.g. task.run() in tests)
                 with exec_context.executing_task(self) as task_ctx:
                     return self.func(task_ctx, *args, **all_kwargs)
             return self.func(task_context, *args, **all_kwargs)
