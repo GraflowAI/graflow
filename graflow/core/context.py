@@ -15,6 +15,7 @@ from graflow.channels.typed import TypedChannel
 from graflow.core.cycle import CycleController
 from graflow.core.engine import WorkflowEngine
 from graflow.core.graph import TaskGraph
+from graflow.core.retry import RetryController
 from graflow.queue.base import TaskSpec
 from graflow.queue.local import LocalTaskQueue
 from graflow.trace.noop import NoopTracer
@@ -52,8 +53,6 @@ class TaskExecutionContext:
         self.task_id = task_id
         self.execution_context = execution_context
         self.start_time = time.time()
-        self.retries = 0
-        self.max_retries = execution_context.default_max_retries
         self.local_data: dict[str, Any] = {}
 
     @property
@@ -74,6 +73,16 @@ class TaskExecutionContext:
     def max_cycles(self) -> int:
         """Maximum cycles for this task (delegated to CycleController)."""
         return self.execution_context.cycle_controller.get_max_cycles_for_node(self._base_task_id)
+
+    @property
+    def retry_count(self) -> int:
+        """Number of retries so far for this task (delegated to RetryController)."""
+        return self.execution_context.retry_controller.get_retry_count(self._base_task_id)
+
+    @property
+    def max_retries(self) -> int:
+        """Maximum retries for this task (delegated to RetryController)."""
+        return self.execution_context.retry_controller.get_max_retries_for_node(self._base_task_id)
 
     @property
     def trace_id(self) -> str:
@@ -474,7 +483,7 @@ class ExecutionContext:
         start_node: Optional[str] = None,
         max_steps: int = 10000,
         default_max_cycles: int = 10,
-        default_max_retries: int = 3,
+        default_max_retries: int = 0,
         steps: int = 0,
         channel_backend: str = "memory",
         config: Optional[Dict[str, Any]] = None,
@@ -530,6 +539,7 @@ class ExecutionContext:
 
         self.task_queue: LocalTaskQueue = LocalTaskQueue(self, start_node)
         self.cycle_controller = CycleController(default_max_cycles)
+        self.retry_controller = RetryController(default_max_retries)
 
         # Task execution context management
         self._task_execution_stack: list[TaskExecutionContext] = []
@@ -645,7 +655,7 @@ class ExecutionContext:
         start_node: Optional[str] = None,
         max_steps: int = 10000,
         default_max_cycles: int = 10,
-        default_max_retries: int = 3,
+        default_max_retries: int = 0,
         channel_backend: str = "memory",
         config: Optional[Dict[str, Any]] = None,
         tracer: Optional[Tracer] = None,
@@ -1257,6 +1267,11 @@ class ExecutionContext:
         task_max_cycles = getattr(task, "max_cycles", None)
         if task_max_cycles is not None:
             self.cycle_controller.set_node_max_cycles(task.task_id, task_max_cycles)
+
+        # Apply per-task max_retries to RetryController if set on the task
+        task_max_retries = getattr(task, "max_retries", None)
+        if task_max_retries is not None:
+            self.retry_controller.set_node_max_retries(task.task_id, task_max_retries)
 
         # Increment cycle count (1-based: first execution = 1)
         # Resolve base task ID for iteration tasks (e.g. "task_cycle_1_abc" → "task")
