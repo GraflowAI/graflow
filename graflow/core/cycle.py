@@ -4,9 +4,15 @@
 
 from typing import Dict, Optional
 
+from graflow.exceptions import CycleLimitExceededError
+
 
 class CycleController:
-    """Controls cycle execution and prevents infinite loops."""
+    """Controls cycle execution and prevents infinite loops.
+
+    This is the single source of truth for cycle state.
+    TaskExecutionContext delegates all cycle operations here.
+    """
 
     def __init__(self, default_max_cycles: int = 100):
         self.default_max_cycles: int = default_max_cycles
@@ -22,16 +28,30 @@ class CycleController:
         return self.node_max_cycles.get(node_id, self.default_max_cycles)
 
     def can_execute(self, node_id: str, iteration: Optional[int] = None) -> bool:
-        """Check if node can be executed based on iteration count."""
+        """Check if node can execute another cycle.
+
+        Args:
+            node_id: The node identifier
+            iteration: Optional explicit iteration count to check.
+                      If None, uses the current cycle count for the node.
+        """
         if iteration is None:
             iteration = self.cycle_counts.get(node_id, 0)
-        max_cycles = self.get_max_cycles_for_node(node_id)
-        return iteration < max_cycles
+        return iteration < self.get_max_cycles_for_node(node_id)
 
     def register_cycle(self, node_id: str) -> int:
-        """Register a cycle execution and return current count."""
-        self.cycle_counts[node_id] = self.cycle_counts.get(node_id, 0) + 1
-        return self.cycle_counts[node_id]
+        """Register a cycle execution and return new count.
+
+        Raises:
+            CycleLimitExceededError: If the cycle limit has been reached.
+        """
+        count = self.cycle_counts.get(node_id, 0)
+        max_cycles = self.get_max_cycles_for_node(node_id)
+        if count >= max_cycles:
+            raise CycleLimitExceededError(task_id=node_id, cycle_count=count, max_cycles=max_cycles)
+        count += 1
+        self.cycle_counts[node_id] = count
+        return count
 
     def get_cycle_count(self, node_id: str) -> int:
         """Return how many times the given node has executed (0 if never)."""
