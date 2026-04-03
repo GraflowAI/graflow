@@ -83,7 +83,10 @@ class TestNextIteration:
         graph.add_node(infinite_loop, "infinite_loop")
 
         context = ExecutionContext.create(
-            graph, start_node="infinite_loop", max_steps=50, default_max_cycles=3,
+            graph,
+            start_node="infinite_loop",
+            max_steps=50,
+            default_max_cycles=3,
         )
         engine = WorkflowEngine()
         with pytest.raises(CycleLimitExceededError) as exc_info:
@@ -108,9 +111,7 @@ class TestNextIteration:
 
         graph.add_node(limited, "limited")
 
-        context = ExecutionContext.create(
-            graph, start_node="limited", max_steps=50, default_max_cycles=100
-        )
+        context = ExecutionContext.create(graph, start_node="limited", max_steps=50, default_max_cycles=100)
         context.cycle_controller.set_node_max_cycles("limited", 4)
 
         engine = WorkflowEngine()
@@ -464,12 +465,14 @@ class TestNextIterationEdgeCases:
         @task(inject_context=True)
         def tracker(ctx: TaskExecutionContext, data=None):
             n = (data or {}).get("n", 0)
-            observed.append({
-                "n": n,
-                "cycle_count": ctx.cycle_count,
-                "max_cycles": ctx.max_cycles,
-                "can_iterate": ctx.can_iterate(),
-            })
+            observed.append(
+                {
+                    "n": n,
+                    "cycle_count": ctx.cycle_count,
+                    "max_cycles": ctx.max_cycles,
+                    "can_iterate": ctx.can_iterate(),
+                }
+            )
             if n < 4:
                 ctx.next_iteration({"n": n + 1})
             return n

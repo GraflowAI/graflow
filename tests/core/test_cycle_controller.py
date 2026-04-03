@@ -97,12 +97,12 @@ class TestCycleControllerCanExecute:
     def test_accept_next_cycle_reflects_current_count(self):
         """accept_next_cycle() always uses the current stored cycle count."""
         ctrl = CycleController(default_max_cycles=3)
-        assert ctrl.accept_next_cycle("node_a") is True   # count=0
-        ctrl.increment("node_a")                      # count=1
+        assert ctrl.accept_next_cycle("node_a") is True  # count=0
+        ctrl.increment("node_a")  # count=1
         assert ctrl.accept_next_cycle("node_a") is True
-        ctrl.increment("node_a")                      # count=2
+        ctrl.increment("node_a")  # count=2
         assert ctrl.accept_next_cycle("node_a") is True
-        ctrl.increment("node_a")                      # count=3 == max
+        ctrl.increment("node_a")  # count=3 == max
         assert ctrl.accept_next_cycle("node_a") is False
 
     def test_accept_next_cycle_uses_per_node_limit(self):

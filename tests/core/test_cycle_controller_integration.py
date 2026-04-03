@@ -41,9 +41,7 @@ def test_cycle_controller_integration():
 
     graph.add_node(counting_task, "counting_task")
 
-    context = ExecutionContext.create(
-        graph, start_node="counting_task", max_steps=20, default_max_cycles=3
-    )
+    context = ExecutionContext.create(graph, start_node="counting_task", max_steps=20, default_max_cycles=3)
     engine = WorkflowEngine()
     engine.execute(context)
 
@@ -81,9 +79,7 @@ def test_custom_cycle_limits():
 
     graph.add_node(limited_task, "limited_task")
 
-    context = ExecutionContext.create(
-        graph, start_node="limited_task", max_steps=30, default_max_cycles=10
-    )
+    context = ExecutionContext.create(graph, start_node="limited_task", max_steps=30, default_max_cycles=10)
     # Set custom cycle limit (5 cycles)
     context.cycle_controller.set_node_max_cycles("limited_task", 5)
 
@@ -107,9 +103,7 @@ def test_cycle_info_methods():
 
     graph.add_node(info_task, "info_task")
 
-    context = ExecutionContext.create(
-        graph, start_node="info_task", max_steps=10, default_max_cycles=3
-    )
+    context = ExecutionContext.create(graph, start_node="info_task", max_steps=10, default_max_cycles=3)
 
     # Before any execution: cycle_count=0, accept_next_cycle=True
     ctrl = context.cycle_controller
@@ -153,9 +147,7 @@ def test_error_handling():
 
     # default_max_cycles=2: task runs twice then next_iteration raises
     with pytest.raises(CycleLimitExceededError) as exc_info:
-        context = ExecutionContext.create(
-            graph, start_node="error_task", max_steps=10, default_max_cycles=2
-        )
+        context = ExecutionContext.create(graph, start_node="error_task", max_steps=10, default_max_cycles=2)
         engine = WorkflowEngine()
         engine.execute(context)
 
