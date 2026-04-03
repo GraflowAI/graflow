@@ -129,7 +129,90 @@ Final Trace: ['root', 'root.node1_1', 'root.node1_1.node1_2', 'root.node2', 'roo
 
 ---
 
-### 3. runtime_dynamic_tasks.py
+### 3. task_iterations.py
+**Difficulty**: Intermediate
+**Time**: 10 minutes
+
+Focused examples for iterative task execution using `@task(max_cycles=N)`, `ctx.can_iterate()`, and `ctx.cycle_count`.
+
+**Key Concepts**:
+- `@task(max_cycles=N)` to limit iterations per task
+- `ctx.cycle_count` for 1-based iteration tracking
+- `ctx.can_iterate()` to check remaining budget
+- Data passing between iterations
+- Early exit on convergence
+- Iterating tasks in a pipeline
+
+**Run**:
+```bash
+uv run python examples/07_dynamic_tasks/task_iterations.py
+```
+
+**Expected Output**:
+```
+=== Basic Iteration (max_cycles=5) ===
+  cycle 1/5
+  cycle 2/5
+  ...
+=== Data Passing Between Iterations ===
+  cycle 1: total=10
+  cycle 2: total=20
+  ...
+=== Early Exit on Convergence ===
+  cycle 1: loss=0.5000
+  ...
+  Converged at cycle 5
+=== Pipeline: Collect -> Summarize ===
+  [collect] cycle 1: gathered item_1
+  ...
+  [summarize] collected 3 items: ['item_1', 'item_2', 'item_3']
+```
+
+---
+
+### 4. task_retries.py
+**Difficulty**: Intermediate
+**Time**: 10 minutes
+
+Demonstrates automatic task retry on failure using `@task(max_retries=N)`, `ctx.retry_count`, and `ctx.max_retries`.
+
+**Key Concepts**:
+- `@task(max_retries=N)` to allow retry attempts after failure
+- `ctx.retry_count` for current retry count (0 on first attempt)
+- `default_max_retries` for global default
+- Automatic re-enqueue on exception
+- Retry in multi-task pipelines
+
+**Run**:
+```bash
+uv run python examples/07_dynamic_tasks/task_retries.py
+```
+
+**Expected Output**:
+```
+=== Retry Succeeds After Transient Failures ===
+  attempt 1 (retry_count=0)
+  attempt 2 (retry_count=1)
+  attempt 3 (retry_count=2)
+  Result: ok
+
+=== Retry Exhausted ===
+  Failed after 3 attempts (1 initial + 2 retries)
+
+=== Retry in Pipeline ===
+  [step_1] ok
+  [step_2] attempt 1
+  [step_2] attempt 2
+  [step_3] ok
+  Pipeline result: done
+
+=== Global default_max_retries ===
+  Recovered after 3 attempts, result: recovered
+```
+
+---
+
+### 5. runtime_dynamic_tasks.py
 **Difficulty**: Advanced
 **Time**: 30 minutes
 
@@ -188,14 +271,16 @@ Current state: START (data=0)
 **Recommended Order**:
 1. Start with `dynamic_tasks.py` for compile-time generation
 2. Explore `fan_out_fan_in.py` for parallel execution patterns
-3. Move to `runtime_dynamic_tasks.py` for runtime patterns
+3. Learn `task_iterations.py` for cycle control (`max_cycles`, `can_iterate()`)
+4. Learn `task_retries.py` for automatic retry on failure (`max_retries`)
+5. Move to `runtime_dynamic_tasks.py` for advanced runtime patterns
 
 **Prerequisites**:
 - Complete examples from 01-03
 - Understanding of workflow patterns from 02
 - Familiarity with channels from 03
 
-**Total Time**: ~70 minutes
+**Total Time**: ~90 minutes
 
 ---
 
