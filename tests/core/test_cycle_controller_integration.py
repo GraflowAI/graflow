@@ -20,7 +20,7 @@ def test_cycle_controller_integration():
     """Test cycle_controller integration with ExecutionContext.
 
     default_max_cycles=3: task executes 3 times (cycle_count 1,2,3).
-    At cycle_count=3, can_iterate() returns False so no more iterations.
+    At cycle_count=3, accept_next_cycle() returns False so no more iterations.
     """
     graph = TaskGraph()
     observed_cycles: list[dict] = []
@@ -111,24 +111,24 @@ def test_cycle_info_methods():
         graph, start_node="info_task", max_steps=10, default_max_cycles=3
     )
 
-    # Before any execution: cycle_count=0, can_execute=True
+    # Before any execution: cycle_count=0, accept_next_cycle=True
     ctrl = context.cycle_controller
     assert ctrl.get_cycle_count("info_task") == 0
-    assert ctrl.can_execute("info_task") is True
+    assert ctrl.accept_next_cycle("info_task") is True
 
     # Simulate manual increments
     ctrl.increment("info_task")  # count=1
     assert ctrl.get_cycle_count("info_task") == 1
-    assert ctrl.can_execute("info_task") is True
+    assert ctrl.accept_next_cycle("info_task") is True
 
     ctrl.increment("info_task")  # count=2
     assert ctrl.get_cycle_count("info_task") == 2
-    assert ctrl.can_execute("info_task") is True
+    assert ctrl.accept_next_cycle("info_task") is True
 
     # Hit the limit (max_cycles=3)
     ctrl.increment("info_task")  # count=3
     assert ctrl.get_cycle_count("info_task") == 3
-    assert ctrl.can_execute("info_task") is False
+    assert ctrl.accept_next_cycle("info_task") is False
 
 
 def test_error_handling():
