@@ -263,7 +263,23 @@ class WorkflowEngine:
                     # Return early to allow external process to provide feedback
                     return None
 
-                # Exception already stored by handler, just re-raise
+                # Retry logic: re-enqueue task if retries remain
+                retry_ctrl = context.retry_controller
+                base_task_id = task_id  # retry uses the original task_id
+                if retry_ctrl.accept_retry(base_task_id):
+                    retry_ctrl.increment(base_task_id, error=e)
+                    logger.info(
+                        "Retrying task '%s' (attempt %d/%d)",
+                        base_task_id,
+                        retry_ctrl.get_retry_count(base_task_id),
+                        retry_ctrl.get_max_retries_for_node(base_task_id),
+                        extra={"task_id": base_task_id, "session_id": context.session_id},
+                    )
+                    context.add_to_queue(task)
+                    task_id = context.get_next_task()
+                    continue
+
+                # No retries left — re-raise
                 raise exceptions.as_runtime_error(e)
 
             # Handle control flow and successor scheduling
