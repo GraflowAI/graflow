@@ -33,8 +33,8 @@ def example_basic_iteration():
             ctx.next_iteration()
 
     graph.add_node(counter, "counter")
-    ExecutionContext.create(graph, start_node="counter")
-    WorkflowEngine().execute(ExecutionContext.create(graph, start_node="counter"))
+    context = ExecutionContext.create(graph, start_node="counter")
+    WorkflowEngine().execute(context)
 
 
 def example_data_passing():
