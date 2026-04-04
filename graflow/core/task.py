@@ -11,6 +11,7 @@ from graflow.coordination.coordinator import CoordinationBackend
 from graflow.coordination.executor import GroupExecutor
 from graflow.core.context import ExecutionContext
 from graflow.core.graph import TaskGraph
+from graflow.core.retry import RetryPolicy
 from graflow.exceptions import GraflowRuntimeError
 
 if TYPE_CHECKING:
@@ -28,6 +29,7 @@ def _reconstruct_task_wrapper(
     resolve_keyword_args: bool = True,
     max_cycles: Optional[int] = None,
     max_retries: Optional[int] = None,
+    retry_policy: Optional[RetryPolicy] = None,
 ) -> TaskWrapper:
     """Reconstruct TaskWrapper from serialized components.
 
@@ -46,6 +48,7 @@ def _reconstruct_task_wrapper(
         resolve_keyword_args: Whether to resolve keyword arguments from channel
         max_cycles: Per-task maximum cycle count for next_iteration()
         max_retries: Per-task maximum retry count on failure
+        retry_policy: RetryPolicy for exponential backoff on failure
 
     Returns:
         Fresh TaskWrapper instance (state will be restored by pickle)
@@ -69,6 +72,7 @@ def _reconstruct_task_wrapper(
         resolve_keyword_args=resolve_keyword_args,
         max_cycles=max_cycles,
         max_retries=max_retries,
+        retry_policy=retry_policy,
     )
 
     return task_wrapper
@@ -717,6 +721,7 @@ class TaskWrapper(Executable):
         resolve_keyword_args: bool = True,
         max_cycles: Optional[int] = None,
         max_retries: Optional[int] = None,
+        retry_policy: Optional[RetryPolicy] = None,
     ) -> None:
         """Initialize a task wrapper with task_id and function.
 
@@ -734,6 +739,8 @@ class TaskWrapper(Executable):
                        If None, the global default_max_cycles is used.
             max_retries: Per-task maximum retry count on failure.
                         If None, the global default_max_retries is used.
+            retry_policy: RetryPolicy for exponential backoff on failure.
+                        If set, max_retries is derived from the policy.
         """
         super().__init__()
         self._task_id = task_id
@@ -743,7 +750,9 @@ class TaskWrapper(Executable):
         self.inject_llm_agent = inject_llm_agent
         self.resolve_keyword_args = resolve_keyword_args
         self.max_cycles = max_cycles
-        self.max_retries = max_retries
+        self.retry_policy = retry_policy
+        # If retry_policy is provided, derive max_retries from it
+        self.max_retries = retry_policy.max_retries if retry_policy is not None else max_retries
 
         # Initialize bound kwargs storage for instance creation
         self._bound_kwargs: dict[str, Any] = {}
@@ -795,6 +804,7 @@ class TaskWrapper(Executable):
                 self.resolve_keyword_args,
                 self.max_cycles,
                 self.max_retries,
+                self.retry_policy,
             ),
             state,  # Additional state to restore
             None,  # listitems
@@ -961,6 +971,7 @@ class TaskWrapper(Executable):
                     resolve_keyword_args=self.resolve_keyword_args,
                     max_cycles=self.max_cycles,
                     max_retries=self.max_retries,
+                    retry_policy=self.retry_policy,
                 )
 
                 # Store bound parameters (remaining kwargs after task_id extraction)

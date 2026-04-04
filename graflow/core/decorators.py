@@ -8,6 +8,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Optional, TypeVar, overload
 
 if TYPE_CHECKING:
+    from .retry import RetryPolicy
     from .task import TaskWrapper
 
 F = TypeVar("F", bound=Callable[..., Any])
@@ -31,6 +32,7 @@ def task(
     resolve_keyword_args: bool = True,
     max_cycles: Optional[int] = None,
     max_retries: Optional[int] = None,
+    retry_policy: Optional[RetryPolicy] = None,
 ) -> Callable[[F], TaskWrapper]: ...  # type: ignore
 
 
@@ -48,6 +50,7 @@ def task(
     resolve_keyword_args: bool = True,
     max_cycles: Optional[int] = None,
     max_retries: Optional[int] = None,
+    retry_policy: Optional[RetryPolicy] = None,
 ) -> Callable[[F], TaskWrapper]: ...  # type: ignore
 
 
@@ -65,6 +68,7 @@ def task(
     resolve_keyword_args: bool = True,
     max_cycles: Optional[int] = None,
     max_retries: Optional[int] = None,
+    retry_policy: Optional[RetryPolicy] = None,
 ) -> TaskWrapper | Callable[[F], TaskWrapper]:
     """Decorator to convert a function into a Task object.
 
@@ -82,6 +86,7 @@ def task(
     - @task(max_cycles=5)
     - @task(inject_context=True, max_cycles=10)
     - @task(max_retries=3)
+    - @task(retry_policy=RetryPolicy(max_retries=3, initial_interval=1.0, backoff_factor=2.0))
 
     Args:
         id_or_func: The function to decorate (when used without parentheses) or task ID string
@@ -98,6 +103,8 @@ def task(
                    If None, the global default_max_cycles is used.
         max_retries: Per-task maximum retry count on failure.
                     If None, the global default_max_retries is used.
+        retry_policy: RetryPolicy for exponential backoff on failure.
+                     If set, max_retries is derived from the policy.
 
     Returns:
         TaskWrapper instance or decorator function
@@ -132,6 +139,7 @@ def task(
                 resolve_keyword_args=resolve_keyword_args,
                 max_cycles=max_cycles,
                 max_retries=max_retries,
+                retry_policy=retry_policy,
             )  # type: ignore
 
         return string_decorator
@@ -162,6 +170,7 @@ def task(
             resolve_keyword_args=resolve_keyword_args,
             max_cycles=max_cycles,
             max_retries=max_retries,
+            retry_policy=retry_policy,
         )
 
         # Copy original function attributes to ensure compatibility

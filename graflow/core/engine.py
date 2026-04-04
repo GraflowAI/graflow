@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import TYPE_CHECKING, Any, Optional
 
 from graflow import exceptions
@@ -184,13 +185,18 @@ class WorkflowEngine:
         retry_ctrl = context.retry_controller
         if retry_ctrl.accept_retry(task_id):
             retry_ctrl.increment(task_id, error=error)
+            # Apply backoff delay if a RetryPolicy is configured
+            delay = retry_ctrl.get_delay(task_id)
             logger.info(
-                "Retrying task '%s' (attempt %d/%d)",
+                "Retrying task '%s' (attempt %d/%d, delay=%.2fs)",
                 task_id,
                 retry_ctrl.get_retry_count(task_id),
                 retry_ctrl.get_max_retries_for_node(task_id),
-                extra={"task_id": task_id, "session_id": context.session_id},
+                delay,
+                extra={"task_id": task_id, "session_id": context.session_id, "retry_delay": delay},
             )
+            if delay > 0:
+                time.sleep(delay)
             context.add_to_queue(task)
             return True
 
