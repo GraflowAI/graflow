@@ -51,6 +51,7 @@ class RetryPolicy:
         delay = min(delay, self.max_interval)
         if self.jitter:
             delay *= random.uniform(0.5, 1.5)
+            delay = min(delay, self.max_interval)
         return delay
 
 
