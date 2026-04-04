@@ -203,6 +203,52 @@ class TestRetryWithContext:
         assert context.channel.get("max_retries") == 5
 
 
+class TestRetryWithIteration:
+    """Tests for retry behavior on iteration tasks."""
+
+    def test_iteration_task_inherits_max_retries(self):
+        """Iteration tasks created by next_iteration() inherit the base task's max_retries."""
+        graph = TaskGraph()
+        attempt_counts: dict[int, int] = {}  # cycle -> attempts
+
+        @task(inject_context=True, max_retries=2, max_cycles=3)
+        def retryable_iter(ctx: TaskExecutionContext, data=None):
+            cycle = ctx.cycle_count
+            attempt_counts[cycle] = attempt_counts.get(cycle, 0) + 1
+            # Fail once on cycle 2
+            if cycle == 2 and attempt_counts[cycle] == 1:
+                raise ValueError("transient failure in iteration 2")
+            ctx.get_channel().set("last_cycle", cycle)
+            if ctx.can_iterate():
+                ctx.next_iteration(data)
+
+        graph.add_node(retryable_iter, "retryable_iter")
+        context = _run_workflow(graph, start_node="retryable_iter")
+
+        # All 3 cycles completed
+        assert context.channel.get("last_cycle") == 3
+        # Cycle 2 was attempted twice (1 fail + 1 retry success)
+        assert attempt_counts[2] == 2
+
+    def test_iteration_task_retry_exhausted(self):
+        """Iteration task exhausting retries raises RetryLimitExceededError."""
+        graph = TaskGraph()
+
+        @task(inject_context=True, max_retries=1, max_cycles=5)
+        def always_fails_iter(ctx: TaskExecutionContext, data=None):
+            if ctx.cycle_count == 2:
+                raise ValueError("always fails on cycle 2")
+            if ctx.can_iterate():
+                ctx.next_iteration(data)
+
+        graph.add_node(always_fails_iter, "always_fails_iter")
+
+        with pytest.raises(RetryLimitExceededError) as exc_info:
+            _run_workflow(graph, start_node="always_fails_iter")
+
+        assert exc_info.value.max_retries == 1
+
+
 class TestRetryInPipeline:
     """Tests for retry behavior within multi-task pipelines."""
 
