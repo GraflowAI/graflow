@@ -15,7 +15,7 @@ from graflow.channels.typed import TypedChannel
 from graflow.core.cycle import CycleController
 from graflow.core.engine import WorkflowEngine
 from graflow.core.graph import TaskGraph
-from graflow.exceptions import CycleLimitExceededError
+from graflow.core.retry import RetryController
 from graflow.queue.base import TaskSpec
 from graflow.queue.local import LocalTaskQueue
 from graflow.trace.noop import NoopTracer
@@ -44,13 +44,15 @@ class TaskExecutionContext:
             task_id: The ID of the task being executed
             execution_context: Reference to the main ExecutionContext
         """
+        # Resolve base task ID for iteration tasks (e.g. "task_cycle_1_abc" -> "task")
+        base_task_id = _ITERATION_PATTERN.sub("", task_id)
+        if not base_task_id or base_task_id == task_id:
+            base_task_id = task_id
+        self._base_task_id = base_task_id
+
         self.task_id = task_id
         self.execution_context = execution_context
         self.start_time = time.time()
-        self.cycle_count = 0
-        self.max_cycles = execution_context.cycle_controller.get_max_cycles_for_node(task_id)
-        self.retries = 0
-        self.max_retries = execution_context.default_max_retries
         self.local_data: dict[str, Any] = {}
 
     @property
@@ -61,6 +63,26 @@ class TaskExecutionContext:
 
             self._logger_instance = logging.getLogger(__name__)
         return self._logger_instance
+
+    @property
+    def cycle_count(self) -> int:
+        """Current cycle count for this task (delegated to CycleController)."""
+        return self.execution_context.cycle_controller.get_cycle_count(self._base_task_id)
+
+    @property
+    def max_cycles(self) -> int:
+        """Maximum cycles for this task (delegated to CycleController)."""
+        return self.execution_context.cycle_controller.get_max_cycles_for_node(self._base_task_id)
+
+    @property
+    def retry_count(self) -> int:
+        """Number of retries so far for this task (delegated to RetryController)."""
+        return self.execution_context.retry_controller.get_retry_count(self._base_task_id)
+
+    @property
+    def max_retries(self) -> int:
+        """Maximum retries for this task (delegated to RetryController)."""
+        return self.execution_context.retry_controller.get_max_retries_for_node(self._base_task_id)
 
     @property
     def trace_id(self) -> str:
@@ -78,19 +100,8 @@ class TaskExecutionContext:
         return self.execution_context.graph
 
     def can_iterate(self) -> bool:
-        """Check if this task can execute another cycle."""
-        return self.cycle_count < self.max_cycles
-
-    def register_cycle(self) -> int:
-        """Register a cycle execution and return new count."""
-        if not self.can_iterate():
-            raise ValueError(
-                f"Cycle limit exceeded for task {self.task_id}: {self.cycle_count}/{self.max_cycles} cycles"
-            )
-        self.cycle_count += 1
-        # Also register with the global cycle controller for consistency
-        self.execution_context.cycle_controller.cycle_counts[self.task_id] = self.cycle_count
-        return self.cycle_count
+        """Check if this task can execute another cycle (delegated to CycleController)."""
+        return self.execution_context.cycle_controller.accept_next_cycle(self._base_task_id)
 
     def next_iteration(self, data: Any = None) -> str:
         """Create iteration task using this task's context."""
@@ -472,7 +483,7 @@ class ExecutionContext:
         start_node: Optional[str] = None,
         max_steps: int = 10000,
         default_max_cycles: int = 10,
-        default_max_retries: int = 3,
+        default_max_retries: int = 0,
         steps: int = 0,
         channel_backend: str = "memory",
         config: Optional[Dict[str, Any]] = None,
@@ -528,6 +539,7 @@ class ExecutionContext:
 
         self.task_queue: LocalTaskQueue = LocalTaskQueue(self, start_node)
         self.cycle_controller = CycleController(default_max_cycles)
+        self.retry_controller = RetryController(default_max_retries)
 
         # Task execution context management
         self._task_execution_stack: list[TaskExecutionContext] = []
@@ -643,7 +655,7 @@ class ExecutionContext:
         start_node: Optional[str] = None,
         max_steps: int = 10000,
         default_max_cycles: int = 10,
-        default_max_retries: int = 3,
+        default_max_retries: int = 0,
         channel_backend: str = "memory",
         config: Optional[Dict[str, Any]] = None,
         tracer: Optional[Tracer] = None,
@@ -1198,19 +1210,10 @@ class ExecutionContext:
         if task_id not in self.graph.nodes:
             raise ValueError(f"Task {task_id} not found in graph")
 
-        # Get or create task context
-        task_ctx = self._task_contexts.get(task_id)
-        if not task_ctx:
-            task_ctx = self.create_task_context(task_id)
+        # Check cycle limit before creating iteration task
+        self.cycle_controller.check_cycle_limit(task_id)
 
-        # Use task context for cycle management
-        if not task_ctx.can_iterate():
-            raise CycleLimitExceededError(
-                task_id=task_id, cycle_count=task_ctx.cycle_count, max_cycles=task_ctx.max_cycles
-            )
-
-        # Register this cycle execution
-        cycle_count = task_ctx.register_cycle()
+        cycle_count = self.cycle_controller.get_cycle_count(task_id)
 
         # Get the current task function
         current_task = self.graph.get_node(task_id)
@@ -1218,21 +1221,25 @@ class ExecutionContext:
         # Generate iteration task ID with cycle count
         iteration_id = f"{task_id}_cycle_{cycle_count}_{uuid.uuid4().hex[:8]}"
 
+        # Capture self (ExecutionContext) for the closure
+        exec_context = self
+
         # Create iteration function with data
         def iteration_func():
             # Set execution context on current_task before calling it
-            current_task.set_execution_context(task_ctx.execution_context)
+            current_task.set_execution_context(exec_context)
 
             # Check if current_task has inject_context
             inject_context = bool(getattr(current_task, "inject_context", False))
             if inject_context:
-                # Don't pass task_ctx, only pass data (TaskWrapper will inject context)
+                # Don't pass task context, only pass data (TaskWrapper will inject context)
                 if data is not None:
                     return current_task(data)
                 else:
                     return current_task()
-            # Pass task_ctx for tasks without inject_context
-            elif data is not None:
+            # Pass current task context for tasks without inject_context
+            task_ctx = exec_context.current_task_context
+            if data is not None:
                 return current_task(task_ctx, data)
             else:
                 return current_task(task_ctx)
@@ -1256,6 +1263,29 @@ class ExecutionContext:
         Yields:
             TaskExecutionContext: The task execution context
         """
+        # Apply per-task max_cycles to CycleController if set on the task
+        task_max_cycles = getattr(task, "max_cycles", None)
+        if task_max_cycles is not None:
+            self.cycle_controller.set_node_max_cycles(task.task_id, task_max_cycles)
+
+        # Resolve base task ID for iteration tasks (e.g. "task_cycle_1_abc" → "task")
+        base_task_id = _ITERATION_PATTERN.sub("", task.task_id) or task.task_id
+
+        # Apply per-task max_retries to RetryController if set on the task
+        task_max_retries = getattr(task, "max_retries", None)
+        if task_max_retries is not None:
+            self.retry_controller.set_node_max_retries(task.task_id, task_max_retries)
+        elif task.task_id != base_task_id:
+            # Iteration task: inherit max_retries from base task
+            base_max = self.retry_controller.get_max_retries_for_node(base_task_id)
+            if base_max != self.retry_controller.default_max_retries:
+                self.retry_controller.set_node_max_retries(task.task_id, base_max)
+
+        # Only increment cycle count on first attempt (not on retry)
+        is_retry = self.retry_controller.get_retry_count(task.task_id) > 0
+        if not is_retry:
+            self.cycle_controller.increment(base_task_id)
+
         task_ctx = self.create_task_context(task.task_id)
 
         # Call tracer hook: task start (before pushing to stack)

@@ -40,6 +40,26 @@ class CycleLimitExceededError(GraflowRuntimeError):
         return f"CycleLimitExceededError(task_id={self.task_id}, cycle_count={self.cycle_count}, max_cycles={self.max_cycles})"
 
 
+class RetryLimitExceededError(GraflowRuntimeError):
+    """Exception raised when a task has exhausted all retry attempts."""
+
+    def __init__(self, task_id: str, retry_count: int, max_retries: int, last_error: Optional[Exception] = None):
+        super().__init__(
+            f"Retry limit exceeded for task {task_id}: {retry_count}/{max_retries} retries",
+            cause=last_error,
+        )
+        self.task_id = task_id
+        self.retry_count = retry_count
+        self.max_retries = max_retries
+        self.last_error = last_error
+
+    def __str__(self) -> str:
+        return (
+            f"RetryLimitExceededError(task_id={self.task_id}, "
+            f"retry_count={self.retry_count}, max_retries={self.max_retries})"
+        )
+
+
 class TaskError(GraflowRuntimeError):
     """Exception raised for errors related to tasks."""
 

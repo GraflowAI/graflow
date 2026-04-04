@@ -2,11 +2,22 @@
 # This file is part of Graflow, a graph-based workflow management system.
 # It implements cycle control to prevent infinite loops in task execution.
 
-from typing import Dict, Optional
+from typing import Dict
+
+from graflow.exceptions import CycleLimitExceededError
 
 
 class CycleController:
-    """Controls cycle execution and prevents infinite loops."""
+    """Controls cycle execution and prevents infinite loops.
+
+    This is the single source of truth for cycle state.
+    TaskExecutionContext delegates all cycle operations here.
+
+    Lifecycle:
+        1. executing_task() calls increment() at execution start → cycle_count becomes 1, 2, ...
+        2. Task body reads cycle_count (1-based) and calls accept_next_cycle() to check budget
+        3. next_iteration() calls check_cycle_limit() before creating the iteration task
+    """
 
     def __init__(self, default_max_cycles: int = 100):
         self.default_max_cycles: int = default_max_cycles
@@ -21,17 +32,29 @@ class CycleController:
         """Get maximum cycle count for a node (node-specific or default)."""
         return self.node_max_cycles.get(node_id, self.default_max_cycles)
 
-    def can_execute(self, node_id: str, iteration: Optional[int] = None) -> bool:
-        """Check if node can be executed based on iteration count."""
-        if iteration is None:
-            iteration = self.cycle_counts.get(node_id, 0)
-        max_cycles = self.get_max_cycles_for_node(node_id)
-        return iteration < max_cycles
+    def accept_next_cycle(self, node_id: str) -> bool:
+        """Return True if the node's cycle count is below its max_cycles."""
+        return self.cycle_counts.get(node_id, 0) < self.get_max_cycles_for_node(node_id)
 
-    def register_cycle(self, node_id: str) -> int:
-        """Register a cycle execution and return current count."""
-        self.cycle_counts[node_id] = self.cycle_counts.get(node_id, 0) + 1
-        return self.cycle_counts[node_id]
+    def increment(self, node_id: str) -> int:
+        """Increment cycle count at execution start. No limit check.
+
+        Returns:
+            The new cycle count (1-based).
+        """
+        count = self.cycle_counts.get(node_id, 0) + 1
+        self.cycle_counts[node_id] = count
+        return count
+
+    def check_cycle_limit(self, node_id: str) -> None:
+        """Raise CycleLimitExceededError if the cycle limit has been reached.
+
+        Called by next_iteration() before creating the iteration task.
+        """
+        count = self.cycle_counts.get(node_id, 0)
+        max_cycles = self.get_max_cycles_for_node(node_id)
+        if count >= max_cycles:
+            raise CycleLimitExceededError(task_id=node_id, cycle_count=count, max_cycles=max_cycles)
 
     def get_cycle_count(self, node_id: str) -> int:
         """Return how many times the given node has executed (0 if never)."""

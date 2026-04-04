@@ -29,6 +29,8 @@ def task(
     inject_llm_agent: Optional[str] = None,
     handler: Optional[str] = None,
     resolve_keyword_args: bool = True,
+    max_cycles: Optional[int] = None,
+    max_retries: Optional[int] = None,
 ) -> Callable[[F], TaskWrapper]: ...  # type: ignore
 
 
@@ -44,6 +46,8 @@ def task(
     inject_llm_agent: Optional[str] = None,
     handler: Optional[str] = None,
     resolve_keyword_args: bool = True,
+    max_cycles: Optional[int] = None,
+    max_retries: Optional[int] = None,
 ) -> Callable[[F], TaskWrapper]: ...  # type: ignore
 
 
@@ -59,6 +63,8 @@ def task(
     inject_llm_agent: Optional[str] = None,
     handler: Optional[str] = None,
     resolve_keyword_args: bool = True,
+    max_cycles: Optional[int] = None,
+    max_retries: Optional[int] = None,
 ) -> TaskWrapper | Callable[[F], TaskWrapper]:
     """Decorator to convert a function into a Task object.
 
@@ -73,6 +79,9 @@ def task(
     - @task(inject_llm_agent="supervisor")
     - @task(handler="docker")
     - @task("custom_id", handler="docker")
+    - @task(max_cycles=5)
+    - @task(inject_context=True, max_cycles=10)
+    - @task(max_retries=3)
 
     Args:
         id_or_func: The function to decorate (when used without parentheses) or task ID string
@@ -85,6 +94,10 @@ def task(
         handler: Execution handler type ("direct", "docker", or custom)
         resolve_keyword_args: If True (default), automatically resolve function keyword arguments
                              from channel by matching parameter names to channel keys
+        max_cycles: Per-task maximum cycle count for next_iteration().
+                   If None, the global default_max_cycles is used.
+        max_retries: Per-task maximum retry count on failure.
+                    If None, the global default_max_retries is used.
 
     Returns:
         TaskWrapper instance or decorator function
@@ -117,6 +130,8 @@ def task(
                 inject_llm_agent=inject_llm_agent,
                 handler=handler,
                 resolve_keyword_args=resolve_keyword_args,
+                max_cycles=max_cycles,
+                max_retries=max_retries,
             )  # type: ignore
 
         return string_decorator
@@ -145,6 +160,8 @@ def task(
             inject_llm_agent=inject_llm_agent,
             handler_type=handler,
             resolve_keyword_args=resolve_keyword_args,
+            max_cycles=max_cycles,
+            max_retries=max_retries,
         )
 
         # Copy original function attributes to ensure compatibility
