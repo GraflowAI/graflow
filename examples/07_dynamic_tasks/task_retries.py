@@ -132,7 +132,7 @@ def example_exponential_backoff():
         retry_policy=RetryPolicy(
             max_retries=3,
             initial_interval=0.1,  # short for demo
-            backoff_factor=2.0,    # 0.1s → 0.2s → 0.4s
+            backoff_factor=2.0,  # 0.1s → 0.2s → 0.4s
         ),
     )
     def flaky_service():

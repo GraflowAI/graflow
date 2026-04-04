@@ -47,7 +47,7 @@ class RetryPolicy:
         Returns:
             Delay in seconds.
         """
-        delay = self.initial_interval * (self.backoff_factor ** retry_count)
+        delay = self.initial_interval * (self.backoff_factor**retry_count)
         delay = min(delay, self.max_interval)
         if self.jitter:
             delay *= random.uniform(0.5, 1.5)

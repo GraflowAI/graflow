@@ -385,7 +385,9 @@ class TestRetryControllerGetDelay:
     def test_delay_capped_by_max_interval(self):
         """Delay is capped at max_interval from the policy."""
         ctrl = RetryController()
-        ctrl.set_node_policy("node_a", RetryPolicy(max_retries=10, initial_interval=1.0, backoff_factor=10.0, max_interval=5.0))
+        ctrl.set_node_policy(
+            "node_a", RetryPolicy(max_retries=10, initial_interval=1.0, backoff_factor=10.0, max_interval=5.0)
+        )
         ctrl.increment("node_a")
         ctrl.increment("node_a")  # count=2 -> delay(1) = 1.0*10^1 = 10.0, capped at 5.0
         assert ctrl.get_delay("node_a") == 5.0
