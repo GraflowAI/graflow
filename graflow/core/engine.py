@@ -159,6 +159,54 @@ class WorkflowEngine:
                 },
             )
 
+    def _handle_task_retry(
+        self,
+        task_id: str,
+        task: Executable,
+        error: Exception,
+        context: ExecutionContext,
+    ) -> bool:
+        """Handle task failure with retry logic.
+
+        Args:
+            task_id: ID of the failed task
+            task: The failed task
+            error: The exception that caused the failure
+            context: Execution context
+
+        Returns:
+            True if the task was re-enqueued for retry
+
+        Raises:
+            RetryLimitExceededError: If retries were attempted but exhausted
+            GraflowRuntimeError: If no retries were configured
+        """
+        retry_ctrl = context.retry_controller
+        if retry_ctrl.accept_retry(task_id):
+            retry_ctrl.increment(task_id, error=error)
+            logger.info(
+                "Retrying task '%s' (attempt %d/%d)",
+                task_id,
+                retry_ctrl.get_retry_count(task_id),
+                retry_ctrl.get_max_retries_for_node(task_id),
+                extra={"task_id": task_id, "session_id": context.session_id},
+            )
+            context.add_to_queue(task)
+            return True
+
+        # Retries were attempted but exhausted
+        if retry_ctrl.get_retry_count(task_id) > 0:
+            retry_ctrl.increment(task_id, error=error)
+            raise exceptions.RetryLimitExceededError(
+                task_id=task_id,
+                retry_count=retry_ctrl.get_retry_count(task_id),
+                max_retries=retry_ctrl.get_max_retries_for_node(task_id),
+                last_error=error,
+            )
+
+        # No retries configured — raise original error
+        raise exceptions.as_runtime_error(error)
+
     def _handle_deferred_checkpoint(self, context: ExecutionContext) -> None:
         """Handle deferred checkpoint requests.
 
@@ -263,34 +311,10 @@ class WorkflowEngine:
                     # Return early to allow external process to provide feedback
                     return None
 
-                # Retry logic: re-enqueue task if retries remain
-                retry_ctrl = context.retry_controller
-                base_task_id = task_id  # retry uses the original task_id
-                if retry_ctrl.accept_retry(base_task_id):
-                    retry_ctrl.increment(base_task_id, error=e)
-                    logger.info(
-                        "Retrying task '%s' (attempt %d/%d)",
-                        base_task_id,
-                        retry_ctrl.get_retry_count(base_task_id),
-                        retry_ctrl.get_max_retries_for_node(base_task_id),
-                        extra={"task_id": base_task_id, "session_id": context.session_id},
-                    )
-                    context.add_to_queue(task)
+                # Retry or raise
+                if self._handle_task_retry(task_id, task, e, context):
                     task_id = context.get_next_task()
                     continue
-
-                # No retries left
-                if retry_ctrl.get_retry_count(base_task_id) > 0:
-                    # Retries were attempted but exhausted — record last error and raise
-                    retry_ctrl.increment(base_task_id, error=e)
-                    raise exceptions.RetryLimitExceededError(
-                        task_id=base_task_id,
-                        retry_count=retry_ctrl.get_retry_count(base_task_id),
-                        max_retries=retry_ctrl.get_max_retries_for_node(base_task_id),
-                        last_error=e,
-                    )
-                # No retries configured — raise original error
-                raise exceptions.as_runtime_error(e)
 
             # Handle control flow and successor scheduling
             if context.cancel_called:
