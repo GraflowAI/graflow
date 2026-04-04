@@ -392,10 +392,10 @@ class TestRetryControllerGetDelay:
         ctrl.increment("node_a")  # count=2 -> delay(1) = 1.0*10^1 = 10.0, capped at 5.0
         assert ctrl.get_delay("node_a") == 5.0
 
-    def test_delay_zero_before_any_increment(self):
-        """Before any increment (count=0), get_delay uses max(0, -1) = 0."""
+    def test_delay_before_any_increment_uses_initial_interval(self):
+        """Before any increment (count=0), get_delay() clamps to retry_count=0."""
         ctrl = RetryController()
         ctrl.set_node_policy("node_a", RetryPolicy(max_retries=3, initial_interval=1.0, backoff_factor=2.0))
-        # count=0, delay(max(0, -1)) = delay(0) = 1.0
-        # Actually this edge case: count=0, so get_delay(max(0, 0-1)) = get_delay(0) = 1.0
+        # count=0, so get_delay() uses max(0, count-1) = max(0, -1) = 0
+        # and therefore returns delay(0), which is the initial interval.
         assert ctrl.get_delay("node_a") == 1.0
