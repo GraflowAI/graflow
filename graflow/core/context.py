@@ -1271,15 +1271,21 @@ class ExecutionContext:
         # Resolve base task ID for iteration tasks (e.g. "task_cycle_1_abc" → "task")
         base_task_id = _ITERATION_PATTERN.sub("", task.task_id) or task.task_id
 
-        # Apply per-task max_retries to RetryController if set on the task
-        task_max_retries = getattr(task, "max_retries", None)
-        if task_max_retries is not None:
+        # Apply per-task retry_policy / max_retries to RetryController if set on the task
+        task_retry_policy = getattr(task, "retry_policy", None)
+        if task_retry_policy is not None:
+            self.retry_controller.set_node_policy(task.task_id, task_retry_policy)
+        elif (task_max_retries := getattr(task, "max_retries", None)) is not None:
             self.retry_controller.set_node_max_retries(task.task_id, task_max_retries)
         elif task.task_id != base_task_id:
-            # Iteration task: inherit max_retries from base task
-            base_max = self.retry_controller.get_max_retries_for_node(base_task_id)
-            if base_max != self.retry_controller.default_max_retries:
-                self.retry_controller.set_node_max_retries(task.task_id, base_max)
+            # Iteration task: inherit retry settings from base task
+            base_policy = self.retry_controller.get_policy_for_node(base_task_id)
+            if base_policy is not None:
+                self.retry_controller.set_node_policy(task.task_id, base_policy)
+            else:
+                base_max = self.retry_controller.get_max_retries_for_node(base_task_id)
+                if base_max != self.retry_controller.default_max_retries:
+                    self.retry_controller.set_node_max_retries(task.task_id, base_max)
 
         # Only increment cycle count on first attempt (not on retry)
         is_retry = self.retry_controller.get_retry_count(task.task_id) > 0

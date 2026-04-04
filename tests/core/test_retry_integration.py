@@ -3,7 +3,11 @@
 Tests verify the full retry lifecycle:
   task raises exception -> engine catches -> retry_controller checks budget
   -> task re-enqueued -> engine re-executes -> succeeds or exhausts retries.
+
+Also covers RetryPolicy with exponential backoff through the full engine.
 """
+
+from unittest.mock import patch
 
 import pytest
 
@@ -11,6 +15,7 @@ from graflow.core.context import ExecutionContext, TaskExecutionContext
 from graflow.core.decorators import task
 from graflow.core.engine import WorkflowEngine
 from graflow.core.graph import TaskGraph
+from graflow.core.retry import RetryPolicy
 from graflow.exceptions import GraflowRuntimeError, RetryLimitExceededError
 
 
@@ -290,3 +295,157 @@ class TestRetryInPipeline:
         assert "flaky:2" in execution_log  # successful retry
         assert "finalize" in execution_log
         assert context.get_result("flaky_middle") == "recovered"
+
+
+class TestRetryPolicyIntegration:
+    """Integration tests for @task(retry_policy=RetryPolicy(...)) with WorkflowEngine."""
+
+    def test_retry_policy_succeeds_with_backoff(self):
+        """Task with retry_policy retries and succeeds."""
+        graph = TaskGraph()
+        attempt_count = 0
+
+        @task(retry_policy=RetryPolicy(max_retries=3, initial_interval=0.01, backoff_factor=2.0))
+        def flaky():
+            nonlocal attempt_count
+            attempt_count += 1
+            if attempt_count < 3:
+                raise ConnectionError(f"fail {attempt_count}")
+            return "ok"
+
+        graph.add_node(flaky, "flaky")
+        context = _run_workflow(graph, start_node="flaky")
+
+        assert attempt_count == 3
+        assert context.get_result("flaky") == "ok"
+
+    def test_retry_policy_exhausted(self):
+        """Task with retry_policy exhausts retries and raises RetryLimitExceededError."""
+        graph = TaskGraph()
+        attempt_count = 0
+
+        @task(retry_policy=RetryPolicy(max_retries=2, initial_interval=0.01))
+        def always_fails():
+            nonlocal attempt_count
+            attempt_count += 1
+            raise ValueError("always fails")
+
+        graph.add_node(always_fails, "always_fails")
+
+        with pytest.raises(RetryLimitExceededError) as exc_info:
+            _run_workflow(graph, start_node="always_fails")
+
+        assert attempt_count == 3  # 1 initial + 2 retries
+        assert exc_info.value.max_retries == 2
+
+    def test_retry_policy_calls_sleep_with_backoff_delays(self):
+        """Engine sleeps with correct exponential backoff delays."""
+        graph = TaskGraph()
+        attempt_count = 0
+
+        @task(retry_policy=RetryPolicy(max_retries=3, initial_interval=1.0, backoff_factor=2.0))
+        def flaky():
+            nonlocal attempt_count
+            attempt_count += 1
+            if attempt_count < 4:
+                raise ValueError(f"fail {attempt_count}")
+            return "ok"
+
+        graph.add_node(flaky, "flaky")
+        context = ExecutionContext.create(graph, start_node="flaky")
+
+        with patch("graflow.core.engine.time.sleep") as mock_sleep:
+            WorkflowEngine().execute(context)
+
+        # 3 retries -> 3 sleep calls with delays 1.0, 2.0, 4.0
+        assert mock_sleep.call_count == 3
+        delays = [call.args[0] for call in mock_sleep.call_args_list]
+        assert delays == [1.0, 2.0, 4.0]
+
+    def test_retry_policy_no_sleep_without_policy(self):
+        """Without retry_policy, no sleep is called (backward compatible)."""
+        graph = TaskGraph()
+        attempt_count = 0
+
+        @task(max_retries=2)
+        def flaky():
+            nonlocal attempt_count
+            attempt_count += 1
+            if attempt_count < 3:
+                raise ValueError("fail")
+            return "ok"
+
+        graph.add_node(flaky, "flaky")
+        context = ExecutionContext.create(graph, start_node="flaky")
+
+        with patch("graflow.core.engine.time.sleep") as mock_sleep:
+            WorkflowEngine().execute(context)
+
+        mock_sleep.assert_not_called()
+        assert attempt_count == 3
+
+    def test_retry_policy_max_interval_cap(self):
+        """Sleep delay is capped by max_interval."""
+        graph = TaskGraph()
+        attempt_count = 0
+
+        @task(retry_policy=RetryPolicy(max_retries=3, initial_interval=1.0, backoff_factor=100.0, max_interval=5.0))
+        def flaky():
+            nonlocal attempt_count
+            attempt_count += 1
+            if attempt_count < 4:
+                raise ValueError("fail")
+            return "ok"
+
+        graph.add_node(flaky, "flaky")
+        context = ExecutionContext.create(graph, start_node="flaky")
+
+        with patch("graflow.core.engine.time.sleep") as mock_sleep:
+            WorkflowEngine().execute(context)
+
+        delays = [call.args[0] for call in mock_sleep.call_args_list]
+        # 1*100^0=1.0, 1*100^1=100->5.0, 1*100^2=10000->5.0
+        assert delays == [1.0, 5.0, 5.0]
+
+    def test_retry_policy_in_pipeline(self):
+        """retry_policy on a middle task doesn't affect other tasks."""
+        graph = TaskGraph()
+        middle_attempts = 0
+
+        @task
+        def step_1():
+            return "data"
+
+        @task(retry_policy=RetryPolicy(max_retries=2, initial_interval=0.01))
+        def step_2():
+            nonlocal middle_attempts
+            middle_attempts += 1
+            if middle_attempts < 2:
+                raise RuntimeError("transient")
+            return "processed"
+
+        @task
+        def step_3():
+            return "done"
+
+        graph.add_node(step_1, "step_1")
+        graph.add_node(step_2, "step_2")
+        graph.add_node(step_3, "step_3")
+        graph.add_edge("step_1", "step_2")
+        graph.add_edge("step_2", "step_3")
+
+        context = _run_workflow(graph, start_node="step_1")
+
+        assert context.get_result("step_3") == "done"
+        assert middle_attempts == 2
+
+    def test_retry_policy_decorator_attribute(self):
+        """@task(retry_policy=...) stores both retry_policy and max_retries on TaskWrapper."""
+        policy = RetryPolicy(max_retries=3, initial_interval=0.5)
+
+        @task(retry_policy=policy)
+        def my_func():
+            pass
+
+        assert my_func.retry_policy is policy
+        assert my_func.max_retries == 3
