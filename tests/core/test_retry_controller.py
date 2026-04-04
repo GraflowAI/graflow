@@ -1,4 +1,4 @@
-"""Unit tests for RetryController.
+"""Unit tests for RetryController and RetryPolicy.
 
 Tests cover:
   - increment() counting
@@ -9,11 +9,13 @@ Tests cover:
   - Last error tracking
   - Independent retry tracking across multiple nodes
   - default_max_retries=0 means no retries by default
+  - RetryPolicy exponential backoff delay calculation
+  - RetryController.set_node_policy() / get_delay() integration
 """
 
 import pytest
 
-from graflow.core.retry import RetryController
+from graflow.core.retry import RetryController, RetryPolicy
 from graflow.exceptions import RetryLimitExceededError
 
 
@@ -253,3 +255,145 @@ class TestRetryControllerMultipleNodes:
 
         assert ctrl.accept_retry("node_a") is False
         assert ctrl.accept_retry("node_b") is True
+
+
+class TestRetryPolicyDefaults:
+    """Tests for RetryPolicy default values."""
+
+    def test_default_values(self):
+        policy = RetryPolicy()
+        assert policy.max_retries == 0
+        assert policy.initial_interval == 1.0
+        assert policy.backoff_factor == 2.0
+        assert policy.max_interval == 60.0
+        assert policy.jitter is False
+
+    def test_custom_values(self):
+        policy = RetryPolicy(max_retries=5, initial_interval=0.5, backoff_factor=3.0, max_interval=30.0, jitter=True)
+        assert policy.max_retries == 5
+        assert policy.initial_interval == 0.5
+        assert policy.backoff_factor == 3.0
+        assert policy.max_interval == 30.0
+        assert policy.jitter is True
+
+
+class TestRetryPolicyGetDelay:
+    """Tests for RetryPolicy.get_delay() calculation."""
+
+    def test_first_retry_delay(self):
+        """First retry (retry_count=0) returns initial_interval."""
+        policy = RetryPolicy(max_retries=3, initial_interval=1.0, backoff_factor=2.0)
+        assert policy.get_delay(0) == 1.0
+
+    def test_exponential_backoff(self):
+        """Delays follow exponential backoff: initial * factor^retry_count."""
+        policy = RetryPolicy(max_retries=5, initial_interval=1.0, backoff_factor=2.0)
+        assert policy.get_delay(0) == 1.0
+        assert policy.get_delay(1) == 2.0
+        assert policy.get_delay(2) == 4.0
+        assert policy.get_delay(3) == 8.0
+
+    def test_custom_backoff_factor(self):
+        """Custom backoff factor (e.g., 3.0) is applied correctly."""
+        policy = RetryPolicy(max_retries=3, initial_interval=0.5, backoff_factor=3.0)
+        assert policy.get_delay(0) == 0.5
+        assert policy.get_delay(1) == 1.5
+        assert policy.get_delay(2) == 4.5
+
+    def test_max_interval_cap(self):
+        """Delay is capped at max_interval."""
+        policy = RetryPolicy(max_retries=10, initial_interval=1.0, backoff_factor=10.0, max_interval=50.0)
+        # 1.0 * 10^3 = 1000, capped at 50
+        assert policy.get_delay(3) == 50.0
+
+    def test_jitter_within_range(self):
+        """With jitter=True, delay is within [0.5 * base, 1.5 * base]."""
+        policy = RetryPolicy(max_retries=3, initial_interval=10.0, backoff_factor=1.0, jitter=True)
+        # With factor=1.0, base delay is always 10.0
+        # Jitter range: [5.0, 15.0]
+        for _ in range(50):
+            delay = policy.get_delay(0)
+            assert 5.0 <= delay <= 15.0
+
+    def test_no_backoff_factor_one(self):
+        """backoff_factor=1.0 means constant delay."""
+        policy = RetryPolicy(max_retries=5, initial_interval=2.0, backoff_factor=1.0)
+        for i in range(5):
+            assert policy.get_delay(i) == 2.0
+
+
+class TestRetryControllerPolicy:
+    """Tests for RetryController with RetryPolicy."""
+
+    def test_set_node_policy_sets_max_retries(self):
+        """set_node_policy() also sets max_retries from the policy."""
+        ctrl = RetryController()
+        policy = RetryPolicy(max_retries=3)
+        ctrl.set_node_policy("node_a", policy)
+        assert ctrl.get_max_retries_for_node("node_a") == 3
+
+    def test_get_policy_for_node_returns_none_by_default(self):
+        """get_policy_for_node() returns None when no policy is set."""
+        ctrl = RetryController()
+        assert ctrl.get_policy_for_node("node_a") is None
+
+    def test_get_policy_for_node_returns_set_policy(self):
+        """get_policy_for_node() returns the policy that was set."""
+        ctrl = RetryController()
+        policy = RetryPolicy(max_retries=2, initial_interval=0.5)
+        ctrl.set_node_policy("node_a", policy)
+        assert ctrl.get_policy_for_node("node_a") is policy
+
+    def test_accept_retry_with_policy(self):
+        """accept_retry() works correctly with a policy-based max_retries."""
+        ctrl = RetryController()
+        ctrl.set_node_policy("node_a", RetryPolicy(max_retries=2))
+        assert ctrl.accept_retry("node_a") is True
+        ctrl.increment("node_a")
+        assert ctrl.accept_retry("node_a") is True
+        ctrl.increment("node_a")
+        assert ctrl.accept_retry("node_a") is False
+
+
+class TestRetryControllerGetDelay:
+    """Tests for RetryController.get_delay()."""
+
+    def test_no_policy_returns_zero(self):
+        """Without a policy, get_delay() returns 0.0 (backward compatible)."""
+        ctrl = RetryController(default_max_retries=3)
+        ctrl.increment("node_a")
+        assert ctrl.get_delay("node_a") == 0.0
+
+    def test_delay_after_first_increment(self):
+        """After first increment (count=1), delay uses retry_count=0."""
+        ctrl = RetryController()
+        ctrl.set_node_policy("node_a", RetryPolicy(max_retries=3, initial_interval=1.0, backoff_factor=2.0))
+        ctrl.increment("node_a")  # count becomes 1
+        assert ctrl.get_delay("node_a") == 1.0  # policy.get_delay(0) = 1.0
+
+    def test_delay_increases_with_retries(self):
+        """Delay increases exponentially with each increment."""
+        ctrl = RetryController()
+        ctrl.set_node_policy("node_a", RetryPolicy(max_retries=5, initial_interval=1.0, backoff_factor=2.0))
+        ctrl.increment("node_a")  # count=1 -> delay(0)=1.0
+        assert ctrl.get_delay("node_a") == 1.0
+        ctrl.increment("node_a")  # count=2 -> delay(1)=2.0
+        assert ctrl.get_delay("node_a") == 2.0
+        ctrl.increment("node_a")  # count=3 -> delay(2)=4.0
+        assert ctrl.get_delay("node_a") == 4.0
+
+    def test_delay_capped_by_max_interval(self):
+        """Delay is capped at max_interval from the policy."""
+        ctrl = RetryController()
+        ctrl.set_node_policy("node_a", RetryPolicy(max_retries=10, initial_interval=1.0, backoff_factor=10.0, max_interval=5.0))
+        ctrl.increment("node_a")
+        ctrl.increment("node_a")  # count=2 -> delay(1) = 1.0*10^1 = 10.0, capped at 5.0
+        assert ctrl.get_delay("node_a") == 5.0
+
+    def test_delay_zero_before_any_increment(self):
+        """Before any increment (count=0), get_delay uses max(0, -1) = 0."""
+        ctrl = RetryController()
+        ctrl.set_node_policy("node_a", RetryPolicy(max_retries=3, initial_interval=1.0, backoff_factor=2.0))
+        # count=0, delay(max(0, -1)) = delay(0) = 1.0
+        # Actually this edge case: count=0, so get_delay(max(0, 0-1)) = get_delay(0) = 1.0
+        assert ctrl.get_delay("node_a") == 1.0
