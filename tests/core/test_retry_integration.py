@@ -11,7 +11,7 @@ from graflow.core.context import ExecutionContext, TaskExecutionContext
 from graflow.core.decorators import task
 from graflow.core.engine import WorkflowEngine
 from graflow.core.graph import TaskGraph
-from graflow.exceptions import GraflowRuntimeError
+from graflow.exceptions import GraflowRuntimeError, RetryLimitExceededError
 
 
 def _run_workflow(
@@ -64,8 +64,8 @@ class TestRetryBasic:
         assert attempt_count == 3
         assert context.get_result("flaky") == "success"
 
-    def test_retry_exhausted_raises(self):
-        """Task that always fails exhausts retries and raises."""
+    def test_retry_exhausted_raises_retry_limit_error(self):
+        """Task that always fails exhausts retries and raises RetryLimitExceededError."""
         graph = TaskGraph()
         attempt_count = 0
 
@@ -77,11 +77,14 @@ class TestRetryBasic:
 
         graph.add_node(always_fails, "always_fails")
 
-        with pytest.raises(GraflowRuntimeError):
+        with pytest.raises(RetryLimitExceededError) as exc_info:
             _run_workflow(graph, start_node="always_fails", default_max_retries=2)
 
         # 1 initial + 2 retries = 3 attempts total
         assert attempt_count == 3
+        assert exc_info.value.task_id == "always_fails"
+        assert exc_info.value.max_retries == 2
+        assert exc_info.value.last_error is not None
 
     def test_retry_count_tracked(self):
         """RetryController tracks the correct retry count."""
@@ -156,10 +159,12 @@ class TestRetryWithDecorator:
 
         graph.add_node(limited, "limited")
 
-        with pytest.raises(GraflowRuntimeError):
+        with pytest.raises(RetryLimitExceededError) as exc_info:
             _run_workflow(graph, start_node="limited", default_max_retries=0)
 
         assert attempt_count == 2  # 1 initial + 1 retry
+        assert exc_info.value.task_id == "limited"
+        assert exc_info.value.max_retries == 1
 
 
 class TestRetryWithContext:

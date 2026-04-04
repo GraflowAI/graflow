@@ -279,7 +279,17 @@ class WorkflowEngine:
                     task_id = context.get_next_task()
                     continue
 
-                # No retries left — re-raise
+                # No retries left
+                if retry_ctrl.get_retry_count(base_task_id) > 0:
+                    # Retries were attempted but exhausted — record last error and raise
+                    retry_ctrl.increment(base_task_id, error=e)
+                    raise exceptions.RetryLimitExceededError(
+                        task_id=base_task_id,
+                        retry_count=retry_ctrl.get_retry_count(base_task_id),
+                        max_retries=retry_ctrl.get_max_retries_for_node(base_task_id),
+                        last_error=e,
+                    )
+                # No retries configured — raise original error
                 raise exceptions.as_runtime_error(e)
 
             # Handle control flow and successor scheduling
