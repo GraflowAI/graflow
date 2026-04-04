@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-04-04
+
+### Added
+- `RetryPolicy` dataclass with exponential backoff support (`initial_interval`, `backoff_factor`, `max_interval`, `jitter`)
+- `@task(retry_policy=RetryPolicy(...))` decorator parameter for per-task retry policy configuration
+- `RetryController.set_node_policy()` and `get_policy_for_node()` methods
+- Exponential backoff example in `examples/07_dynamic_tasks/task_retries.py`
+- `RetryPolicy` exported from top-level `graflow` package
+
+### Changed
+- Iteration tasks now inherit `retry_policy` from base task (in addition to `max_retries`)
+- `retry_policy` takes precedence over `max_retries` when both are set; `max_retries` is derived from the policy
+
 ## [0.1.3] - 2026-04-04
 
 ### Added
@@ -74,7 +87,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Workflow visualization (ASCII, Mermaid, PNG)
 - REST API for workflow management and feedback submission
 
-[Unreleased]: https://github.com/myui/graflow/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/myui/graflow/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/myui/graflow/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/myui/graflow/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/myui/graflow/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/myui/graflow/compare/v0.1.0...v0.1.1
