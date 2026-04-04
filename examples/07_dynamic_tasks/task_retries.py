@@ -7,6 +7,7 @@ Demonstrates automatic retry on task failure using
 
 Concepts:
   - @task(max_retries=N): Allow up to N retry attempts after failure
+  - @task(retry_policy=RetryPolicy(...)): Exponential backoff on retry
   - ctx.retry_count: Number of retries so far (0 on first attempt)
   - ctx.max_retries: Configured retry limit
   - default_max_retries: Global default (0 = no retries)
@@ -20,6 +21,7 @@ from graflow.core.context import ExecutionContext, TaskExecutionContext
 from graflow.core.decorators import task
 from graflow.core.engine import WorkflowEngine
 from graflow.core.graph import TaskGraph
+from graflow.core.retry import RetryPolicy
 from graflow.exceptions import GraflowRuntimeError
 
 
@@ -120,8 +122,35 @@ def example_global_default():
     print(f"  Recovered after {attempts} attempts, result: {context.get_result('unstable')}")
 
 
+def example_exponential_backoff():
+    """Retry with exponential backoff using RetryPolicy."""
+    print("\n=== Exponential Backoff ===")
+    graph = TaskGraph()
+    attempts = 0
+
+    @task(
+        retry_policy=RetryPolicy(
+            max_retries=3,
+            initial_interval=0.1,  # short for demo
+            backoff_factor=2.0,    # 0.1s → 0.2s → 0.4s
+        ),
+    )
+    def flaky_service():
+        nonlocal attempts
+        attempts += 1
+        if attempts < 3:
+            raise ConnectionError(f"timeout (attempt {attempts})")
+        return "success"
+
+    graph.add_node(flaky_service, "flaky_service")
+    context = ExecutionContext.create(graph, start_node="flaky_service")
+    WorkflowEngine().execute(context)
+    print(f"  Recovered after {attempts} attempts, result: {context.get_result('flaky_service')}")
+
+
 if __name__ == "__main__":
     example_retry_succeeds()
     example_retry_exhausted()
     example_retry_in_pipeline()
     example_global_default()
+    example_exponential_backoff()
