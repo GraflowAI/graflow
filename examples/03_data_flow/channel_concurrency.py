@@ -17,7 +17,10 @@ Solutions
    Backed by a per-key lock in MemoryChannel and ``INCRBYFLOAT`` in Redis.
 
 2. **``channel.lock(key)``** — Advisory lock for arbitrary compound
-   operations.  No-op for Redis (server-side serialisation).
+   operations. Safe for in-process coordination only when the backend
+   provides a real lock; do **not** rely on a no-op Redis lock for
+   ``get`` -> compute -> ``set`` sequences, because those commands can
+   still interleave across clients.
 
 Expected Output
 ---------------
