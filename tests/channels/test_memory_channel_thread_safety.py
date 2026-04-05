@@ -115,6 +115,31 @@ class TestAtomicAdd:
         with pytest.raises(TypeError, match="expected int or float"):
             channel.atomic_add("data", 1)
 
+    def test_set_and_atomic_add_share_same_key(self) -> None:
+        """set() then atomic_add() then get() must all operate on the same value."""
+        channel = MemoryChannel("test")
+        channel.set("counter", 0)
+        channel.atomic_add("counter", 5)
+        assert channel.get("counter") == 5
+
+        channel.set("counter", 100)
+        channel.atomic_add("counter", -10)
+        assert channel.get("counter") == 90
+
+    def test_atomic_add_then_set_overwrites(self) -> None:
+        """set() after atomic_add() overwrites the value."""
+        channel = MemoryChannel("test")
+        channel.atomic_add("counter", 42)
+        channel.set("counter", 0)
+        assert channel.get("counter") == 0
+
+    def test_atomic_add_visible_in_keys_and_exists(self) -> None:
+        """Keys created by atomic_add() appear in keys() and exists()."""
+        channel = MemoryChannel("test")
+        channel.atomic_add("auto_created", 1)
+        assert channel.exists("auto_created")
+        assert "auto_created" in channel.keys()
+
 
 class TestAdvisoryLock:
     """Tests for the explicit ``lock()`` context manager."""
