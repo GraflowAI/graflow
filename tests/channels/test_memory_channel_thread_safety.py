@@ -315,6 +315,112 @@ class TestAdvisoryLock:
         assert b == 1000 + total_transfers
 
 
+class TestConcurrentAppendPrepend:
+    """Verify append/prepend are safe under concurrent access."""
+
+    def test_concurrent_append_no_data_loss(self) -> None:
+        """All appended values must be present — no initialization race."""
+        channel = MemoryChannel("test")
+        num_threads = 10
+        items_per_thread = 100
+        expected_len = num_threads * items_per_thread
+
+        barrier = threading.Barrier(num_threads)
+
+        def worker(thread_id: int) -> None:
+            barrier.wait()
+            for i in range(items_per_thread):
+                channel.append("items", (thread_id, i))
+
+        threads = [threading.Thread(target=worker, args=(tid,)) for tid in range(num_threads)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        result = channel.get("items")
+        assert isinstance(result, list)
+        assert len(result) == expected_len, f"Expected {expected_len}, got {len(result)}"
+
+    def test_concurrent_prepend_no_data_loss(self) -> None:
+        """All prepended values must be present — no initialization race."""
+        channel = MemoryChannel("test")
+        num_threads = 10
+        items_per_thread = 100
+        expected_len = num_threads * items_per_thread
+
+        barrier = threading.Barrier(num_threads)
+
+        def worker(thread_id: int) -> None:
+            barrier.wait()
+            for i in range(items_per_thread):
+                channel.prepend("items", (thread_id, i))
+
+        threads = [threading.Thread(target=worker, args=(tid,)) for tid in range(num_threads)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        result = channel.get("items")
+        assert isinstance(result, list)
+        assert len(result) == expected_len, f"Expected {expected_len}, got {len(result)}"
+
+    def test_concurrent_append_to_new_key_returns_correct_length(self) -> None:
+        """append() return value should reflect the actual list length."""
+        channel = MemoryChannel("test")
+        lengths: list = []
+        num_threads = 10
+        lock = threading.Lock()
+
+        barrier = threading.Barrier(num_threads)
+
+        def worker() -> None:
+            barrier.wait()
+            length = channel.append("items", "val")
+            with lock:
+                lengths.append(length)
+
+        threads = [threading.Thread(target=worker) for _ in range(num_threads)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        result = channel.get("items")
+        assert isinstance(result, list)
+        assert len(result) == num_threads
+        # All returned lengths should be between 1 and num_threads
+        assert all(1 <= length <= num_threads for length in lengths)
+
+    def test_concurrent_mixed_append_prepend(self) -> None:
+        """Mixing append and prepend concurrently should not lose items."""
+        channel = MemoryChannel("test")
+        num_threads = 10
+        items_per_thread = 50
+        expected_len = num_threads * items_per_thread
+
+        barrier = threading.Barrier(num_threads)
+
+        def worker(thread_id: int) -> None:
+            barrier.wait()
+            for i in range(items_per_thread):
+                if i % 2 == 0:
+                    channel.append("items", (thread_id, i))
+                else:
+                    channel.prepend("items", (thread_id, i))
+
+        threads = [threading.Thread(target=worker, args=(tid,)) for tid in range(num_threads)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        result = channel.get("items")
+        assert isinstance(result, list)
+        assert len(result) == expected_len, f"Expected {expected_len}, got {len(result)}"
+
+
 class TestBaseChannelLockNoop:
     """Verify that the base Channel.lock() default is a no-op."""
 

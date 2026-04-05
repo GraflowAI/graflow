@@ -97,20 +97,18 @@ class MemoryChannel(Channel):
         """
         self._cleanup_expired(key)
 
-        # Initialize list if key doesn't exist
-        if key not in self.data:
-            self.data[key] = []
-        elif not isinstance(self.data[key], list):
+        # setdefault is atomic under GIL — avoids initialization race
+        existing = self.data.setdefault(key, [])
+        if not isinstance(existing, list):
             raise TypeError(f"Key '{key}' exists but is not a list")
 
-        # Append to the list
-        self.data[key].append(value)
+        existing.append(value)
 
         # Set TTL if specified
         if ttl is not None:
             self.ttl_data[key] = time.time() + ttl
 
-        return len(self.data[key])
+        return len(existing)
 
     def prepend(self, key: str, value: Any, ttl: Optional[int] = None) -> int:
         """Prepend value to the head of a list stored at key.
@@ -125,14 +123,12 @@ class MemoryChannel(Channel):
         """
         self._cleanup_expired(key)
 
-        # Initialize list if key doesn't exist
-        if key not in self.data:
-            self.data[key] = []
-        elif not isinstance(self.data[key], list):
+        # setdefault is atomic under GIL — avoids initialization race
+        existing = self.data.setdefault(key, [])
+        if not isinstance(existing, list):
             raise TypeError(f"Key '{key}' exists but is not a list")
 
-        # Prepend to the head of the list
-        self.data[key].insert(0, value)
+        existing.insert(0, value)
 
         # Set TTL if specified
         if ttl is not None:
