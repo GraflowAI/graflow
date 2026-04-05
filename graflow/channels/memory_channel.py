@@ -24,8 +24,8 @@ class MemoryChannel(Channel):
     def __getstate__(self) -> Dict[str, Any]:
         """Exclude unpicklable lock objects during serialization."""
         state = self.__dict__.copy()
-        del state["_key_locks"]
-        del state["_key_locks_guard"]
+        state.pop("_key_locks", None)
+        state.pop("_key_locks_guard", None)
         return state
 
     def __setstate__(self, state: Dict[str, Any]) -> None:
