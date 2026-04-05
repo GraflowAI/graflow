@@ -72,7 +72,7 @@ class Channel(ABC):
         pass
 
     @abstractmethod
-    def add(self, key: str, amount: Union[int, float] = 1) -> Union[int, float]:
+    def atomic_add(self, key: str, amount: Union[int, float] = 1) -> Union[int, float]:
         """Atomically add *amount* to the numeric value stored at *key*.
 
         If *key* does not exist, it is initialised to 0 before the addition.

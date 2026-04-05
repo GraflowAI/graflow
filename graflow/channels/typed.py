@@ -149,9 +149,9 @@ class TypedChannel(Channel, Generic[T]):
         """
         return self._channel.prepend(key, value, ttl)
 
-    def add(self, key: str, amount: Union[int, float] = 1) -> Union[int, float]:
+    def atomic_add(self, key: str, amount: Union[int, float] = 1) -> Union[int, float]:
         """Atomically add *amount* to the numeric value stored at *key*."""
-        return self._channel.add(key, amount)
+        return self._channel.atomic_add(key, amount)
 
     @contextmanager
     def lock(self, key: str, timeout: float = 10.0) -> Iterator[None]:
