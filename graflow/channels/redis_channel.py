@@ -217,20 +217,10 @@ class RedisChannel(Channel):
 
         return cast(int, length)
 
-    # Redis INCRBYFLOAT uses a separate key namespace to avoid JSON
-    # serialisation overhead and to leverage native atomic arithmetic.
-    _COUNTER_PREFIX = "counter:"
-
-    def _get_counter_key(self, key: str) -> str:
-        """Return the Redis key used for numeric counters."""
-        return f"{self.key_prefix}{self._COUNTER_PREFIX}{key}"
-
     def atomic_add(self, key: str, amount: Union[int, float] = 1) -> Union[int, float]:
         """Atomically add *amount* using Redis INCRBYFLOAT.
 
         This is a server-side atomic operation — no client-side locking needed.
-        Counter values live in a dedicated key namespace so they don't collide
-        with JSON-serialised values stored via ``set()``.
 
         Args:
             key: The key identifying the numeric value.
@@ -239,9 +229,9 @@ class RedisChannel(Channel):
         Returns:
             The value after the addition.
         """
-        counter_key = self._get_counter_key(key)
+        redis_key = self._get_key(key)
         # INCRBYFLOAT returns the new value as a string; auto-creates key at 0.
-        result = self.redis_client.incrbyfloat(counter_key, amount)
+        result = self.redis_client.incrbyfloat(redis_key, amount)
         new_value = float(cast(str, result))
         # Return int when possible for ergonomics
         if new_value == int(new_value):
