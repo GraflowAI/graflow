@@ -17,10 +17,9 @@ Solutions
    Backed by a per-key lock in MemoryChannel and ``INCRBYFLOAT`` in Redis.
 
 2. **``channel.lock(key)``** — Advisory lock for arbitrary compound
-   operations. Safe for in-process coordination only when the backend
-   provides a real lock; do **not** rely on a no-op Redis lock for
-   ``get`` -> compute -> ``set`` sequences, because those commands can
-   still interleave across clients.
+   operations. ``MemoryChannel`` uses a per-key ``threading.RLock`` for
+   in-process coordination; ``RedisChannel`` uses ``redis.lock.Lock``
+   (SET NX + Lua release) for cross-client distributed coordination.
 
 Expected Output
 ---------------
