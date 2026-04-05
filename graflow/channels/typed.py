@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, ClassVar, Generic, Type, TypeVar, get_type_hints
+from contextlib import contextmanager
+from typing import Any, ClassVar, Generic, Iterator, Type, TypeVar, Union, get_type_hints
 
 from graflow.channels.base import Channel
 from graflow.exceptions import ConfigError
@@ -147,6 +148,16 @@ class TypedChannel(Channel, Generic[T]):
             Length of the list after prepend
         """
         return self._channel.prepend(key, value, ttl)
+
+    def add(self, key: str, amount: Union[int, float] = 1) -> Union[int, float]:
+        """Atomically add *amount* to the numeric value stored at *key*."""
+        return self._channel.add(key, amount)
+
+    @contextmanager
+    def lock(self, key: str, timeout: float = 10.0) -> Iterator[None]:
+        """Acquire advisory lock — delegates to underlying channel."""
+        with self._channel.lock(key, timeout):
+            yield
 
     def send(self, key: str, message: T, ttl: int | None = None) -> None:
         """Send a typed message.

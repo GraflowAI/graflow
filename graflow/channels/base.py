@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, List, Optional
+from contextlib import contextmanager
+from typing import Any, Iterator, List, Optional, Union
 
 
 class Channel(ABC):
@@ -69,3 +70,53 @@ class Channel(ABC):
             Length of the list after prepend
         """
         pass
+
+    @abstractmethod
+    def add(self, key: str, amount: Union[int, float] = 1) -> Union[int, float]:
+        """Atomically add *amount* to the numeric value stored at *key*.
+
+        If *key* does not exist, it is initialised to 0 before the addition.
+        Negative *amount* is allowed (decrement).
+
+        Args:
+            key: The key identifying the numeric value.
+            amount: The value to add (default 1). May be negative.
+
+        Returns:
+            The value after the addition.
+
+        Raises:
+            TypeError: If the existing value is not numeric.
+        """
+        pass
+
+    @contextmanager
+    def lock(self, key: str, timeout: float = 10.0) -> Iterator[None]:
+        """Acquire an advisory lock scoped to *key* for compound operations.
+
+        Usage::
+
+            with channel.lock("counter"):
+                val = channel.get("counter")
+                channel.set("counter", val * 2 if val > 0 else 0)
+
+        The lock is *advisory* — regular ``get``/``set`` calls do **not**
+        acquire it automatically.  It exists for task authors who need to
+        protect read-modify-write sequences that cannot be expressed with
+        ``add``.
+
+        The default implementation is a **no-op** (yields immediately).
+        This is appropriate for backends where atomicity is guaranteed by
+        the server (e.g. Redis commands are serialised server-side).
+        Subclasses that need client-side locking (e.g. ``MemoryChannel``
+        under multi-threading) should override this method.
+
+        Args:
+            key: Logical key to lock on (does not need to correspond to a
+                 stored key).
+            timeout: Maximum seconds to wait for the lock.
+
+        Yields:
+            None — the lock is held for the duration of the ``with`` block.
+        """
+        yield
