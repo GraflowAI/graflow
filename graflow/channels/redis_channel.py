@@ -279,7 +279,7 @@ class RedisChannel(Channel):
 
     def __setstate__(self, state):
         """Support for pickle deserialization."""
-        self.__dict__.update(state) # type: ignore
+        self.__dict__.update(state)  # type: ignore
         # Recreate the Redis client
         assert redis is not None, "redis package is required for RedisChannel"
         self.redis_client = redis.Redis(
