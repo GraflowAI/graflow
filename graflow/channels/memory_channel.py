@@ -159,7 +159,7 @@ class MemoryChannel(Channel):
         with self._get_key_lock(key):
             self._cleanup_expired(key)
             current = self.data.get(key, 0)
-            if not isinstance(current, int | float):
+            if not isinstance(current, (int, float)):
                 raise TypeError(f"Key '{key}' holds {type(current).__name__}, expected int or float")
             new_value = current + amount
             self.data[key] = new_value
