@@ -105,11 +105,15 @@ class Channel(ABC):
         protect read-modify-write sequences that cannot be expressed with
         ``atomic_add()``.
 
-        The default implementation is a **no-op** (yields immediately).
-        This is appropriate for backends where atomicity is guaranteed by
-        the server (e.g. Redis commands are serialised server-side).
-        Subclasses that need client-side locking (e.g. ``MemoryChannel``
-        under multi-threading) should override this method.
+        .. warning::
+
+            The default implementation is a **no-op** (yields immediately)
+            and provides **no mutual exclusion**.  Subclasses that need
+            compound-operation safety **must** override this method — this
+            includes both in-process backends under multi-threading
+            (e.g. ``MemoryChannel``) and distributed backends where
+            multi-client read-modify-write sequences are racy
+            (e.g. Redis without a distributed lock).
 
         Args:
             key: Logical key to lock on (does not need to correspond to a
