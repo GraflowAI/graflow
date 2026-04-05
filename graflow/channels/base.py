@@ -105,20 +105,24 @@ class Channel(ABC):
         protect read-modify-write sequences that cannot be expressed with
         ``atomic_add()``.
 
+        Both ``MemoryChannel`` (threading lock) and ``RedisChannel``
+        (``redis.lock.Lock`` — distributed SET NX + Lua release) provide
+        real mutual exclusion.
+
         .. warning::
 
-            The default implementation is a **no-op** (yields immediately)
-            and provides **no mutual exclusion**.  Subclasses that need
-            compound-operation safety **must** override this method — this
-            includes both in-process backends under multi-threading
-            (e.g. ``MemoryChannel``) and distributed backends where
-            multi-client read-modify-write sequences are racy
-            (e.g. Redis without a distributed lock).
+            The **base class** default is a **no-op** (yields immediately)
+            and provides **no mutual exclusion**.  Custom subclasses that
+            need compound-operation safety **must** override this method.
 
         Args:
             key: Logical key to lock on (does not need to correspond to a
                  stored key).
             timeout: Maximum seconds to wait for the lock.
+
+        Raises:
+            TimeoutError: If the lock cannot be acquired within *timeout*
+                (raised by ``MemoryChannel`` and ``RedisChannel``).
 
         Yields:
             None — the lock is held for the duration of the ``with`` block.
