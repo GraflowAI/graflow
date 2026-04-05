@@ -417,8 +417,8 @@ After mastering data flow:
 - `channel.set(key, value)` - Store value
 - `channel.get(key, default=None)` - Retrieve value
 - `channel.keys()` - List all keys
-- `channel.atomic_add(key, amount=1)` - Atomic numeric add/subtract (thread-safe)
-- `channel.lock(key, timeout=10.0)` - Advisory lock for compound operations
+- `channel.atomic_add(key, amount=1)` - Atomic numeric add/subtract (thread-safe for `MemoryChannel`; single-command atomic for Redis)
+- `channel.lock(key, timeout=10.0)` - Advisory per-key lock for compound read-modify-write operations (thread-safe via `threading.RLock`)
 
 **TypedChannel**:
 - `typed_channel = ctx.get_typed_channel(SchemaClass)` - Create typed channel
