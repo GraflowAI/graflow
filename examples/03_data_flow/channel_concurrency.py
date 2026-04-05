@@ -196,8 +196,8 @@ if __name__ == "__main__":
 # 2. **channel.lock(key)**
 #    - Advisory lock for compound operations that atomic_add() can't express
 #    - Wrap with ``with channel.lock(key):`` context manager
-#    - MemoryChannel: per-key RLock; Redis: no-op (server-side serialisation)
-#    - Use for conditional updates, multi-key transactions
+#    - MemoryChannel: per-key RLock; Redis: distributed lock for the same key
+#    - Use for conditional updates and other compound read-modify-write logic
 #
 # 3. **When to use which**
 #    - Simple counter?         → channel.atomic_add("counter", 1)
