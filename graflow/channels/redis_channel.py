@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import json
-from typing import Any, List, Optional, cast
+from contextlib import contextmanager
+from typing import TYPE_CHECKING, Any, Iterator, List, Optional, Union, cast
 
 from graflow.channels.base import Channel
 
+if TYPE_CHECKING:
+    from redis import Redis
+
 try:
     import redis
-    from redis import Redis
 except ImportError:
     redis = None
 
@@ -217,6 +220,56 @@ class RedisChannel(Channel):
 
         return cast(int, length)
 
+    def atomic_add(self, key: str, amount: Union[int, float] = 1) -> Union[int, float]:
+        """Atomically add *amount* using Redis INCRBYFLOAT.
+
+        This is a server-side atomic operation — no client-side locking needed.
+
+        Args:
+            key: The key identifying the numeric value.
+            amount: The value to add (default 1). May be negative.
+
+        Returns:
+            The value after the addition.
+        """
+        redis_key = self._get_key(key)
+        # INCRBYFLOAT returns the new value as a string; auto-creates key at 0.
+        result = self.redis_client.incrbyfloat(redis_key, amount)
+        new_value = float(cast(str, result))
+        # Return int when possible for ergonomics
+        if new_value == int(new_value):
+            return int(new_value)
+        return new_value
+
+    @contextmanager
+    def lock(self, key: str, timeout: float = 10.0) -> Iterator[None]:
+        """Acquire a distributed advisory lock scoped to *key*.
+
+        Uses ``redis.lock.Lock`` (SET NX + Lua release) under the hood.
+
+        Args:
+            key: Logical key to lock on.
+            timeout: Maximum seconds to wait for the lock.
+
+        Raises:
+            TimeoutError: If the lock cannot be acquired within *timeout*.
+        """
+        from redis.exceptions import LockNotOwnedError
+        from redis.lock import Lock
+
+        lock_name = f"{self.key_prefix}lock:{key}"
+        lock = Lock(self.redis_client, lock_name, timeout=timeout)
+        acquired = lock.acquire(blocking=True, blocking_timeout=timeout)
+        if not acquired:
+            raise TimeoutError(f"Could not acquire lock for key '{key}' within {timeout}s")
+        try:
+            yield
+        finally:
+            try:
+                lock.release()
+            except LockNotOwnedError:
+                pass
+
     def __getstate__(self):
         """Support for pickle serialization."""
         state = self.__dict__.copy()
@@ -226,7 +279,7 @@ class RedisChannel(Channel):
 
     def __setstate__(self, state):
         """Support for pickle deserialization."""
-        self.__dict__.update(state)
+        self.__dict__.update(state)  # type: ignore
         # Recreate the Redis client
         assert redis is not None, "redis package is required for RedisChannel"
         self.redis_client = redis.Redis(
