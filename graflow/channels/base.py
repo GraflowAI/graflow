@@ -103,7 +103,7 @@ class Channel(ABC):
         The lock is *advisory* — regular ``get``/``set`` calls do **not**
         acquire it automatically.  It exists for task authors who need to
         protect read-modify-write sequences that cannot be expressed with
-        ``add``.
+        ``atomic_add()``.
 
         The default implementation is a **no-op** (yields immediately).
         This is appropriate for backends where atomicity is guaranteed by
