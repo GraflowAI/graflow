@@ -319,7 +319,7 @@ class TestBaseChannelLockNoop:
     """Verify that the base Channel.lock() default is a no-op."""
 
     def test_noop_lock(self) -> None:
-        """RedisChannel (or any subclass) that doesn't override lock() gets a no-op."""
+        """Any subclass that doesn't override lock() gets a no-op."""
         from graflow.channels.base import Channel
 
         # Create a minimal concrete subclass that does NOT override lock()
