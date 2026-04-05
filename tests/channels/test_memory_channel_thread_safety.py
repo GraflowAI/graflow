@@ -194,7 +194,7 @@ class TestAdvisoryLock:
 
         t = threading.Thread(target=holder)
         t.start()
-        held.wait()
+        assert held.wait(timeout=5), "holder thread failed to acquire lock"
 
         with pytest.raises(TimeoutError):
             with channel.lock("key", timeout=0.1):
