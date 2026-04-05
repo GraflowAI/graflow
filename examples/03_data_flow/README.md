@@ -11,7 +11,8 @@ This section demonstrates **data flow and inter-task communication** in Graflow 
 ## What You'll Learn
 
 - 📡 Using channels for inter-task communication
-- 🔒 Type-safe channels with TypedDict
+- 🔒 Thread-safe channel operations (`atomic_add`, `lock`)
+- 🏷️ Type-safe channels with TypedDict
 - 💾 Storing and retrieving task results
 - 🔄 Data flow patterns in workflows
 - 📊 Sharing state across task boundaries
@@ -37,7 +38,25 @@ uv run python examples/03_data_flow/channels_basic.py
 
 ---
 
-### 2. typed_channels.py
+### 2. channel_concurrency.py
+
+**Concept**: Thread-safe channel operations
+
+Learn how to safely update shared channel data when tasks run in parallel using `ParallelGroup`.
+
+```bash
+uv run python examples/03_data_flow/channel_concurrency.py
+```
+
+**Key Concepts**:
+- Race conditions with naive `get`/`set` under concurrency
+- Atomic counter updates with `channel.atomic_add()`
+- Advisory locking with `channel.lock()` for compound operations
+- Threshold-based reset pattern with multi-key updates
+
+---
+
+### 3. typed_channels.py
 
 **Concept**: Type-safe channels
 
@@ -56,7 +75,7 @@ uv run python examples/03_data_flow/typed_channels.py
 
 ---
 
-### 3. results_storage.py
+### 4. results_storage.py
 
 **Concept**: Task results and dependency data
 
@@ -107,7 +126,32 @@ def process_batch(ctx: TaskExecutionContext):
     channel.set("total_processed", total)
 ```
 
-### Pattern 3: Type-Safe Messages
+### Pattern 3: Thread-Safe Counter
+
+```python
+@task(inject_context=True)
+def count_items(ctx: TaskExecutionContext):
+    channel = ctx.get_channel()
+    # Atomic — safe for parallel tasks
+    channel.atomic_add("processed_count", 1)
+```
+
+### Pattern 4: Compound Update with Lock
+
+```python
+@task(inject_context=True)
+def check_and_reset(ctx: TaskExecutionContext):
+    channel = ctx.get_channel()
+    with channel.lock("counter"):
+        val = channel.get("counter")
+        if val >= threshold:
+            channel.set("counter", 0)
+            channel.atomic_add("overflow_count", 1)
+        else:
+            channel.set("counter", val + 1)
+```
+
+### Pattern 5: Type-Safe Messages
 
 ```python
 from typing import TypedDict
@@ -129,7 +173,7 @@ def collect_metrics(ctx: TaskExecutionContext):
     typed_channel.set("metrics", metrics)
 ```
 
-### Pattern 4: Result Dependencies
+### Pattern 6: Result Dependencies
 
 ```python
 with workflow("pipeline") as ctx:
@@ -310,9 +354,8 @@ def use_config(ctx: TaskExecutionContext):
 @task(inject_context=True)
 def track_metrics(ctx: TaskExecutionContext):
     channel = ctx.get_channel()
-    metrics = channel.get("metrics", {})
-    metrics["processed"] = metrics.get("processed", 0) + 1
-    channel.set("metrics", metrics)
+    # Thread-safe counter — works in parallel tasks
+    channel.atomic_add("processed", 1)
 ```
 
 ### Error Accumulation
@@ -374,6 +417,8 @@ After mastering data flow:
 - `channel.set(key, value)` - Store value
 - `channel.get(key, default=None)` - Retrieve value
 - `channel.keys()` - List all keys
+- `channel.atomic_add(key, amount=1)` - Atomic numeric add/subtract (thread-safe)
+- `channel.lock(key, timeout=10.0)` - Advisory lock for compound operations
 
 **TypedChannel**:
 - `typed_channel = ctx.get_typed_channel(SchemaClass)` - Create typed channel
