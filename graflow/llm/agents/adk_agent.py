@@ -38,7 +38,7 @@ try:
 
     ADK_AVAILABLE = True
 except ImportError as e:
-    logger.warning("Google ADK is not installed. AdkLLMAgent will not be available.", exc_info=e)
+    logger.debug("Google ADK is not installed. AdkLLMAgent will not be available: %s", e)
     ADK_AVAILABLE = False
 
 # OpenInference instrumentation for ADK tracing
@@ -47,7 +47,7 @@ try:
 
     OPENINFERENCE_AVAILABLE = True
 except ImportError as e:
-    logger.warning("OpenInference instrumentation for Google ADK is not available.", exc_info=e)
+    logger.debug("OpenInference instrumentation for Google ADK is not available: %s", e)
     OPENINFERENCE_AVAILABLE = False
     GoogleADKInstrumentor = None  # type: ignore[misc,assignment]
 

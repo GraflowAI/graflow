@@ -21,7 +21,7 @@ try:
 
     PYDANTIC_AI_AVAILABLE = True
 except ImportError as e:
-    logger.warning("Pydantic AI is not installed. PydanticLLMAgent will not be available.", exc_info=e)
+    logger.debug("Pydantic AI is not installed. PydanticLLMAgent will not be available: %s", e)
     PYDANTIC_AI_AVAILABLE = False
 
 # Type variable for Agent output type (matches Pydantic AI's definition)
