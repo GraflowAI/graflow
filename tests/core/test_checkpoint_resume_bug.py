@@ -108,7 +108,10 @@ class TestDeferredCheckpointResume:
                 _result, context = wf.execute("task_a", ret_context=True)
 
             # Resume and check queue state
-            restored_ctx, _ = CheckpointManager.resume_from_checkpoint(context.last_checkpoint_path)  # type: ignore
+            assert context.last_checkpoint_path is not None, (
+                "Expected deferred checkpoint to be created before resuming"
+            )
+            restored_ctx, _ = CheckpointManager.resume_from_checkpoint(context.last_checkpoint_path)
 
             # The queue should contain task_c as a pending task
             pending = list(restored_ctx.task_queue.get_pending_task_specs())
