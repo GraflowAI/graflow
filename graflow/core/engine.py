@@ -341,10 +341,6 @@ class WorkflowEngine:
             context.mark_task_completed(task_id)
             context.increment_step()
 
-            # Handle deferred checkpoint requests
-            if context.checkpoint_requested:
-                self._handle_deferred_checkpoint(context)
-
             if context.terminate_called:
                 # Workflow termination requested (normal exit)
                 logger.info(
@@ -370,6 +366,11 @@ class WorkflowEngine:
                 for succ in successors:
                     succ_task = graph.get_node(succ)
                     context.add_to_queue(succ_task)
+
+            # Handle deferred checkpoint requests AFTER successor processing
+            # so that pending successors are included in the checkpoint's queue
+            if context.checkpoint_requested:
+                self._handle_deferred_checkpoint(context)
 
             # Get next task from queue
             task_id = context.get_next_task()
