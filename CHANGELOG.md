@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-04-07
+
+Patch release with an important checkpoint bugfix and logging refinement.
+
+### Fixed
+- Add `_run_sync` helper to support nested event loops in Jupyter/Colab environments using asyncio
+- Ensure deferred checkpoint includes successor tasks in execution queue (#46)
+
+### Changed
+- Change warning logs to debug logs for ADK and Pydantic agent import errors
+
 ## [0.1.6] - 2026-04-06
 
 Minor patch release with a corner-case bugfix only. No new features or breaking changes.
@@ -104,7 +115,8 @@ Minor patch release with a corner-case bugfix only. No new features or breaking 
 - Workflow visualization (ASCII, Mermaid, PNG)
 - REST API for workflow management and feedback submission
 
-[Unreleased]: https://github.com/myui/graflow/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/myui/graflow/compare/v0.1.7...HEAD
+[0.1.7]: https://github.com/myui/graflow/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/myui/graflow/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/myui/graflow/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/myui/graflow/compare/v0.1.3...v0.1.4
