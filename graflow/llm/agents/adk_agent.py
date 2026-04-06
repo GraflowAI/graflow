@@ -55,6 +55,33 @@ except ImportError as e:
 _adk_instrumented = False
 
 
+def _run_sync(coro: Any) -> Any:
+    """Run a coroutine synchronously, handling both running and non-running event loops.
+
+    In environments like Jupyter/Colab where an event loop is already running,
+    asyncio.run() raises RuntimeError. This helper applies nest_asyncio on demand
+    to allow nested event loops, then retries.
+    """
+    try:
+        return asyncio.run(coro)
+    except RuntimeError as e:
+        if "cannot be called from a running event loop" not in str(e):
+            raise
+        logger.debug("Detected running event loop, applying nest_asyncio for nested loop support")
+        # Apply nest_asyncio to allow nested event loops (e.g. Jupyter/Colab)
+        try:
+            import nest_asyncio
+
+            nest_asyncio.apply()
+            logger.debug("nest_asyncio applied successfully")
+        except ImportError:
+            raise RuntimeError(
+                "asyncio.run() cannot be called from a running event loop. "
+                "Install nest-asyncio to fix this: pip install nest-asyncio"
+            ) from e
+        return asyncio.run(coro)
+
+
 def _patch_passthrough_tracer() -> None:
     """Patch _PassthroughTracer to properly propagate OpenTelemetry context.
 
@@ -631,8 +658,7 @@ class AdkLLMAgent(LLMAgent):
             logger.debug(f"Running ADK agent with trace_id={trace_id}, session_id={session_id}")
 
             # Create session in session service (async in ADK 1.0+)
-            # Use asyncio.run() to execute async session creation synchronously
-            asyncio.run(
+            _run_sync(
                 self._session_service.create_session(app_name=self._app_name, user_id=user_id, session_id=session_id)
             )
 
