@@ -890,7 +890,12 @@ class TaskWrapper(Executable):
                 continue
 
             # Check if value exists in channel
-            if param_name in channel.keys():
+            # First check __result__ key (set by context.set_result()),
+            # then fall back to plain key (set directly via channel.set())
+            result_key = f"{param_name}.__result__"
+            if channel.exists(result_key):
+                resolved_kwargs[param_name] = channel.get(result_key)
+            elif channel.exists(param_name):
                 resolved_kwargs[param_name] = channel.get(param_name)
             elif param.default is not inspect.Parameter.empty:
                 # Parameter has default value, skip
