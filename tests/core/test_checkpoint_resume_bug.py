@@ -132,3 +132,47 @@ class TestDeferredCheckpointResume:
             )
             assert final_result == "c_done"
             assert "task_c" in restored_ctx.completed_tasks
+
+    def test_deferred_checkpoint_with_terminate_workflow(self):
+        """A task that requests both checkpoint and terminate should still produce a checkpoint.
+
+        Scenario: step_1 >> step_2 >> step_3
+        - step_2 requests a deferred checkpoint AND terminates the workflow
+        - Checkpoint should still be created (before break)
+        - step_3 should NOT execute (workflow terminated)
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            checkpoint_path = os.path.join(tmpdir, "terminate_checkpoint")
+
+            with workflow("terminate_test") as wf:
+
+                @task
+                def step_1() -> str:
+                    return "done"
+
+                @task(inject_context=True)
+                def step_2(task_ctx: TaskExecutionContext) -> str:
+                    task_ctx.checkpoint(path=checkpoint_path, metadata={"stage": "before_terminate"})
+                    task_ctx.terminate_workflow("early exit")
+                    return "terminated"
+
+                @task
+                def step_3() -> str:
+                    return "should_not_run"
+
+                _ = step_1 >> step_2 >> step_3
+                _result, context = wf.execute("step_1", ret_context=True)
+
+            # step_3 should not have been executed (workflow terminated at step_2)
+            assert context.get_result("step_3") is None
+
+            # Checkpoint should still have been created despite termination
+            assert context.last_checkpoint_path is not None
+            assert os.path.exists(context.last_checkpoint_path)
+
+            # Verify checkpoint is valid and restorable
+            restored_ctx, metadata = CheckpointManager.resume_from_checkpoint(context.last_checkpoint_path)
+            assert "step_1" in restored_ctx.completed_tasks
+            assert "step_2" in restored_ctx.completed_tasks
+            assert restored_ctx.get_result("step_2") == "terminated"
+            assert metadata.user_metadata["stage"] == "before_terminate"

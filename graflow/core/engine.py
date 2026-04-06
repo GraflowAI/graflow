@@ -349,6 +349,9 @@ class WorkflowEngine:
                     context.ctrl_message,
                     extra={"task_id": task_id, "session_id": context.session_id, "ctrl_message": context.ctrl_message},
                 )
+                # Honor deferred checkpoint before exiting
+                if context.checkpoint_requested:
+                    self._handle_deferred_checkpoint(context)
                 # Exit workflow execution loop
                 break
 
