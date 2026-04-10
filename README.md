@@ -20,7 +20,7 @@ Graflow is the orchestration engine for production-grade agentic workflows, desi
 
 Try Graflow instantly in your browser:
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/GraflowAI/graflow-examples/blob/main/examples/notebooks/simple_etl.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/GraflowAI/graflow-examples/blob/main/notebooks/hands_on_guide.ipynb)
 
 Or install locally:
 
@@ -30,8 +30,8 @@ pip install graflow
 
 ## Documentation
 
+- [Product Documentation](./docs/) - Detailed product documentation
 - [Examples](./examples/) - Production-ready examples organized by complexity
-- [API Documentation](./docs/) - Detailed API reference
 
 ## License
 
