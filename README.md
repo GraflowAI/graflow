@@ -9,7 +9,7 @@ Graflow is the orchestration engine for production-grade agentic workflows, desi
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![PyPI](https://img.shields.io/pypi/v/graflow.svg)](https://pypi.org/project/graflow/)
 [![CI status](https://github.com/GraflowAI/graflow/actions/workflows/ci.yml/badge.svg)](https://github.com/GraflowAI/graflow/actions)
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/GraflowAI/graflow-examples/blob/main/examples/notebooks/simple_etl.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://github.com/GraflowAI/graflow-examples/blob/main/notebooks/hands_on_guide.ipynb)
 
 
 <a href="https://x.com/GraflowAI"><img src="https://img.shields.io/twitter/follow/GraflowAI?logo=X&color=%20%23f5f5f5" alt="follow on X(Twitter)"></a>
