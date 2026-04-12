@@ -30,7 +30,7 @@ pip install graflow
 
 ## Documentation
 
-- [Product Documentation](./docs/) - Detailed product documentation
+- [Product Documentation](https://graflow.ai) - Detailed product documentation
 - [Examples](./examples/) - Production-ready examples organized by complexity
 
 ## License
