@@ -23,7 +23,7 @@ from pydantic_ai import RunContext
 from graflow.core.context import TaskExecutionContext
 from graflow.core.decorators import task
 from graflow.core.workflow import workflow
-from graflow.llm.agents import PydanticLLMAgent, create_pydantic_ai_agent_with_litellm
+from graflow.llm.agents import PydanticLLMAgent, create_pydantic_ai_agent
 
 
 # Define structured output
@@ -38,7 +38,7 @@ class WeatherReport(BaseModel):
 
 # Create agent using helper function (LiteLLM backend)
 # Alternative: You can create Agent directly with Agent('openai/gpt-5-mini', ...)
-pydantic_agent = create_pydantic_ai_agent_with_litellm(
+pydantic_agent = create_pydantic_ai_agent(
     model="openai/gpt-5-mini",  # LiteLLM format: 'provider/model'
     system_prompt="You are a helpful weather assistant with access to weather data.",
 )

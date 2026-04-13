@@ -16,9 +16,9 @@ except ImportError:
 try:
     from graflow.llm.agents.pydantic_agent import (  # noqa: F401
         PydanticLLMAgent,
-        create_pydantic_ai_agent_with_litellm,
+        create_pydantic_ai_agent,
     )
 
-    __all__.extend(["PydanticLLMAgent", "create_pydantic_ai_agent_with_litellm"])
+    __all__.extend(["PydanticLLMAgent", "create_pydantic_ai_agent"])
 except ImportError:
     pass

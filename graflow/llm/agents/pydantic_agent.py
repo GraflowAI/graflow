@@ -93,7 +93,7 @@ def setup_pydantic_ai_tracing() -> None:
         logger.warning(f"Failed to instrument Pydantic AI: {e}")
 
 
-def create_pydantic_ai_agent_with_litellm(
+def create_pydantic_ai_agent(
     model: str,
     *,
     output_type: Optional[Type[BaseModel]] = None,
@@ -196,6 +196,10 @@ def create_pydantic_ai_agent_with_litellm(
         agent_kwargs["instrument"] = instrument
 
     return Agent(llm_model, **agent_kwargs)
+
+
+# Backward compatibility alias
+create_pydantic_ai_agent_with_litellm = create_pydantic_ai_agent
 
 
 class PydanticLLMAgent(LLMAgent, Generic[OutputDataT_co]):
