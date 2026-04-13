@@ -174,7 +174,7 @@ def create_pydantic_ai_agent(
         if not base_url:
             base_url = "http://localhost:11434/v1"
         ollama_provider = OllamaProvider(base_url=base_url)
-        model = "ollama:" + model[len("ollama/"):]
+        model = "ollama:" + model[len("ollama/") :]
         llm_model = infer_model(model, provider_factory=lambda _name: ollama_provider)
     else:
         # Convert slash to colon for native resolution (e.g., 'openai/gpt-4o' → 'openai:gpt-4o')
