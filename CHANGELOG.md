@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-04-13
+
+Patch release with Pydantic AI agent improvements and documentation updates.
+
+### Changed
+- Rename `create_pydantic_ai_agent_with_litellm` to `create_pydantic_ai_agent` for consistency (backward compatibility alias retained)
+- Add `create_pydantic_ai_agent_with_litellm` to `__all__` for backward compatibility
+- Add Ollama model support in `create_pydantic_ai_agent`
+
 ## [0.1.7] - 2026-04-07
 
 Patch release with an important checkpoint bugfix and logging refinement.
@@ -115,7 +124,8 @@ Minor patch release with a corner-case bugfix only. No new features or breaking 
 - Workflow visualization (ASCII, Mermaid, PNG)
 - REST API for workflow management and feedback submission
 
-[Unreleased]: https://github.com/myui/graflow/compare/v0.1.7...HEAD
+[Unreleased]: https://github.com/myui/graflow/compare/v0.1.8...HEAD
+[0.1.8]: https://github.com/myui/graflow/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/myui/graflow/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/myui/graflow/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/myui/graflow/compare/v0.1.4...v0.1.5
