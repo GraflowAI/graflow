@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, Generic, List, Optional, Type
 
 from pydantic import BaseModel
@@ -109,14 +110,15 @@ def create_pydantic_ai_agent_with_litellm(
     create Agent instances directly and wrap them with PydanticLLMAgent.
 
     Args:
-        model: Model identifier in LiteLLM format (e.g., 'openai/gpt-4o', 'anthropic/claude-3-5-sonnet')
+        model: Model identifier (e.g., 'openai:gpt-4o', 'anthropic:claude-3-5-sonnet',
+               'ollama/gemma4:e4b', 'litellm:openai/gpt-4o')
         output_type: Optional Pydantic model for structured output
         instructions: Optional instructions for the agent (recommended over system_prompt)
                      Instructions are not retained in message history across runs
         system_prompt: Optional system prompt (persists in message history)
         name: Optional name for the agent (useful for debugging/logging)
         instrument: Optional flag to enable Langfuse tracing (default: None, uses Pydantic AI default)
-        **kwargs: Additional Agent parameters (model_settings, retries, tools, etc.)
+        **kwargs: Additional Agent parameters (model_settings, retries, tools, toolsets, etc.)
 
     Returns:
         Pydantic AI Agent configured with LiteLLM backend
@@ -139,32 +141,49 @@ def create_pydantic_ai_agent_with_litellm(
             instrument=True  # Enable tracing
         )
 
+        # Use with Ollama (local model)
+        agent = create_pydantic_ai_agent_with_litellm(
+            'ollama/gemma4:e4b',
+            instructions="You are a helpful assistant.",
+        )
+
         # Wrap for Graflow
         wrapped = PydanticLLMAgent(agent, name="analyzer")
         ```
 
     Note:
-        - API keys loaded from environment (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.)
-        - Model names use LiteLLM format: 'provider/model' (e.g., 'openai/gpt-4o')
+        - API keys loaded from environment (OPENAI_API_KEY, ANTHROPIC_API_KEY, OLLAMA_BASE_URL, etc.)
+        - 'ollama/' prefix auto-resolves to native OllamaProvider (e.g., 'ollama/gemma4:e4b')
+        - 'litellm:' prefix routes through LiteLLM (e.g., 'litellm:openai/gpt-4o')
+        - Slash format is converted to colon for native resolution (e.g., 'openai/gpt-4o' → 'openai:gpt-4o')
         - Prefer 'instructions' over 'system_prompt' for most use cases
         - This is just a convenience helper - you can create Agent instances any way you want
     """
     if not PYDANTIC_AI_AVAILABLE:
         raise RuntimeError("Pydantic AI is not installed. Install with: pip install pydantic-ai")
 
-    from pydantic_ai.models.openai import OpenAIChatModel
-    from pydantic_ai.providers.litellm import LiteLLMProvider
+    from pydantic_ai.models import infer_model
 
-    # Create LiteLLM provider (API keys from environment)
-    provider = LiteLLMProvider()
+    # For ollama/ prefix, use pydantic-ai's native OllamaProvider
+    if model.startswith("ollama/"):
+        from pydantic_ai.providers.ollama import OllamaProvider
 
-    # Create OpenAI-compatible model with LiteLLM backend
-    llm_model = OpenAIChatModel(model, provider=provider, **kwargs)
+        base_url = kwargs.pop("base_url", None)
+        if not base_url:
+            base_url = os.getenv("OLLAMA_BASE_URL")
+        if not base_url:
+            base_url = "http://localhost:11434/v1"
+        ollama_provider = OllamaProvider(base_url=base_url)
+        model = "ollama:" + model[len("ollama/"):]
+        llm_model = infer_model(model, provider_factory=lambda _name: ollama_provider)
+    else:
+        # Convert slash to colon for native resolution (e.g., 'openai/gpt-4o' → 'openai:gpt-4o')
+        if not model.startswith("litellm:") and "/" in model:
+            model = model.replace("/", ":", 1)
+        llm_model = infer_model(model)
 
-    # Build agent kwargs - all parameters are optional
-    agent_kwargs: Dict[str, Any] = {}
-
-    # Add optional parameters only if provided (None values are omitted)
+    # Build agent kwargs - only include parameters that were explicitly provided
+    agent_kwargs: Dict[str, Any] = kwargs.copy()
     if output_type is not None:
         agent_kwargs["output_type"] = output_type
     if instructions is not None:
