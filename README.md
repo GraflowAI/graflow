@@ -2,7 +2,7 @@
 
 # Graflow
 
-**Stop writing state machines. Start writing workflows.**
+**Stop wrestling graph composition. Start writing Pythonic agent pipelines. Compose tasks with `>>` and `|`.**
 
 Graflow is a Python-based agent orchestration framework with a **workflow-first, defined-by-run** approach focused on simplicity and developer experience. Compose tasks — from ETL jobs to multi-agent LLM pipelines — using plain Python functions and two intuitive operators.
 
