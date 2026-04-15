@@ -253,6 +253,51 @@ Scenario 2: CSV → Filter → CSV File
 
 ---
 
+### 6. multi_image_docker.py
+**Difficulty**: Advanced
+**Time**: 15 minutes
+**Prerequisites**: Docker daemon running, `pip install docker`, images `python:3.11-slim` & `python:3.11`
+
+> ⚠️ **Python versions must match** across host and all containers. Cloudpickle bytecode is Python-minor-version-specific, so mixing 3.11 and 3.12 will fail during task deserialization. Use different images on the *same* Python minor version (e.g., `python:3.11-slim` for ETL + `pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime` for training — both ship Python 3.11).
+
+Runs different tasks of a single workflow in **different Docker images** by registering multiple `DockerTaskHandler` instances under distinct names and selecting them per-task via `@task(handler="<name>")`.
+
+**Key Concepts**:
+- One handler name binds to one image — register multiple for multi-image pipelines
+- Per-task routing with `@task(handler="<name>")`
+- Mixing host-local and containerized execution in one workflow
+- Reading upstream results across container boundaries via `context.get_result(...)`
+
+**What You'll Learn**:
+- How to compose a pipeline that spans heterogeneous runtimes (e.g., slim ETL image + heavy GPU image)
+- How task metadata routes execution to a specific handler
+- How `ExecutionContext` and results are serialized across container boundaries
+
+**Run**:
+```bash
+uv run python examples/06_advanced/multi_image_docker.py
+```
+
+**Expected Output**:
+```
+=== Multi-Image Docker Pipeline ===
+
+Checking Docker availability...
+✅ Docker is available
+
+[host]       local_step   -> python 3.11.x (pid=...)
+[py311-slim] etl_step     -> python 3.11.x (pid=1)
+[py311-full] train_step   -> python 3.11.x (pid=1)
+             upstream etl: 'etl on python 3.11.x'
+
+=== Final Results ===
+  local_step: ran on host (python 3.11.x)
+  etl_step:   etl on python 3.11.x
+  train_step: trained on python 3.11.x (upstream: 'etl on python 3.11.x')
+```
+
+---
+
 ## Learning Path
 
 **Recommended Order**:
