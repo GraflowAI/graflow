@@ -93,10 +93,7 @@ def main():
 
         ctx.execute("agent")
 
-    print(
-        f"\nLoop finished. Agent calls: {call_counts['agent']}, "
-        f"Tool calls: {call_counts['tool']}"
-    )
+    print(f"\nLoop finished. Agent calls: {call_counts['agent']}, Tool calls: {call_counts['tool']}")
 
 
 if __name__ == "__main__":
