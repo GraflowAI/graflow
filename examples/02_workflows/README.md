@@ -100,7 +100,37 @@ uv run python examples/02_workflows/context_injection.py
 
 ---
 
-### 5. task_graph_lowlevel_api.py
+### 5. agent_loop.py
+
+**Concept**: Cyclic agent ↔ tool workflow
+
+Build a loop where an `agent` task repeatedly calls a `tool` task until a termination condition is met. This is the Graflow equivalent of an agent loop with conditional edges in other frameworks.
+
+```bash
+uv run python examples/02_workflows/agent_loop.py
+```
+
+**Key Concepts**:
+- Cycles with `agent >> tool >> agent`
+- Exiting a loop with `context.terminate_workflow(message)`
+- Define-by-run execution of cyclic graphs
+- When to use loops vs. `next_iteration()` (parameter-driven convergence)
+
+**Expected Output**:
+```
+=== Agent Loop Demo ===
+[iter 1] agent: thinking...
+[iter 1] tool:  running tool (step=1)
+[iter 2] agent: thinking...
+[iter 2] tool:  running tool (step=2)
+[iter 3] agent: thinking...
+[iter 3] agent: condition met → terminate
+Loop finished. Agent calls: 3, Tool calls: 2
+```
+
+---
+
+### 6. task_graph_lowlevel_api.py
 
 **Concept**: Low-level TaskGraph API usage
 
