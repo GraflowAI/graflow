@@ -5,8 +5,7 @@ This pattern is documented in the README as the Graflow equivalent of a
 LangGraph agent loop with conditional edges.
 """
 
-from graflow.core.decorators import task
-from graflow.core.workflow import workflow
+from graflow import task, workflow
 
 
 def test_agent_tool_loop_terminates_on_condition():
@@ -24,7 +23,7 @@ def test_agent_tool_loop_terminates_on_condition():
             return f"agent_response_{call_counts['agent']}"
 
         @task
-        def tool(out: str = "default"):
+        def tool():
             call_counts["tool"] += 1
             return f"tool_out_{call_counts['tool']}"
 
@@ -50,7 +49,7 @@ def test_agent_tool_loop_single_pass():
             return "agent_response"
 
         @task
-        def tool(out: str = "default"):
+        def tool():
             call_counts["tool"] += 1
             return "tool_out"
 
