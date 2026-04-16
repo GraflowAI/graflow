@@ -103,6 +103,16 @@ all = [
 ]
 
 
+[tool.uv]
+# https://docs.astral.sh/uv/concepts/resolution/#dependency-cooldowns
+exclude-newer = "1 week"
+exclude-newer-package = { setuptools = "30 days" }
+# Preventive constraint: if litellm ever enters the dependency tree (e.g., via ADK),
+# ensure we don't get compromised versions until BerriAI publishes a verified safe release
+# https://github.com/BerriAI/litellm/issues/24518
+# https://docs.astral.sh/uv/reference/settings/#constraint-dependencies
+constraint-dependencies = ["litellm<=1.82.6"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
