@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-04-16
+
+Patch release to exclude vulnerable litellm versions (supply chain attack mitigation).
+
+### Added
+- Agent loop example (`examples/02_workflows/agent_loop.py`) demonstrating cyclic `agent >> tool >> agent` workflows with `terminate_workflow()`
+- Multi-image Docker pipeline example (`examples/06_advanced/multi_image_docker.py`) showing per-task handler routing across different container images
+- Tests for agent-loop pattern termination conditions
+
+### Changed
+- Exclude vulnerable `litellm` versions 1.82.7 and 1.82.8 to avoid supply chain attacks (#47)
+- Bump `google-adk` minimum to v1.28.0
+
+### Fixed
+- Add `exclude-newer` and `exclude-newer-package` uv configuration for dependency cooldowns
+
 ## [0.1.8] - 2026-04-13
 
 Patch release with Pydantic AI agent improvements and documentation updates.
@@ -124,7 +140,8 @@ Minor patch release with a corner-case bugfix only. No new features or breaking 
 - Workflow visualization (ASCII, Mermaid, PNG)
 - REST API for workflow management and feedback submission
 
-[Unreleased]: https://github.com/myui/graflow/compare/v0.1.8...HEAD
+[Unreleased]: https://github.com/myui/graflow/compare/v0.1.9...HEAD
+[0.1.9]: https://github.com/myui/graflow/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/myui/graflow/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/myui/graflow/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/myui/graflow/compare/v0.1.5...v0.1.6
