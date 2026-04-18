@@ -102,19 +102,19 @@ uv run python examples/02_workflows/context_injection.py
 
 ### 5. agent_loop.py
 
-**Concept**: Cyclic agent ↔ tool workflow
+**Concept**: Cyclic agent ↔ tool workflow (three loop styles)
 
-Build a loop where an `agent` task repeatedly calls a `tool` task until a termination condition is met. This is the Graflow equivalent of an agent loop with conditional edges in other frameworks.
+Demonstrates three ways to build iterative loops in Graflow, from static cycles to dynamic jumps to self-iteration.
 
 ```bash
 uv run python examples/02_workflows/agent_loop.py
 ```
 
 **Key Concepts**:
-- Cycles with `agent >> tool >> agent`
-- Exiting a loop with `context.terminate_workflow(message)`
-- Define-by-run execution of cyclic graphs
-- When to use loops vs. `next_iteration()` (parameter-driven convergence)
+- **`agent_tool_loop()`** — Static cycle with `agent >> tool >> agent` + `terminate_workflow()`
+- **`loop_with_goto()`** — Dynamic jumps with `next_task(t, goto=True)` + `@task(max_cycles=N)`
+- **`loop_with_iteration()`** — Single-task self-loop with `next_iteration(data)` + `@task(max_cycles=N)`
+- Cycle budget APIs: `ctx.cycle_count`, `ctx.max_cycles`, `ctx.can_iterate()`
 
 **Expected Output**:
 ```
@@ -126,6 +126,20 @@ uv run python examples/02_workflows/agent_loop.py
 [iter 3] agent: thinking...
 [iter 3] agent: condition met → terminate
 Loop finished. Agent calls: 3, Tool calls: 2
+
+=== Dynamic Jump Loop Demo ===
+[cycle 1/5] agent: reflecting... (score=0.2)
+           tool:  executing action (call #1)
+...
+[cycle 4/5] agent: quality threshold reached — done
+Dynamic jump loop finished after 4 cycles. Final score: 0.8
+
+=== Self-Refinement Loop Demo ===
+[iter 1/5] refining... (draft_v1, score=0.3)
+...
+[iter 4/5] quality threshold reached — accepting draft_v4
+[publish] publishing draft_v4
+Self-refinement finished after 4 iterations. Published: draft_v4
 ```
 
 ---
