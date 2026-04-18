@@ -350,8 +350,8 @@ Contributions are welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md) for setup
 - 🐛 **Report bugs** or request features via [GitHub Issues](https://github.com/GraflowAI/graflow/issues)
 - 🔌 **Add a new backend** (queue / channel / handler) — follow the factory pattern in `graflow/queue/` and `graflow/channels/`
 - 📚 **Contribute an example** to `examples/` — especially real-world agent/LLM workflows
-- 📖 **Improve the docs** at [graflow.ai](https://graflow.ai)
-- 💬 **Discuss** on [r/GraflowAI](https://www.reddit.com/r/GraflowAI/)
+- 📖 **Improve the docs** at [graflow.ai](https://github.com/GraflowAI/graflow-site)
+- 💬 **Discuss** on [r/GraflowAI](https://github.com/GraflowAI/graflow/discussions)
 
 ## License
 
