@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-22
+
+Security release excluding a hijacked `litellm` version, plus compatibility fixes for redis-py 8 and Starlette 1.x.
+
+### Security
+- Raise `litellm` minimum to 1.84.0 for the SSRF fix (GHSA-xqmj-j6mv-4862) and CVE-2026-49468, which also skips the earlier compromised releases 1.80.16 / 1.82.3 / 1.82.7 / 1.82.8 (#71)
+- Exclude hijacked `litellm` 1.107.0, whose PyPI wheels shipped a `.pth` credential stealer (BerriAI/litellm#47826) (#71)
+- Security updates for `gpt_newspaper` example frontend packages
+
+### Added
+- Dynamic and self-refinement loop styles in the agent loop example (`examples/02_workflows/agent_loop.py`)
+- Tests for agent-loop goto and iteration patterns
+
+### Fixed
+- Support redis-py 8: `GraphStore` no longer passes pool-internal connection kwargs (e.g. `himport_registry`) when recreating a binary-safe Redis client (#71)
+- Support Starlette 1.x: HITL feedback web UI uses the `TemplateResponse(request, name, context)` signature (#71)
+
+### Changed
+- Ignore ruff `PLR0917` and exclude Markdown files from `ruff format` (#71)
+- Update documentation links in README
+
 ## [0.1.9] - 2026-04-16
 
 Patch release to exclude vulnerable litellm versions (supply chain attack mitigation).
@@ -140,7 +161,8 @@ Minor patch release with a corner-case bugfix only. No new features or breaking 
 - Workflow visualization (ASCII, Mermaid, PNG)
 - REST API for workflow management and feedback submission
 
-[Unreleased]: https://github.com/myui/graflow/compare/v0.1.9...HEAD
+[Unreleased]: https://github.com/myui/graflow/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/myui/graflow/compare/v0.1.9...v0.2.0
 [0.1.9]: https://github.com/myui/graflow/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/myui/graflow/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/myui/graflow/compare/v0.1.6...v0.1.7
