@@ -412,15 +412,21 @@ class TestRoundTrip:
         # Extract config
         config = extract_redis_config(original_client)
 
+        # redis-py 8 sets a default socket_timeout, which must be preserved as well
+        expected_kwargs = {
+            "host": "redis.example.com",
+            "port": 6380,
+            "db": 2,
+            "decode_responses": True,
+            "password": "secret",
+        }
+        socket_timeout = original_client.connection_pool.connection_kwargs.get("socket_timeout")
+        if socket_timeout is not None:
+            expected_kwargs["socket_timeout"] = socket_timeout
+
         # Recreate client
         with patch.object(Redis, "__init__", return_value=None) as mock_init:
             create_redis_client(config)
 
             # Verify same parameters used
-            mock_init.assert_called_once_with(
-                host="redis.example.com",
-                port=6380,
-                db=2,
-                decode_responses=True,
-                password="secret",
-            )
+            mock_init.assert_called_once_with(**expected_kwargs)

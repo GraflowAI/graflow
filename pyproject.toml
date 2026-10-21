@@ -12,7 +12,10 @@ dependencies = [
     "cachetools>=5.3.2",
     "jinja2>=3.1.6",
     "python-dotenv>=1.1.1",
-    "litellm>=1.79.1,!=1.82.7,!=1.82.8", # 1.72.6+ required for langfuse_otel callback, excluded 1.82.(7|8) to avoid supply chain attack
+    # Floor pin: SSRF fix in 1.83.7 (GHSA-xqmj-j6mv-4862), CVE-2026-49468 in 1.84.0.
+    # Also skips compromised PyPI lines 1.80.16 / 1.82.3 / 1.82.7 / 1.82.8 (BerriAI/litellm#24512).
+    # Exclude 1.107.0: hijacked PyPI wheels with a .pth credential stealer (BerriAI/litellm#47826).
+    "litellm>=1.84.0,!=1.107.0",
     "pydantic>=2.10.0",
     "pyyaml>=6.0.3",
 ]
@@ -137,6 +140,10 @@ exclude = [
     ".env",
 ]
 
+[tool.ruff.format]
+# Don't format code blocks embedded in docs (README etc.)
+exclude = ["*.md"]
+
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "N", "UP", "B", "RUF", "C90", "PL", "PD", "YTT", "TID"]
 ignore = [
@@ -145,6 +152,7 @@ ignore = [
     # UP045: Use `X | None` for type annotationsRuff
     "UP045",
     "PLR0913", "C901", "RUF010",
+    "PLR0917",  # https://docs.astral.sh/ruff/rules/too-many-positional-arguments/
     "PD901",    # https://docs.astral.sh/ruff/rules/pandas-df-variable-name/
     "PLR2004",  # https://docs.astral.sh/ruff/rules/magic-value-comparison/
     "N802",     # https://docs.astral.sh/ruff/rules/invalid-function-name/

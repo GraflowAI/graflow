@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import logging
 import zlib
 from typing import TYPE_CHECKING
@@ -74,9 +75,13 @@ class GraphStore:
             return redis_client
 
         if kwargs.get("decode_responses"):
-            kwargs["decode_responses"] = False
             from redis import Redis
 
+            # connection_kwargs may contain pool-internal entries (e.g., himport_registry in redis-py 8)
+            # that Redis.__init__ does not accept, so pass only constructor parameters.
+            init_params = inspect.signature(Redis.__init__).parameters
+            kwargs = {key: value for key, value in kwargs.items() if key in init_params}
+            kwargs["decode_responses"] = False
             return Redis(**kwargs)
 
         return redis_client

@@ -54,9 +54,9 @@ async def list_pending_feedback(
     # Render list
     templates = request.app.state.templates
     return templates.TemplateResponse(
+        request,
         "feedback/list.html",
         {
-            "request": request,
             "count": len(masked_requests),
             "requests": masked_requests,
         },
@@ -94,9 +94,9 @@ async def show_feedback_form(
     # Render form (for pending or timeout status)
     templates = request.app.state.templates
     return templates.TemplateResponse(
+        request,
         "feedback/form.html",
         {
-            "request": request,
             "feedback_request": feedback_request,
         },
     )
@@ -230,9 +230,9 @@ async def show_success_page(
     # Render success page
     templates = request.app.state.templates
     return templates.TemplateResponse(
+        request,
         "feedback/success.html",
         {
-            "request": request,
             "response": feedback_response,
         },
     )
@@ -261,9 +261,9 @@ async def show_expired_page(
     # Render expired page
     templates = request.app.state.templates
     return templates.TemplateResponse(
+        request,
         "feedback/expired.html",
         {
-            "request": request,
             "feedback_request": feedback_request,
         },
     )
