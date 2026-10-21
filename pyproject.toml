@@ -140,6 +140,10 @@ exclude = [
     ".env",
 ]
 
+[tool.ruff.format]
+# Don't format code blocks embedded in docs (README etc.)
+exclude = ["*.md"]
+
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "N", "UP", "B", "RUF", "C90", "PL", "PD", "YTT", "TID"]
 ignore = [
